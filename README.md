@@ -1,6 +1,7 @@
 # Global University Application Platform
 
-> **"One Student Profile. Every University. One Global Platform."**
+> **"One Student Profile. Every University. One Global Platform."**<br/>
+> *AI-powered global university discovery and application infrastructure.*
 
 A next-generation, global operating system for higher education admissions, course equivalency, and academic mobility. Designed to unify first-year admissions, transfer pathways, and international academic evaluation under one single platform.
 

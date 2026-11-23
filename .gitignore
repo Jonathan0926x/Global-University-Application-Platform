@@ -43,21 +43,80 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 
-# --- Node.js / Next.js ---
-node_modules/
-.next/
-out/
-build/
-dist/
-.pnp
-.pnp.js
-# --- Logs ---
+# --- Logs & Diagnostics ---
+logs
 *.log
 logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 .pnpm-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# --- Runtime Data ---
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# --- Node.js / Next.js / Frontend Ecosystem ---
+node_modules/
+jspm_packages/
+web_modules/
+.next
+.next/
+out
+out/
+build/
+dist/
+.output
+.nuxt
+.nitro/
+.cache
+.parcel-cache
+.vuepress/dist
+.temp
+.svelte-kit/
+**/.vitepress/dist
+**/.vitepress/cache
+.docusaurus
+.serverless/
+.fusebox/
+.dynamodb/
+.firebase/
+.tern-port
+.vscode-test
+.pnpm-store
+.pnp
+.pnp.*
+.pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+.vite/
+.astro/
+.turbo
+.nx/cache
+.nx/workspace-data
+.nx/migrate-runs
+coverage
+*.lcov
+.nyc_output
+.grunt
+bower_components
+build/Release
 
 # --- Python / FastAPI ---
 __pycache__/
