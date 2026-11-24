@@ -24,8 +24,10 @@ import {
   addCourse,
   StudentProfile
 } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export default function ProfilePage() {
+  const { t } = useI18n();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -140,7 +142,7 @@ export default function ProfilePage() {
                   {firstName} {lastName}
                 </h1>
                 <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Universal Profile Active
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {t("profile.badge", "Universal Profile Active")}
                 </span>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
@@ -152,7 +154,7 @@ export default function ProfilePage() {
           {/* Profile Completion Bar */}
           <div className="w-full md:w-72 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              <span>Universal Profile Readiness</span>
+              <span>{t("profile.title", "Universal Student Profile")}</span>
               <span className="font-bold text-brand-600 dark:text-brand-400">{completionPct}%</span>
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
@@ -162,7 +164,7 @@ export default function ProfilePage() {
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Valid for both First-Year & Transfer applications globally
+              {t("profile.subtitle", "A reusable, globally recognized student profile that adapts across university admissions requirements worldwide.")}
             </p>
           </div>
         </div>

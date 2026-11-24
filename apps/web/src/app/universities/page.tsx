@@ -21,9 +21,11 @@ import {
   createApplication,
   Institution
 } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export default function UniversitiesPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,13 +84,16 @@ export default function UniversitiesPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">
-            <Globe2 className="w-4 h-4" /> Global Admissions Directory
+            <Globe2 className="w-4 h-4" /> {t("univ.badge", "Global Admissions Directory")}
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">
-            Global University Catalog
+            {t("univ.title", "Global University Catalog")}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Explore verified four-year universities, community colleges, and international partner institutions.
+            {t(
+              "univ.subtitle",
+              "Explore verified four-year universities, community colleges, and international partner institutions."
+            )}
           </p>
         </div>
 
@@ -97,7 +102,7 @@ export default function UniversitiesPage() {
             href="/dashboard"
             className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-200 transition-colors"
           >
-            Back to Dashboard
+            {t("nav.student_os", "Student OS")}
           </Link>
         </div>
       </div>
@@ -118,7 +123,7 @@ export default function UniversitiesPage() {
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search universities by name, state, or city..."
+            placeholder={t("univ.search_placeholder", "Search universities by name, state, or city...")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -135,7 +140,7 @@ export default function UniversitiesPage() {
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900"
             }`}
           >
-            All Institutions
+            {t("univ.filter_all", "All Institutions")}
           </button>
           <button
             onClick={() => setFilterPathway("transfer")}
@@ -145,7 +150,7 @@ export default function UniversitiesPage() {
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900"
             }`}
           >
-            Transfer Friendly
+            {t("univ.filter_transfer", "Accepts Transfer")}
           </button>
           <button
             onClick={() => setFilterPathway("first_year")}
@@ -155,7 +160,7 @@ export default function UniversitiesPage() {
                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900"
             }`}
           >
-            First-Year Admissions
+            {t("univ.filter_first_year", "Accepts First-Year")}
           </button>
         </div>
       </div>

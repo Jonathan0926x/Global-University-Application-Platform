@@ -20,8 +20,10 @@ import {
   Institution,
   ApplicationWorkspace,
 } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export default function TransferPortalPage() {
+  const { t } = useI18n();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [applications, setApplications] = useState<ApplicationWorkspace[]>([]);
   const [selectedInstId, setSelectedInstId] = useState<string>("");
@@ -68,13 +70,16 @@ export default function TransferPortalPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-md bg-sky-100/80 px-2.5 py-1 text-xs font-semibold text-sky-800 mb-3">
-              <ArrowRightLeft className="h-4 w-4" /> Dedicated Transfer Admissions Intelligence
+              <ArrowRightLeft className="h-4 w-4" /> {t("transfer.badge", "Dedicated Transfer Admissions Intelligence")}
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-900 tracking-tight">
-              Transfer Application Portal
+              {t("transfer.title", "Transfer Application Portal")}
             </h1>
             <p className="mt-2 text-sm text-zinc-600 max-w-2xl">
-              Transferring from a community college, a 4-year university, or an international institution? Built with a specialized architecture for college transcript evaluation, course articulation, and 60-unit prerequisite milestones.
+              {t(
+                "transfer.subtitle",
+                "Transferring from a community college, a 4-year university, or an international institution? Built with a specialized architecture for college transcript evaluation, course articulation, and 60-unit prerequisite milestones."
+              )}
             </p>
           </div>
 
@@ -84,7 +89,7 @@ export default function TransferPortalPage() {
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-800 shadow-xs hover:bg-zinc-50"
             >
               <BookOpen className="h-4 w-4 text-sky-600" />
-              Manage Coursework & Credits
+              {t("nav.profile", "Universal Profile")}
             </Link>
           </div>
         </div>

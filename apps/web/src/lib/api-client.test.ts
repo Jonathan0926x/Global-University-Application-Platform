@@ -75,4 +75,30 @@ test("Core UI translations accurately resolve for Haitian Creole, Spanish, and A
   assert.equal(fallback, "Default Fallback");
 });
 
+test("Homepage headline and CTA buttons translate accurately into Spanish, French, Haitian Creole, and Arabic", () => {
+  // Spanish (es-419 and regional es-MX / es)
+  assert.equal(translate("home.hero_title_1", "es-419"), "Un perfil de estudiante.");
+  assert.equal(translate("home.hero_title_2", "es-419"), "Todas las universidades. Una plataforma global.");
+  assert.equal(translate("home.hero_title_1", "es-MX"), "Un perfil de estudiante.");
+  assert.equal(translate("home.hero_title_2", "es-ES"), "Todas las universidades. Una plataforma global.");
+  assert.equal(translate("home.cta_transfer", "es-419"), "Comenzar como estudiante de transferencia");
+  assert.equal(translate("home.cta_first_year", "es-419"), "Comenzar como estudiante de primer año");
+  assert.equal(translate("nav.student_os", "es-419"), "Sistema del Estudiante");
+
+  // French (fr-FR)
+  assert.equal(translate("home.hero_title_1", "fr-FR"), "Un profil étudiant.");
+  assert.equal(translate("home.hero_title_2", "fr-FR"), "Chaque université. Une plateforme mondiale.");
+  assert.equal(translate("home.cta_transfer", "fr-FR"), "Commencer comme étudiant de transfert");
+
+  // Haitian Creole (ht-HT)
+  assert.equal(translate("home.hero_title_1", "ht-HT"), "Yon sèl pwofil etidyan.");
+  assert.equal(translate("home.hero_title_2", "ht-HT"), "Chak inivèsite. Yon platfòm mondyal.");
+  assert.equal(translate("home.cta_transfer", "ht-HT"), "Kòmanse kòm etidyan transfè");
+
+  // Arabic (ar-SA)
+  assert.equal(translate("home.hero_title_1", "ar-SA"), "ملف طالب واحد.");
+  assert.equal(translate("home.hero_title_2", "ar-SA"), "كل جامعة. منصة عالمية واحدة.");
+});
+
+
 

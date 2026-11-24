@@ -14,12 +14,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { fetchProfile, fetchApplications, StudentProfile, ApplicationWorkspace } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export default function DashboardPage() {
+  const { t, formatNumber } = useI18n();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [applications, setApplications] = useState<ApplicationWorkspace[]>([]);
   const [pathwayFilter, setPathwayFilter] = useState<"all" | "first_year" | "transfer">("all");
   const [loading, setLoading] = useState(true);
+
 
   useEffect(() => {
     async function loadData() {
@@ -53,15 +56,15 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-zinc-200 pb-6">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-            <span>Student OS Workspace</span>
+            <span>{t("nav.student_os", "Student OS")}</span>
             <span>•</span>
-            <span className="text-indigo-600 font-bold">Live Synced</span>
+            <span className="text-indigo-600 font-bold">{t("nav.backend_connected", "Live Synced")}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900">
-            Welcome back, {profile?.first_name || "Jordan"}
+            {t("dash.title", "Unified Student Operating System")}
           </h1>
           <p className="mt-1 text-sm text-zinc-600">
-            One profile managing all your higher education application pathways worldwide.
+            {t("dash.subtitle", "Manage both First-Year and Transfer application workspaces from a single canonical profile.")}
           </p>
         </div>
 
@@ -71,13 +74,13 @@ export default function DashboardPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-zinc-800 transition-colors"
           >
             <PlusCircle className="h-4 w-4" />
-            New Application
+            <span>{t("dash.btn_new_app", "New Application")}</span>
           </Link>
           <Link
             href="/profile"
             className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 transition-colors"
           >
-            Edit Profile
+            <span>{t("nav.profile", "Universal Profile")}</span>
           </Link>
         </div>
       </div>
@@ -157,7 +160,7 @@ export default function DashboardPage() {
               pathwayFilter === "all" ? "bg-white text-zinc-900 shadow-xs" : "hover:text-zinc-900"
             }`}
           >
-            All Applications ({applications.length || 2})
+            {t("dash.filter_all", "All Workspaces")} ({applications.length || 2})
           </button>
           <button
             onClick={() => setPathwayFilter("transfer")}
@@ -166,7 +169,7 @@ export default function DashboardPage() {
             }`}
           >
             <ArrowRightLeft className="h-3.5 w-3.5 text-sky-600" />
-            Transfer Pathway
+            <span>{t("dash.filter_transfer", "Transfer Applications")}</span>
           </button>
           <button
             onClick={() => setPathwayFilter("first_year")}
@@ -175,12 +178,12 @@ export default function DashboardPage() {
             }`}
           >
             <GraduationCap className="h-3.5 w-3.5 text-indigo-600" />
-            First-Year Pathway
+            <span>{t("dash.filter_fy", "First-Year Applications")}</span>
           </button>
         </div>
 
         <span className="text-xs text-zinc-500">
-          Viewing applications categorized by admissions pathway requirements.
+          {t("dash.active_workspaces", "Active Application Workspaces")}
         </span>
       </div>
 

@@ -19,8 +19,10 @@ import {
   Institution,
   ApplicationWorkspace,
 } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 
 export default function FirstYearPortalPage() {
+  const { t } = useI18n();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [applications, setApplications] = useState<ApplicationWorkspace[]>([]);
   const [selectedInstId, setSelectedInstId] = useState<string>("");
@@ -67,13 +69,16 @@ export default function FirstYearPortalPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-md bg-indigo-100/80 px-2.5 py-1 text-xs font-semibold text-indigo-800 mb-3">
-              <GraduationCap className="h-4 w-4" /> Dedicated First-Year Admissions Suite
+              <GraduationCap className="h-4 w-4" /> {t("fy.badge", "Dedicated First-Year Admissions Suite")}
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-900 tracking-tight">
-              First-Year Application Portal
+              {t("fy.title", "First-Year Application Portal")}
             </h1>
             <p className="mt-2 text-sm text-zinc-600 max-w-2xl">
-              Applying directly from high school or secondary education? One central workspace to manage your secondary transcripts, standardized tests (SAT, ACT, International Baccalaureate), essays, and counselor recommendations.
+              {t(
+                "fy.subtitle",
+                "Applying directly from high school or secondary education? One central workspace to manage your secondary transcripts, standardized tests (SAT, ACT, International Baccalaureate), essays, and counselor recommendations."
+              )}
             </p>
           </div>
 
@@ -83,7 +88,7 @@ export default function FirstYearPortalPage() {
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-white border border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-800 shadow-xs hover:bg-zinc-50"
             >
               <FileText className="h-4 w-4 text-zinc-500" />
-              Manage Secondary Records
+              {t("nav.profile", "Universal Profile")}
             </Link>
           </div>
         </div>
