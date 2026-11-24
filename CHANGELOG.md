@@ -6,12 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 Planning
+## [Unreleased] - Phase 3 In Progress (Milestones 2–7)
 
 ### Planned
-- Advanced transfer credit articulation rules engine (IGETC / CSU-GE / Assist.org full mapping).
-- Ingestion of complete IPEDS institutional dataset into PostgreSQL.
-- Financial aid net price calculator with multi-currency conversion references.
+- Milestone 2: Bulk US institutional ingestion (NCES IPEDS / Urban Institute / College Scorecard) + frontend Global University Intelligence UI.
+- Milestone 3: Admissions Requirements Engine (First-Year & Transfer conditional rules and versioned deadlines).
+- Milestone 4: 3-Tier Transfer Articulation Engine (ASSIST.org API-keyed connector + `pgvector` Tier 3 predictions).
+- Milestone 5: 4-Dimensional Explainable University Matching Engine (Reach / Target / Likely).
+- Milestone 6: Live `pgvector` RAG Multilingual AI Counselor (`$0` local embedding default).
+- Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+
+---
+
+## [0.5.0-m1] - 2026-11-24
+
+### Added — Phase 3 Milestone 1: Global Institutional DB & Ingestion Infrastructure
+- **Database Schema & Reversible Migration (`5f3c21a2d902`):**
+  - Enabled PostgreSQL `pg_trgm` and `unaccent` extensions alongside `pgvector`.
+  - Added `countries` table (ISO 3166-1 alpha-2, currencies, languages, higher-ed ministries, accreditation bodies) seeded with 33 global country authorities.
+  - Extended `institutions` with multi-campus hierarchy (`parent_institution_id`, `campus_name`, `is_main_campus`), canonical global identifiers (`ipeds_unit_id`, `ope_id`, `ucas_code`, `ror_id`, `openalex_id`, `external_ids`), admission percentiles, `data_completeness_score`, and PostgreSQL `tsvector` FTS trigger + GIN/trigram indexes.
+  - Added `academic_programs`, versioned `institution_costs`, `ingestion_runs`, non-destructive `data_provenance` (SHA-256 `data_hash` + `previous_value`), and `data_quality_flags`.
+- **Extensible Ingestion Pipeline (`apps/api/app/ingestion/`):**
+  - Implemented `BaseInstitutionConnector`, `IngestionPipeline` (idempotent upserts, non-destructive change logging, completeness scoring, quality flag detection), and CLI runner (`app.ingestion.cli`).
+  - Built and verified CC0 `OpenAlexRorConnector` ingesting real multi-country university data (US, CA, HT, FR, GB, DE, IN, NG, BR, MX, JP, AU) with 100% re-run idempotency.
+- **Institutional Search, Provenance & Admin RBAC APIs:**
+  - Added `GET /api/v1/countries`, faceted `GET /api/v1/institutions/search`, `GET /api/v1/institutions/{id}`, `GET /api/v1/institutions/{id}/provenance`, and role-protected `GET /api/v1/admin/quality-flags` & `GET /api/v1/admin/ingestion-runs`.
+  - Verified with 20 passing backend pytest tests and 7 passing frontend tests.
 
 ---
 

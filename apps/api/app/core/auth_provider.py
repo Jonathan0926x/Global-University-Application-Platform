@@ -35,7 +35,16 @@ class MockAuthProvider(IAuthProvider):
         clean_token = token.replace("Bearer ", "").strip()
         
         # Test tokens
-        if clean_token.startswith("mock_"):
+        if clean_token.startswith("mock_admin_"):
+            email = clean_token.split("mock_admin_", 1)[1] or "admin@uniglobe.edu"
+            return UserClaims(
+                user_id=f"admin_{email.replace('@', '_').replace('.', '_')}",
+                email=email,
+                first_name="System",
+                last_name="Admin",
+                role="admin"
+            )
+        elif clean_token.startswith("mock_"):
             parts = clean_token.split("_", 1)
             email = parts[1] if len(parts) > 1 else "student@example.com"
             user_id = f"user_{email.replace('@', '_').replace('.', '_')}"

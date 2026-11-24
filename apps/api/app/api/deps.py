@@ -54,3 +54,14 @@ def get_current_profile(
     db: Session = Depends(get_db)
 ) -> Optional[StudentProfile]:
     return db.query(StudentProfile).filter(StudentProfile.user_id == user.id).first()
+
+
+def require_admin_claims(
+    claims: UserClaims = Depends(get_current_user_claims),
+) -> UserClaims:
+    if claims.role not in ("admin", "data_verifier"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative or data verifier privileges required."
+        )
+    return claims

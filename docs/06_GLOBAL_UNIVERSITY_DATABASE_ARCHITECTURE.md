@@ -1,8 +1,8 @@
 # Global University Database Architecture
 
-> **Date:** November 23, 2026
-> **Status:** Technical Specification — Pre-Implementation
-> **Dependencies:** Database infrastructure, data ingestion pipeline
+> **Date:** November 24, 2026
+> **Status:** Milestone 1 Implemented & Tested (Schema, Provenance, FTS Search, OpenAlex/ROR Connector); Milestone 2 Pending (US IPEDS Bulk Ingestion)
+> **Dependencies:** PostgreSQL 16+ with `pgvector`, `pg_trgm`, `unaccent` (Active in Alembic rev `5f3c21a2d902`)
 
 ---
 

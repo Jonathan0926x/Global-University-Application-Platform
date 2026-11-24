@@ -14,6 +14,7 @@ from app.schemas.application import (
     InstitutionSummarySchema
 )
 from app.api.deps import get_current_user
+from app.ingestion.countries_seed import ensure_country_exists
 
 router = APIRouter()
 
@@ -21,6 +22,7 @@ router = APIRouter()
 def seed_sample_institutions_if_empty(db: Session):
     count = db.query(Institution).count()
     if count == 0:
+        ensure_country_exists(db, "US", "United States")
         samples = [
             Institution(
                 official_name="University of California, Berkeley",

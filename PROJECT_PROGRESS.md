@@ -37,7 +37,7 @@
 | **Universal Student Profile** | ✅ **Tested** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
 | **First-Year Portal (Core)** | 🚀 **Implemented** | P1 | Phase 1 | Nov 23, 2026 | Engineering |
 | **Transfer Portal (Wedge)** | 🚀 **Implemented** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
-| **University Discovery** | 🚀 **Implemented** | P0 | Phase 1/2 | Nov 23, 2026 | Data / Backend |
+| **University Discovery** | ✅ **Tested** (M1 Complete) | P0 | Phase 3 (M1–M2) | Nov 24, 2026 | Data / Backend |
 | **Application Management** | ✅ **Tested** | P1 | Phase 1/2 | Nov 23, 2026 | Full Stack |
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ⏳ **In Progress** | P0 | Phase 2/3 | Phase 2 (M3) | Data / Backend |
@@ -175,14 +175,19 @@
 * **Last Verified Date:** November 23, 2026
 * **Next Action:** Milestone 2.3: Build transfer coursework management interface.
 
-### 12. University Discovery & Directory
-* **Status:** ⭕ **Not Started**
+### 12. University Discovery & Directory (Phase 3 M1)
+* **Status:** ✅ **Tested** (Milestone 1 Complete — Institutional DB & Ingestion Infrastructure)
 * **Priority:** P0
 * **Dependencies:** Database Implementation
-* **Relevant Files:** [`docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md`](docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md)
-* **Acceptance Criteria:** Ingestion pipeline for 4,000+ US institutions (IPEDS dataset); fast search API (<150ms) by name, state, major, selectivity, and tuition.
-* **Last Verified Date:** November 23, 2026
-* **Next Action:** Phase 2 data seeding script for IPEDS institution database.
+* **Relevant Files:**
+  - [`docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md`](docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md)
+  - `apps/api/app/models/country.py`, `apps/api/app/models/institution.py`, `apps/api/app/models/provenance.py`
+  - `apps/api/app/ingestion/base.py`, `apps/api/app/ingestion/countries_seed.py`, `apps/api/app/ingestion/openalex_ror.py`
+  - `apps/api/app/api/v1/institutions.py`
+  - `apps/api/alembic/versions/5f3c21a2d902_milestone_1_institutional_db_and_.py`
+* **Acceptance Criteria:** Normalized `countries`, multi-campus `institutions`, `academic_programs`, `institution_costs`, `ingestion_runs`, non-destructive `data_provenance` (SHA-256 diff versioning), `data_quality_flags`, PostgreSQL FTS (`tsvector` + GIN + `pg_trgm`), OpenAlex/ROR CC0 connector (verified across 12 countries / 60 records idempotently), and RBAC-protected admin provenance endpoints.
+* **Last Verified Date:** November 24, 2026
+* **Next Action:** Phase 3 Milestone 2: US Institutional Dataset Ingestion (IPEDS / Urban Institute / College Scorecard) and enhanced `/universities` search UI.
 
 ### 13. Application Management & Tracker
 * **Status:** ⭕ **Not Started**
