@@ -110,17 +110,24 @@ class InstitutionSummaryV3Schema(BaseModel):
     official_website: Optional[str] = None
     admissions_website: Optional[str] = None
     total_enrollment: Optional[int] = None
+    undergraduate_enrollment: Optional[int] = None
     acceptance_rate: Optional[float] = None
     tuition_in_state: Optional[float] = None
     tuition_out_of_state: Optional[float] = None
+    avg_net_price: Optional[float] = None
+    cost_of_attendance: Optional[float] = None
     currency: Optional[str] = "USD"
     ipeds_unit_id: Optional[str] = None
+    ope_id: Optional[str] = None
+    ope6_id: Optional[str] = None
     ror_id: Optional[str] = None
     openalex_id: Optional[str] = None
     accepts_transfer: bool = True
     accepts_first_year: bool = True
     accepts_international: bool = True
     data_completeness_score: Optional[float] = 0.0
+    data_reporting_year: Optional[str] = None
+    primary_source: Optional[str] = None
     is_verified: bool = True
     last_verified_at: Optional[datetime] = None
 
@@ -143,9 +150,13 @@ class InstitutionDetailSchema(InstitutionSummaryV3Schema):
     longitude: Optional[float] = None
     financial_aid_website: Optional[str] = None
     international_admissions_website: Optional[str] = None
+    net_price_calculator_url: Optional[str] = None
+    application_portal_url: Optional[str] = None
     accreditation_status: Optional[str] = None
     accrediting_body: Optional[str] = None
-    undergraduate_enrollment: Optional[int] = None
+    open_admissions: Optional[bool] = None
+    calendar_system: Optional[str] = None
+    undergrad_application_fee: Optional[float] = None
     graduate_enrollment: Optional[int] = None
     student_faculty_ratio: Optional[str] = None
     sat_math_25: Optional[int] = None
@@ -156,7 +167,14 @@ class InstitutionDetailSchema(InstitutionSummaryV3Schema):
     act_composite_75: Optional[int] = None
     gpa_25: Optional[float] = None
     gpa_75: Optional[float] = None
-    ope_id: Optional[str] = None
+    completion_rate_4yr: Optional[float] = None
+    completion_rate_less_4yr: Optional[float] = None
+    retention_rate: Optional[float] = None
+    median_earnings_10yr: Optional[float] = None
+    median_debt: Optional[float] = None
+    pct_international: Optional[float] = None
+    pct_pell: Optional[float] = None
+    student_demographics: Dict[str, Any] = {}
     ucas_code: Optional[str] = None
     external_ids: Dict[str, Any] = {}
     programs: List[AcademicProgramSchema] = []
@@ -164,9 +182,9 @@ class InstitutionDetailSchema(InstitutionSummaryV3Schema):
     campuses: List[InstitutionSummaryV3Schema] = []
     provenance_summary: List[DataProvenanceSchema] = []
 
-    @field_validator("external_ids", mode="before")
+    @field_validator("external_ids", "student_demographics", mode="before")
     @classmethod
-    def coerce_external_ids(cls, v):
+    def coerce_dicts(cls, v):
         return v if v is not None else {}
 
 

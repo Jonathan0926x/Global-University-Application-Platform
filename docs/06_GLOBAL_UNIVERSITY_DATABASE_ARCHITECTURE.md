@@ -1,8 +1,8 @@
 # Global University Database Architecture
 
 > **Date:** November 24, 2026
-> **Status:** Milestone 1 Implemented & Tested (Schema, Provenance, FTS Search, OpenAlex/ROR Connector); Milestone 2 Pending (US IPEDS Bulk Ingestion)
-> **Dependencies:** PostgreSQL 16+ with `pgvector`, `pg_trgm`, `unaccent` (Active in Alembic rev `5f3c21a2d902`)
+> **Status:** Milestones 1–2 Implemented & Tested (`6,699` verified institutions: `6,644` U.S. IPEDS/College Scorecard + `55` OpenAlex/ROR international; `/universities` & `/universities/[id]` live)
+> **Dependencies:** PostgreSQL 16+ with `pgvector`, `pg_trgm`, `unaccent` (Active in Alembic rev `77ffb27f3bc8`)
 
 ---
 

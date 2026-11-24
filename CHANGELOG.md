@@ -6,15 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 In Progress (Milestones 2–7)
+## [Unreleased] - Phase 3 In Progress (Milestones 3–7)
 
 ### Planned
-- Milestone 2: Bulk US institutional ingestion (NCES IPEDS / Urban Institute / College Scorecard) + frontend Global University Intelligence UI.
 - Milestone 3: Admissions Requirements Engine (First-Year & Transfer conditional rules and versioned deadlines).
 - Milestone 4: 3-Tier Transfer Articulation Engine (ASSIST.org API-keyed connector + `pgvector` Tier 3 predictions).
 - Milestone 5: 4-Dimensional Explainable University Matching Engine (Reach / Target / Likely).
 - Milestone 6: Live `pgvector` RAG Multilingual AI Counselor (`$0` local embedding default).
 - Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+
+---
+
+## [0.5.0-m2] - 2026-11-24
+
+### Added — Phase 3 Milestone 2: U.S. Institutional Dataset Ingestion & Directory UI
+- **Schema Extension & Reversible Migration (`77ffb27f3bc8`):**
+  - Extended `institutions` with College Scorecard outcomes and admissions indicators (`net_price_calculator_url`, `application_portal_url`, `open_admissions`, `calendar_system`, `undergrad_application_fee`, `completion_rate_4yr`, `completion_rate_less_4yr`, `retention_rate`, `median_earnings_10yr`, `median_debt`, `pct_international`, `pct_pell`, `student_demographics`, `avg_net_price`, `cost_of_attendance`, `ope6_id`, `data_reporting_year`, `primary_source`) plus B-tree search indexes (`control_type`, `tuition_in_state`, `tuition_out_of_state`, `total_enrollment`).
+- **NCES IPEDS & College Scorecard Connectors (`apps/api/app/ingestion/`):**
+  - Implemented `IPEDSConnector` ingesting 2023–2024 `HD2023`, `IC2023`, `IC2023_AY`, `ADM2023`, and `DRVEF2023` bulk federal files (`fetched=6059`, `created=6055`, `updated=4`, `7,074` itemized cost rows).
+  - Implemented `CollegeScorecardConnector` (`bulk` CSV + `DEMO_KEY` REST API mode) coercing `PrivacySuppressed` to SQL `NULL`, linking `1,296` branch campuses via `MAIN=0` / `ope6_id`, and upserting `21,434` CIP `academic_programs` rows (`fetched=6272`, `created=585`, `updated=5687`).
+  - Added source authority ranking (`official_website > ipeds > government_db > college_scorecard > manual_entry > api > openalex_ror`), stale-year protection, non-duplicating `conflicting_data` audit flags (`477` detected), and `deduplicate_us_non_ipeds` collapsing 4 seed/OpenAlex duplicates into canonical IPEDS records (`6,699` total verified institutions: `6,644` U.S. + `55` international).
+- **Directory Search & Intelligence Detail UI:**
+  - Added `GET /api/v1/institutions/filters` and enhanced `GET /api/v1/institutions/search` (`enrollment_min`, `enrollment_max`, `sort`).
+  - Upgraded `/universities` (paginated catalog with 7 faceted filters and explicit `Not Reported` null handling) and launched `/universities/[id]` (affordability, admissions benchmarks, enrollment & outcomes, associated campuses, CIP classifications, itemized cost tables, and SHA-256 provenance trail).
+  - Verified with 25 passing backend `pytest` tests, 7 passing frontend tests, Next.js `15.5.29` production build, and live Chromium UI verification.
 
 ---
 

@@ -34,6 +34,50 @@ def list_countries(
     return query.order_by(Country.name.asc()).all()
 
 
+@router.get("/institutions/filters", tags=["Institutions"])
+def get_institution_filter_options(db: Session = Depends(get_db)):
+    """Returns distinct available filter values from published database records."""
+    total_count = db.query(func.count(Institution.id)).filter(Institution.is_published == True).scalar() or 0
+    us_count = (
+        db.query(func.count(Institution.id))
+        .filter(Institution.is_published == True, Institution.country_code == "US")
+        .scalar()
+        or 0
+    )
+    countries = (
+        db.query(Institution.country_code, func.count(Institution.id))
+        .filter(Institution.is_published == True)
+        .group_by(Institution.country_code)
+        .order_by(func.count(Institution.id).desc())
+        .all()
+    )
+    states = (
+        db.query(Institution.state_province)
+        .filter(
+            Institution.is_published == True,
+            Institution.country_code == "US",
+            Institution.state_province.isnot(None),
+        )
+        .distinct()
+        .order_by(Institution.state_province.asc())
+        .all()
+    )
+    types = (
+        db.query(Institution.institution_type, func.count(Institution.id))
+        .filter(Institution.is_published == True)
+        .group_by(Institution.institution_type)
+        .order_by(func.count(Institution.id).desc())
+        .all()
+    )
+    return {
+        "total_institutions": total_count,
+        "us_institutions": us_count,
+        "countries": [{"code": c, "count": n} for c, n in countries],
+        "us_states": [s[0] for s in states if s[0] and len(s[0]) <= 10],
+        "institution_types": [{"type": t, "count": n} for t, n in types],
+    }
+
+
 @router.get("/institutions/search", response_model=InstitutionSearchResponse, tags=["Institutions"])
 def search_institutions(
     q: Optional[str] = Query(None, description="Full-text and fuzzy search query"),
@@ -45,7 +89,10 @@ def search_institutions(
     accepts_first_year: Optional[bool] = Query(None),
     accepts_international: Optional[bool] = Query(None),
     tuition_max: Optional[float] = Query(None, ge=0),
+    enrollment_min: Optional[int] = Query(None, ge=0),
+    enrollment_max: Optional[int] = Query(None, ge=0),
     cip_code: Optional[str] = Query(None, description="Filter by AcademicProgram CIP code prefix"),
+    sort: str = Query("relevance", description="Sort order: relevance, enrollment_desc, tuition_asc, name_asc"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -59,7 +106,11 @@ def search_institutions(
     if country:
         query = query.filter(Institution.country_code == country.strip().upper()[:2])
     if state:
-        query = query.filter(Institution.state_province.ilike(f"%{state.strip()}%"))
+        st_clean = state.strip()
+        if len(st_clean) == 2:
+            query = query.filter(func.upper(Institution.state_province) == st_clean.upper())
+        else:
+            query = query.filter(Institution.state_province.ilike(f"%{st_clean}%"))
     if type:
         query = query.filter(Institution.institution_type == type.strip())
     if control:
@@ -77,11 +128,16 @@ def search_institutions(
                 Institution.tuition_out_of_state <= tuition_max,
             )
         )
+    if enrollment_min is not None:
+        query = query.filter(Institution.total_enrollment >= enrollment_min)
+    if enrollment_max is not None:
+        query = query.filter(Institution.total_enrollment <= enrollment_max)
     if cip_code:
         query = query.join(AcademicProgram, AcademicProgram.institution_id == Institution.id).filter(
             AcademicProgram.cip_code.ilike(f"{cip_code.strip()}%")
         ).distinct()
 
+    ts_query = None
     if q and q.strip():
         q_clean = q.strip()
         ts_query = func.plainto_tsquery("english", q_clean)
@@ -96,15 +152,24 @@ def search_institutions(
                 Institution.ror_id == q_clean,
             )
         )
-        # Order exact / prefix / FTS rank matches first
+
+    if sort == "enrollment_desc":
+        query = query.order_by(Institution.total_enrollment.desc().nullslast(), Institution.official_name.asc())
+    elif sort == "tuition_asc":
+        query = query.order_by(Institution.tuition_in_state.asc().nullslast(), Institution.official_name.asc())
+    elif sort == "name_asc":
+        query = query.order_by(Institution.official_name.asc())
+    elif ts_query is not None:
         query = query.order_by(
             func.coalesce(func.ts_rank(Institution.search_vector, ts_query), 0.0).desc(),
             Institution.data_completeness_score.desc(),
+            Institution.total_enrollment.desc().nullslast(),
             Institution.official_name.asc(),
         )
     else:
         query = query.order_by(
             Institution.data_completeness_score.desc(),
+            Institution.total_enrollment.desc().nullslast(),
             Institution.official_name.asc(),
         )
 

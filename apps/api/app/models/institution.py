@@ -39,11 +39,16 @@ class Institution(Base):
     admissions_website = Column(Text, nullable=True)
     financial_aid_website = Column(Text, nullable=True)
     international_admissions_website = Column(Text, nullable=True)
+    net_price_calculator_url = Column(Text, nullable=True)
+    application_portal_url = Column(Text, nullable=True)
 
-    # Accreditation
+    # Accreditation & Admissions Structure
     accreditation_status = Column(String(50), nullable=True)
     accrediting_body = Column(String(300), nullable=True)
     accreditation_details = Column(JSONB, default=dict)
+    open_admissions = Column(Boolean, nullable=True)
+    calendar_system = Column(String(30), nullable=True)
+    undergrad_application_fee = Column(Numeric(8, 2), nullable=True)
 
     # Size & published admission benchmarks (only populated from authoritative sources)
     total_enrollment = Column(Integer, nullable=True)
@@ -60,14 +65,27 @@ class Institution(Base):
     gpa_25 = Column(Numeric(4, 2), nullable=True)
     gpa_75 = Column(Numeric(4, 2), nullable=True)
 
+    # Outcomes & Aggregated Student Demographics (College Scorecard / IPEDS)
+    completion_rate_4yr = Column(Numeric(5, 2), nullable=True)
+    completion_rate_less_4yr = Column(Numeric(5, 2), nullable=True)
+    retention_rate = Column(Numeric(5, 2), nullable=True)
+    median_earnings_10yr = Column(Numeric(10, 2), nullable=True)
+    median_debt = Column(Numeric(10, 2), nullable=True)
+    pct_international = Column(Numeric(5, 2), nullable=True)
+    pct_pell = Column(Numeric(5, 2), nullable=True)
+    student_demographics = Column(JSONB, default=dict)
+
     # Costs (summary in-state and out-of-state/international; versioned details in institution_costs)
     tuition_in_state = Column(Numeric(10, 2), nullable=True)
     tuition_out_of_state = Column(Numeric(10, 2), nullable=True)
+    avg_net_price = Column(Numeric(10, 2), nullable=True)
+    cost_of_attendance = Column(Numeric(10, 2), nullable=True)
     currency = Column(CHAR(3), default="USD")
 
     # External canonical identifiers
     ipeds_unit_id = Column(String(20), nullable=True, unique=True, index=True)
     ope_id = Column(String(20), nullable=True, index=True)
+    ope6_id = Column(String(10), nullable=True, index=True)
     ucas_code = Column(String(20), nullable=True, index=True)
     ror_id = Column(String(100), nullable=True, unique=True, index=True)
     openalex_id = Column(String(100), nullable=True, unique=True, index=True)
@@ -84,6 +102,8 @@ class Institution(Base):
 
     # Data quality & verification
     data_completeness_score = Column(Numeric(3, 2), default=0.0)
+    data_reporting_year = Column(String(9), nullable=True)
+    primary_source = Column(String(50), nullable=True)
     last_verified_at = Column(DateTime(timezone=True), nullable=True)
     is_verified = Column(Boolean, default=True)
     is_published = Column(Boolean, default=True)

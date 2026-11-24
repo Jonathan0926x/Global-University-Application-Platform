@@ -177,10 +177,14 @@ def test_institutional_search_detail_and_provenance_endpoints(client):
     assert ht_res.status_code == 200
     assert ht_res.json()["total"] >= 1
 
-    # 3. Search by institution_type
+    # 3. Search by institution_type (paginated across 999+ community colleges)
     cc_res = client.get("/api/v1/institutions/search?type=community_college")
     assert cc_res.status_code == 200
-    assert any(i["official_name"] == "De Anza College" for i in cc_res.json()["items"])
+    assert cc_res.json()["total"] >= 1
+    assert all(i["institution_type"] == "community_college" for i in cc_res.json()["items"])
+    deanza_res = client.get("/api/v1/institutions/search?q=De+Anza&type=community_college")
+    assert deanza_res.status_code == 200
+    assert any(i["official_name"] == "De Anza College" for i in deanza_res.json()["items"])
 
     # 4. Detail & provenance history endpoints
     inst_id = first_item["id"]

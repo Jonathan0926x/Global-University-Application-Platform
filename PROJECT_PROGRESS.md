@@ -3,7 +3,7 @@
 > **Single Source of Truth for Implementation Progress & Milestone Tracking**<br/>
 > **Platform Vision:** One Student Profile. Every University. One Global Platform.<br/>
 > **Repository:** `Jonathan0926x/Global-University-Application-Platform` (Private)<br/>
-> **Last Updated:** November 23, 2026
+> **Last Updated:** November 24, 2026
 
 ---
 
@@ -37,7 +37,7 @@
 | **Universal Student Profile** | ✅ **Tested** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
 | **First-Year Portal (Core)** | 🚀 **Implemented** | P1 | Phase 1 | Nov 23, 2026 | Engineering |
 | **Transfer Portal (Wedge)** | 🚀 **Implemented** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
-| **University Discovery** | ✅ **Tested** (M1 Complete) | P0 | Phase 3 (M1–M2) | Nov 24, 2026 | Data / Backend |
+| **University Discovery** | ✅ **Tested** (M1–M2 Complete: 6,699 Inst.) | P0 | Phase 3 (M1–M2) | Nov 24, 2026 | Data / Backend |
 | **Application Management** | ✅ **Tested** | P1 | Phase 1/2 | Nov 23, 2026 | Full Stack |
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ⏳ **In Progress** | P0 | Phase 2/3 | Phase 2 (M3) | Data / Backend |
@@ -175,19 +175,20 @@
 * **Last Verified Date:** November 23, 2026
 * **Next Action:** Milestone 2.3: Build transfer coursework management interface.
 
-### 12. University Discovery & Directory (Phase 3 M1)
-* **Status:** ✅ **Tested** (Milestone 1 Complete — Institutional DB & Ingestion Infrastructure)
+### 12. University Discovery & Directory (Phase 3 M1–M2)
+* **Status:** ✅ **Tested** (Milestone 1 & Milestone 2 Complete — 6,699 Verified Institutions Indexed)
 * **Priority:** P0
 * **Dependencies:** Database Implementation
 * **Relevant Files:**
   - [`docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md`](docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md)
   - `apps/api/app/models/country.py`, `apps/api/app/models/institution.py`, `apps/api/app/models/provenance.py`
-  - `apps/api/app/ingestion/base.py`, `apps/api/app/ingestion/countries_seed.py`, `apps/api/app/ingestion/openalex_ror.py`
+  - `apps/api/app/ingestion/base.py`, `apps/api/app/ingestion/countries_seed.py`, `apps/api/app/ingestion/openalex_ror.py`, `apps/api/app/ingestion/ipeds.py`, `apps/api/app/ingestion/scorecard.py`, `apps/api/app/ingestion/dedup.py`
   - `apps/api/app/api/v1/institutions.py`
-  - `apps/api/alembic/versions/5f3c21a2d902_milestone_1_institutional_db_and_.py`
-* **Acceptance Criteria:** Normalized `countries`, multi-campus `institutions`, `academic_programs`, `institution_costs`, `ingestion_runs`, non-destructive `data_provenance` (SHA-256 diff versioning), `data_quality_flags`, PostgreSQL FTS (`tsvector` + GIN + `pg_trgm`), OpenAlex/ROR CC0 connector (verified across 12 countries / 60 records idempotently), and RBAC-protected admin provenance endpoints.
+  - `apps/api/alembic/versions/5f3c21a2d902_milestone_1_institutional_db_and_.py`, `apps/api/alembic/versions/77ffb27f3bc8_milestone_2_scorecard_outcomes_and_.py`
+  - `apps/web/src/app/universities/page.tsx`, `apps/web/src/app/universities/[id]/page.tsx`
+* **Acceptance Criteria:** Normalized `countries`, multi-campus `institutions` (`6,644` US IPEDS/Scorecard + `55` international institutions across `11` countries), `21,434` `academic_programs` CIP records, `7,074` versioned `institution_costs`, `12,954` non-destructive `data_provenance` (SHA-256) snapshots, authority-ranked conflict detection (`477` flagged without overwriting IPEDS), non-IPEDS duplicate collapse (`0` remaining unlinked U.S. rows), explicit `Not Reported` null handling, paginated 7-filter `/universities` directory, and `/universities/[id]` intelligence detail pages.
 * **Last Verified Date:** November 24, 2026
-* **Next Action:** Phase 3 Milestone 2: US Institutional Dataset Ingestion (IPEDS / Urban Institute / College Scorecard) and enhanced `/universities` search UI.
+* **Next Action:** Phase 3 Milestone 3: Global International Registry Expansion & Admissions Requirements Engine.
 
 ### 13. Application Management & Tracker
 * **Status:** ⭕ **Not Started**

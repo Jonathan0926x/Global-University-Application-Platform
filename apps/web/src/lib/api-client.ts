@@ -354,3 +354,222 @@ export async function translateDocument(
   return res.json();
 }
 
+// ============================================================================
+// Phase 3: Global University Intelligence Engine Types & APIs
+// ============================================================================
+
+export interface CountryItem {
+  code: string;
+  name: string;
+  name_local?: string;
+  region?: string;
+  currency_code?: string;
+  primary_languages: string[];
+  higher_ed_ministry?: string;
+  accreditation_body?: string;
+}
+
+export interface InstitutionV3 {
+  id: string;
+  official_name: string;
+  alternative_names: string[];
+  abbreviation?: string;
+  campus_name?: string;
+  is_main_campus: boolean;
+  parent_institution_id?: string;
+  country_code: string;
+  state_province?: string;
+  city?: string;
+  institution_type: string;
+  control_type?: string;
+  carnegie_classification?: string;
+  official_website?: string;
+  admissions_website?: string;
+  total_enrollment?: number;
+  undergraduate_enrollment?: number;
+  acceptance_rate?: number;
+  tuition_in_state?: number;
+  tuition_out_of_state?: number;
+  avg_net_price?: number;
+  cost_of_attendance?: number;
+  currency?: string;
+  ipeds_unit_id?: string;
+  ope_id?: string;
+  ope6_id?: string;
+  ror_id?: string;
+  openalex_id?: string;
+  accepts_transfer: boolean;
+  accepts_first_year: boolean;
+  accepts_international: boolean;
+  data_completeness_score?: number;
+  data_reporting_year?: string;
+  primary_source?: string;
+  is_verified: boolean;
+  last_verified_at?: string;
+}
+
+export interface AcademicProgramItem {
+  id: string;
+  program_name: string;
+  degree_level: string;
+  degree_type?: string;
+  cip_code?: string;
+  academic_year?: string;
+  verification_status?: string;
+}
+
+export interface InstitutionCostItem {
+  id: string;
+  academic_year: string;
+  student_type: string;
+  degree_level?: string;
+  tuition?: number;
+  mandatory_fees?: number;
+  room_board?: number;
+  books_supplies?: number;
+  personal_expenses?: number;
+  total_estimated_cost?: number;
+  currency?: string;
+  is_current: boolean;
+  source_url?: string;
+  verification_status?: string;
+}
+
+export interface DataProvenanceItem {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  field_name?: string;
+  source_type: string;
+  source_url?: string;
+  source_name: string;
+  collection_method: string;
+  retrieved_at: string;
+  verified_at?: string;
+  academic_year?: string;
+  confidence_level: string;
+  data_hash?: string;
+  previous_value?: Record<string, any>;
+  is_current: boolean;
+}
+
+export interface InstitutionDetail extends InstitutionV3 {
+  postal_code?: string;
+  latitude?: number;
+  longitude?: number;
+  financial_aid_website?: string;
+  international_admissions_website?: string;
+  net_price_calculator_url?: string;
+  application_portal_url?: string;
+  accreditation_status?: string;
+  accrediting_body?: string;
+  open_admissions?: boolean;
+  calendar_system?: string;
+  undergrad_application_fee?: number;
+  graduate_enrollment?: number;
+  student_faculty_ratio?: string;
+  sat_math_25?: number;
+  sat_math_75?: number;
+  sat_ebrw_25?: number;
+  sat_ebrw_75?: number;
+  act_composite_25?: number;
+  act_composite_75?: number;
+  gpa_25?: number;
+  gpa_75?: number;
+  completion_rate_4yr?: number;
+  completion_rate_less_4yr?: number;
+  retention_rate?: number;
+  median_earnings_10yr?: number;
+  median_debt?: number;
+  pct_international?: number;
+  pct_pell?: number;
+  student_demographics: Record<string, any>;
+  ucas_code?: string;
+  external_ids: Record<string, any>;
+  programs: AcademicProgramItem[];
+  costs: InstitutionCostItem[];
+  campuses: InstitutionV3[];
+  provenance_summary: DataProvenanceItem[];
+}
+
+export interface InstitutionSearchResponse {
+  items: InstitutionV3[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface InstitutionFilterOptions {
+  total_institutions: number;
+  us_institutions: number;
+  countries: Array<{ code: string; count: number }>;
+  us_states: string[];
+  institution_types: Array<{ type: string; count: number }>;
+}
+
+export async function fetchCountries(): Promise<CountryItem[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/countries`);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchInstitutionFilters(): Promise<InstitutionFilterOptions | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/institutions/filters`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function searchInstitutions(params: {
+  q?: string;
+  country?: string;
+  state?: string;
+  type?: string;
+  control?: string;
+  accepts_transfer?: boolean;
+  accepts_first_year?: boolean;
+  tuition_max?: number;
+  enrollment_min?: number;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}): Promise<InstitutionSearchResponse> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.append("q", params.q);
+  if (params.country) qs.append("country", params.country);
+  if (params.state) qs.append("state", params.state);
+  if (params.type) qs.append("type", params.type);
+  if (params.control) qs.append("control", params.control);
+  if (params.accepts_transfer !== undefined) qs.append("accepts_transfer", String(params.accepts_transfer));
+  if (params.accepts_first_year !== undefined) qs.append("accepts_first_year", String(params.accepts_first_year));
+  if (params.tuition_max !== undefined) qs.append("tuition_max", String(params.tuition_max));
+  if (params.enrollment_min !== undefined) qs.append("enrollment_min", String(params.enrollment_min));
+  if (params.sort) qs.append("sort", params.sort);
+  qs.append("page", String(params.page || 1));
+  qs.append("limit", String(params.limit || 24));
+
+  const res = await fetch(`${API_BASE_URL}/institutions/search?${qs.toString()}`);
+  if (!res.ok) throw new Error("Failed to search institutions");
+  return res.json();
+}
+
+export async function fetchInstitutionDetail(id: string): Promise<InstitutionDetail> {
+  const res = await fetch(`${API_BASE_URL}/institutions/${id}`);
+  if (!res.ok) throw new Error("Failed to load institution details");
+  return res.json();
+}
+
+export async function fetchInstitutionProvenance(id: string): Promise<DataProvenanceItem[]> {
+  const res = await fetch(`${API_BASE_URL}/institutions/${id}/provenance`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+
