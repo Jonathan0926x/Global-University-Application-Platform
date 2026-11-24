@@ -80,13 +80,13 @@ class DocumentVaultService:
 
         # Language Detection Heuristic
         detected_lang = "en-US"
-        if any(w in lower_text or w in lower_filename for w in ["kreyòl", "ayiti", "lekol", "not"]):
+        if any(w in lower_text or w in lower_filename for w in ["kreyòl", "ayiti", "lekol", "bilten nòt", "nòt"]):
             detected_lang = "ht-HT"
-        elif any(w in lower_text or w in lower_filename for w in ["baccalauréat", "lycée", "bulletin", "semestre", "université"]):
+        elif any(w in lower_text or w in lower_filename for w in ["baccalauréat", "lycée", "bulletin", "semestre", "université", "français"]):
             detected_lang = "fr-FR"
-        elif any(w in lower_text or w in lower_filename for w in ["español", "bachillerato", "calificaciones", "asignatura"]):
+        elif any(w in lower_text or w in lower_filename for w in ["español", "bachillerato", "calificaciones", "asignatura", "colegio"]):
             detected_lang = "es-419"
-        elif any(w in lower_text or w in lower_filename for w in ["جامعة", "شهادة", "درجات"]):
+        elif any(w in lower_text or w in lower_filename for w in ["جامعة", "شهادة", "درجات", "المملكة"]):
             detected_lang = "ar-SA"
 
         # Academic Qualification & Institution Detection

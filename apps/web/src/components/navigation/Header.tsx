@@ -12,7 +12,9 @@ import {
   Compass,
   Bot,
   FileText,
-  ChevronDown
+  ChevronDown,
+  Menu,
+  X
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 import { LanguageModal } from "@/components/i18n/LanguageModal";
@@ -21,6 +23,7 @@ export function Header() {
   const pathname = usePathname();
   const { language, direction, t } = useI18n();
   const [langModalOpen, setLangModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
     { href: "/dashboard", label: t("nav.student_os", "Student OS"), icon: LayoutDashboard },
@@ -97,8 +100,42 @@ export function Header() {
               </div>
               <span className="hidden sm:inline">Jordan T.</span>
             </Link>
+
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+              aria-label="Toggle Navigation Menu"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t border-zinc-200 bg-white px-4 py-3 space-y-1 shadow-lg animate-in slide-in-from-top-2">
+            {navLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href || pathname?.startsWith(link.href + "/");
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-zinc-100 text-zinc-900 font-semibold"
+                      : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 text-zinc-500" />
+                  <span>{link.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       {/* Language & Region Selector Modal */}

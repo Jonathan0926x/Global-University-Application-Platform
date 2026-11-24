@@ -1,0 +1,16 @@
+DE ANZA COLLEGE
+Cupertino, California, USA
+OFFICIAL ACADEMIC TRANSCRIPT
+Student: Jordan Taylor (ID: 20491823)
+Degree Program: Associate in Science in Computer Science for Transfer (AS-T)
+Cumulative GPA: 3.88 | Units Earned: 48.0 Quarter Units
+
+COURSE RECORD:
+CIS 22A - Beginning Programming Methodologies in C++ | 4.5 Units | Grade: A
+CIS 22B - Intermediate Programming Methodologies in C++ | 4.5 Units | Grade: A
+MATH 1A - Calculus I (Differential Calculus) | 5.0 Units | Grade: A-
+MATH 1B - Calculus II (Integral Calculus) | 5.0 Units | Grade: A
+ENGL 1A - Composition and Reading | 5.0 Units | Grade: B+
+PHYS 4A - Physics for Scientists and Engineers: Mechanics | 6.0 Units | Grade: A
+
+STATUS: Transferable to UC and CSU campuses. Articulation verified via ASSIST.org.

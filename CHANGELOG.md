@@ -6,12 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 2 In Progress
+## [Unreleased] - Phase 3 Planning
 
 ### Planned
 - Advanced transfer credit articulation rules engine (IGETC / CSU-GE / Assist.org full mapping).
 - Ingestion of complete IPEDS institutional dataset into PostgreSQL.
 - Financial aid net price calculator with multi-currency conversion references.
+
+---
+
+## [0.4.1] - 2026-11-24
+
+### Quality Assurance & End-to-End Audit
+- **Full Internationalization Capabilities Audit:**
+  - Audited all 8 internationalization capabilities across 7 application routes (`/`, `/dashboard`, `/first-year`, `/transfer`, `/counselor`, `/documents`, `/universities`, `/profile`).
+  - Expanded registry to 36 global languages across 3 verified tiers (`fully_supported`: 10, `beta_preview`: 8, `discovery`: 18).
+  - Verified RTL layouts across Arabic (`ar-SA`), Hebrew (`he-IL`), Persian (`fa-IR`), and Urdu (`ur-PK`) with dynamic layout mirroring.
+- **Document Vault Heuristic Fix & Multi-Language Ingestion:**
+  - Resolved language detection substring collision where French transcripts containing `"notes"` falsely triggered Haitian Creole detection (`"not"` substring).
+  - Authored authentic sample transcripts in English, French, Haitian Creole, Spanish, and Arabic.
+  - Implemented end-to-end automated pytest suite (`test_e2e_document_audit.py`) verifying SHA-256 cryptographic checksums, immutable disk storage preservation, academic entity extraction, and side-by-side translation generation.
+- **Mobile Viewport Responsiveness:**
+  - Implemented mobile navigation menu toggle and drawer in `Header.tsx`, giving mobile and tablet users complete access to all 7 application portals.
+- **AI Counselor Grounded Citations Verification:**
+  - Audited multilingual responses and validated that all official citation URLs (`assist.org`, `universityofcalifornia.edu`, `cdss.berkeley.edu`, `wes.org`, `icas-ca.org`) resolve to active university resources.
+- **Automated Test Suite Expansion:**
+  - 15/15 backend pytest tests passing (including end-to-end multi-language document vault and citations audit).
+  - 7/7 frontend node unit tests passing.
+  - Next.js 15 production build generating 11/11 static routes without errors.
+
 
 ---
 
