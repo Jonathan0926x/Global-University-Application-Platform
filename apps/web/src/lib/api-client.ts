@@ -774,4 +774,120 @@ export async function refreshApplicationChecklist(applicationId: string): Promis
   return res.json();
 }
 
+// ============================================================================
+// Phase 3 Milestone 4: 3-Tier Transfer Articulation & Credit Intelligence
+// ============================================================================
+
+export interface EvaluatedCourseResult {
+  student_course_id?: string;
+  source_institution_name?: string;
+  source_course_code: string;
+  source_course_name: string;
+  original_credits?: number;
+  original_credit_system: string;
+  normalized_semester_credits?: number;
+  credits_transferable: number;
+  equivalency_tier?: number | null;
+  tier_label: string;
+  equivalency_type: string;
+  confidence_score: number;
+  target_course_code?: string;
+  target_course_name?: string;
+  applicability_bucket: string;
+  satisfies_major_requirement: boolean;
+  satisfies_ge_requirement: boolean;
+  ge_category?: string;
+  satisfies_prerequisite: boolean;
+  elective_only: boolean;
+  is_duplicate: boolean;
+  requires_syllabus: boolean;
+  syllabus_document_id?: string;
+  supporting_evidence: string;
+  disclaimer: string;
+  source_name?: string;
+  source_url?: string;
+  verified_at?: string;
+}
+
+export interface DegreeApplicabilitySummary {
+  target_institution_id: string;
+  target_institution_name: string;
+  intended_major?: string;
+  total_courses_evaluated: number;
+  officially_verified_count: number;
+  historically_observed_count: number;
+  ai_predicted_count: number;
+  unverified_course_count: number;
+  missing_syllabus_count: number;
+  duplicate_course_count: number;
+  total_original_credits_by_system: Record<string, number>;
+  normalized_semester_credits_attempted: number;
+  officially_transferable_credits: number;
+  potentially_transferable_credits: number;
+  unverified_credits: number;
+  major_applicable_credits: number;
+  ge_applicable_credits: number;
+  elective_only_credits: number;
+  non_applicable_or_duplicate_credits: number;
+  ge_areas_satisfied: string[];
+  major_prerequisites_satisfied: string[];
+  major_prerequisites_remaining: string[];
+  warnings: string[];
+  disclaimer: string;
+  evaluated_courses: EvaluatedCourseResult[];
+}
+
+export async function fetchTransferProfileSummary(
+  targetInstitutionId: string,
+  intendedMajor?: string
+): Promise<DegreeApplicabilitySummary | null> {
+  try {
+    const qs = new URLSearchParams({ target_institution_id: targetInstitutionId });
+    if (intendedMajor) qs.append("intended_major", intendedMajor);
+    const res = await fetch(`${API_BASE_URL}/transfer/profile-summary?${qs.toString()}`, {
+      headers: { ...auth.getAuthHeader() },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function evaluateCourseEquivalency(payload: {
+  source_institution_id?: string;
+  source_course_code: string;
+  source_course_name: string;
+  source_description?: string;
+  source_learning_outcomes?: string[];
+  source_credits?: number;
+  source_credit_system?: string;
+  target_institution_id: string;
+  intended_major?: string;
+}): Promise<EvaluatedCourseResult | null> {
+  const res = await fetch(`${API_BASE_URL}/transfer/equivalencies/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function attachSyllabusToCourse(
+  courseId: string,
+  documentId: string
+) {
+  const res = await fetch(`${API_BASE_URL}/transfer/courses/${courseId}/attach-syllabus`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify({ document_id: documentId }),
+  });
+  if (!res.ok) throw new Error("Failed to attach syllabus to course");
+  return res.json();
+}
+
 

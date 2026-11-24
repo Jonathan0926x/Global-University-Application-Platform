@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, Boolean, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -30,6 +30,8 @@ class Course(Base):
     is_ap_ib_dual = Column(Boolean, default=False)
     ap_ib_score = Column(String(10), nullable=True)
     is_transferable = Column(Boolean, nullable=True)
+    learning_outcomes = Column(JSONB, default=list)
+    syllabus_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

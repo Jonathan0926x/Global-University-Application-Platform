@@ -22,6 +22,7 @@ import {
   ApplicationWorkspace,
 } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
+import { TransferCreditIntelligencePanel } from "@/components/transfer/TransferCreditIntelligencePanel";
 
 export default function TransferPortalPage() {
   const { t } = useI18n();
@@ -41,7 +42,8 @@ export default function TransferPortalPage() {
         setInstitutions(instList);
         setApplications(appList);
         if (instList.length > 0) {
-          setSelectedInstId(instList[0].id);
+          const berkeley = instList.find((i) => i.official_name.includes("Berkeley"));
+          setSelectedInstId(berkeley ? berkeley.id : instList[0].id);
         }
       } catch (err) {
         console.error("Error loading transfer data:", err);
@@ -294,6 +296,13 @@ export default function TransferPortalPage() {
           )}
         </div>
       </div>
+
+      {/* Milestone 4: 3-Tier Transfer Articulation & Degree Applicability Dashboard */}
+      <TransferCreditIntelligencePanel
+        selectedTargetId={selectedInstId}
+        intendedMajor={major}
+        targetOptions={institutions}
+      />
     </div>
   );
 }

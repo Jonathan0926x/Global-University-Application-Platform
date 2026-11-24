@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -98,6 +99,7 @@ def list_institutions(
     type: Optional[str] = None,
     accepts_transfer: Optional[bool] = None,
     accepts_first_year: Optional[bool] = None,
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     seed_sample_institutions_if_empty(db)
@@ -108,7 +110,15 @@ def list_institutions(
         query = query.filter(Institution.accepts_transfer == accepts_transfer)
     if accepts_first_year is not None:
         query = query.filter(Institution.accepts_first_year == accepts_first_year)
-    return query.all()
+    priority_order = case(
+        (Institution.ipeds_unit_id.in_(["110635", "110662", "122597", "170976", "166683", "113333"]), 0),
+        else_=1,
+    )
+    return (
+        query.order_by(priority_order.asc(), Institution.total_enrollment.desc().nulls_last(), Institution.official_name.asc())
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/applications", response_model=List[ApplicationResponse], tags=["Applications"])

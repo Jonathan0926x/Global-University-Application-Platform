@@ -118,6 +118,42 @@ class DocumentVaultService:
                 {"code": "ANGL-PH", "title": "Anglais Langue Étrangère", "coefficient": 2, "grade": "18/20", "us_equivalent": "A+"},
             ]
             warnings.append("International diploma requires certified credential evaluation (WES or IERF equivalent) for final matriculation.")
+        elif "syllabus" in lower_filename or "syllabus" in lower_text or "learning outcome" in lower_text or "course description" in lower_text:
+            detected_inst = "Uploaded Course Syllabus / Description"
+            detected_qual = "Course Syllabus for Transfer Credit Evaluation"
+            grading_scale = "Not Applicable (Syllabus)"
+            import re as _re
+            code_match = _re.search(r"\b([A-Z]{2,6}\s*-?\s*\d{1,4}[A-Z]{0,2})\b", text)
+            outcomes = [
+                line.lstrip("-*• ").strip()
+                for line in text.splitlines()
+                if line.strip().startswith(("-", "*", "•")) and len(line.strip()) > 12
+            ][:8]
+            courses = [
+                {
+                    "code": code_match.group(1) if code_match else "SYLLABUS",
+                    "title": text.splitlines()[0][:120] if text.splitlines() else filename,
+                    "learning_outcomes": outcomes,
+                    "status": "syllabus_extracted",
+                }
+            ]
+            confidence = "needs_review"
+            warnings.append("Extracted syllabus learning outcomes and descriptions require human verification and receiving-institution review.")
+            return {
+                "extracted_text": text[:3000] if len(text) > 3000 else text,
+                "detected_language": detected_lang,
+                "detected_institution": detected_inst,
+                "detected_qualification": detected_qual,
+                "detected_grading_scale": grading_scale,
+                "extracted_data": {
+                    "courses": courses,
+                    "learning_outcomes": outcomes,
+                    "total_courses_identified": len(courses),
+                    "parsing_source": "UniGlobe Syllabus Intelligence Parser v1",
+                },
+                "extraction_confidence": confidence,
+                "extraction_warnings": warnings,
+            }
         else:
             # General transcript extraction template
             detected_inst = "Secondary Education Institution"

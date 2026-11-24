@@ -17,6 +17,7 @@ from app.ingestion.openalex_ror import OpenAlexRorConnector
 from app.ingestion.ipeds import IPEDSConnector
 from app.ingestion.scorecard import CollegeScorecardConnector
 from app.ingestion.requirements_seed import seed_verified_requirements
+from app.ingestion.articulation_seed import seed_articulation_intelligence
 
 
 def _print_run_summary(tag: str, run):
@@ -50,6 +51,7 @@ def main():
     sc_parser.add_argument("--mode", type=str, default="bulk", choices=["bulk", "api"])
 
     subparsers.add_parser("seed-requirements", help="Seed source-verified global admission requirements & deadlines")
+    subparsers.add_parser("seed-articulation", help="Seed course catalogs, agreements, and Tier 1/2 equivalencies")
 
     args = parser.parse_args()
     db = SessionLocal()
@@ -62,6 +64,9 @@ def main():
         elif args.command == "seed-requirements":
             res = seed_verified_requirements(db)
             print(f"[seed-requirements] {json.dumps(res)}")
+        elif args.command == "seed-articulation":
+            res = seed_articulation_intelligence(db)
+            print(f"[seed-articulation] {json.dumps(res)}")
         elif args.command == "ingest-openalex":
             codes = [c.strip().upper() for c in args.countries.split(",") if c.strip()]
             run = pipeline.run_connector(OpenAlexRorConnector(), country_codes=codes, per_country=args.per_country)

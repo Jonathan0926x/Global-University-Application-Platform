@@ -6,13 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 In Progress (Milestones 4–7)
+## [Unreleased] - Phase 3 In Progress (Milestones 5–7)
 
 ### Planned
-- Milestone 4: 3-Tier Transfer Articulation Engine (ASSIST.org API-keyed connector + `pgvector` Tier 3 predictions).
 - Milestone 5: 4-Dimensional Explainable University Matching Engine (Reach / Target / Likely).
 - Milestone 6: Live `pgvector` RAG Multilingual AI Counselor (`$0` local embedding default).
 - Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+
+---
+
+## [0.5.0-m4] - 2026-11-24
+
+### Added — Phase 3 Milestone 4: Transfer Articulation & Global Credit Intelligence Engine
+- **3-Tier Transfer Schema & pgvector HNSW Index (`a70efe4e6454`):**
+  - Added `course_catalog` (`Vector(384)` semantic embeddings + HNSW cosine index), `articulation_agreements`, and `course_equivalencies` (`equivalency_tier` 1–3, degree applicability flags), plus extended `courses` with `learning_outcomes` and nullable `syllabus_document_id` FK.
+- **Course Catalogs, EULA-Compliant ASSIST Connector & Seeder:**
+  - Built `AssistOrgConnector` requiring authorized `ASSIST_API_KEY` (`help@assist.org`) under the ASSIST EULA and refusing restricted web scraping.
+  - Seeded **52** course catalog entries across **9** US & international institutions (De Anza, SMC, UC Berkeley, UCLA, SFSU, UMich, U of Toronto, TUM, Sorbonne), **4** articulation agreements, and **33** Tier 1/2 equivalencies (**30** Tier 1 published California CC -> UC/CSU, **3** Tier 2 historical UMich patterns).
+- **3-Tier Matching, Credit Systems & Degree Applicability Engine (`articulation_engine.py`):**
+  - Preserves `us_quarter`, `us_semester`, `ects`, `ca_credit`, and `uk_cat` original credit values alongside informational normalized semester credits.
+  - Strictly distinguishes Tier 1 Official, Tier 2 Historical, Tier 3 AI-Predicted (`50%` semantic outcome similarity, `20%` credit match, `15%` subject, `15%` level), and Unverified coursework (`requires_syllabus`).
+  - Separates accepted units from Major, GE, Elective-only, and Non-Applicable/Duplicate credits; detects duplicate coursework; adds syllabus parsing & `POST /transfer/courses/{id}/attach-syllabus`.
+  - Upgraded `/transfer` dashboard (`TransferCreditIntelligencePanel.tsx`) and `/api/v1/transfer/*` endpoints; verified with **32** passing backend pytest tests, **7** frontend unit tests, Next.js build, and live browser simulator checks.
 
 ---
 

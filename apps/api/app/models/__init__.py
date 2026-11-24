@@ -14,6 +14,11 @@ from app.models.requirements import (
     Deadline,
     CountryQualification,
 )
+from app.models.articulation import (
+    CourseCatalog,
+    ArticulationAgreement,
+    CourseEquivalency,
+)
 from app.models.application import StandardizedTest, ExtracurricularActivity, Application, ApplicationRequirementStatus
 from app.models.document import Document, DocumentExtraction, DocumentTranslation
 from app.models.counselor import CounselorConversation, CounselorMessage
@@ -40,6 +45,9 @@ __all__ = [
     "RequirementCondition",
     "Deadline",
     "CountryQualification",
+    "CourseCatalog",
+    "ArticulationAgreement",
+    "CourseEquivalency",
     "StandardizedTest",
     "ExtracurricularActivity",
     "Application",

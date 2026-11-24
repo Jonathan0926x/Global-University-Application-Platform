@@ -36,11 +36,11 @@
 | **Authentication & RBAC** | ✅ **Tested** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
 | **Universal Student Profile** | ✅ **Tested** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
 | **First-Year Portal (Core)** | 🚀 **Implemented** | P1 | Phase 1 | Nov 23, 2026 | Engineering |
-| **Transfer Portal (Wedge)** | 🚀 **Implemented** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
+| **Transfer Portal (Wedge)** | ✅ **Tested** (Milestone 4 Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Engineering |
 | **University Discovery** | ✅ **Tested** (M1–M3 Complete: 6,699 Inst. / 94 Reqs) | P0 | Phase 3 (M1–M3) | Nov 24, 2026 | Data / Backend |
 | **Application Management** | ✅ **Tested** (Checklist Engine Live) | P1 | Phase 3 M3 | Nov 24, 2026 | Full Stack |
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
-| **Transfer Intelligence (MVP)**| ⏳ **In Progress** | P0 | Phase 2/3 | Phase 2 (M3) | Data / Backend |
+| **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
 | **AI College Counselor** | ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Scholarship & Net Price** | ⭕ **Not Started** | P1 | Phase 4 | Phase 4 (M5) | Backend / Full Stack |
 | **Security & Privacy Testing**| ⏳ **In Progress** | P0 | Phase 1–5 | Continuous | Security / QA |
@@ -166,14 +166,20 @@
 * **Last Verified Date:** November 23, 2026
 * **Next Action:** Milestone 2.2: Establish first-year route controllers and shared schema projections.
 
-### 11. Transfer Portal (Product Wedge)
-* **Status:** ⭕ **Not Started**
+### 11. Transfer Portal & Articulation Intelligence (Phase 3 M4)
+* **Status:** ✅ **Tested** (Milestone 4 Complete — 3-Tier Equivalency & Degree Applicability Engine)
 * **Priority:** P0
 * **Dependencies:** Universal Student Profile, Database Implementation
-* **Relevant Files:** [`docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md`](docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md)
-* **Acceptance Criteria:** College-credit intake form (institution, course code, grade, units, semester), general education progress tracker, transfer eligibility indicator.
-* **Last Verified Date:** November 23, 2026
-* **Next Action:** Milestone 2.3: Build transfer coursework management interface.
+* **Relevant Files:**
+  - [`docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md`](docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md)
+  - `apps/api/app/models/articulation.py`, `apps/api/app/models/course.py`
+  - `apps/api/alembic/versions/a70efe4e6454_milestone_4_transfer_articulation_engine.py`
+  - `apps/api/app/ingestion/assist_org.py`, `apps/api/app/ingestion/articulation_seed.py`, `apps/api/app/services/embeddings.py`
+  - `apps/api/app/services/articulation_engine.py`, `apps/api/app/api/v1/transfer.py`
+  - `apps/web/src/app/transfer/page.tsx`, `apps/web/src/components/transfer/TransferCreditIntelligencePanel.tsx`
+* **Acceptance Criteria:** `52` catalog courses across `9` US/international institutions (`384`-dim `pgvector` embeddings + HNSW index), `4` published agreements, `33` Tier 1/2 equivalencies (`30` Tier 1 ASSIST + `3` Tier 2 historical), Tier 3 content/outcome matching, `us_semester`/`us_quarter`/`ects`/`ca_credit`/`uk_cat` preservation, strict separation of accepted units vs. major/GE/elective credits, duplicate exclusion, syllabus upload & extraction (`POST /transfer/courses/{id}/attach-syllabus`), EULA-compliant `AssistOrgConnector`, and upgraded `/transfer` dashboard.
+* **Last Verified Date:** November 24, 2026
+* **Next Action:** Phase 3 Milestone 5: 4-Dimensional Explainable University Matching Engine.
 
 ### 12. University Discovery & Admissions Requirements (Phase 3 M1–M3)
 * **Status:** ✅ **Tested** (Milestones 1–3 Complete — 6,699 Institutions, 94 Verified Requirements, 25 Deadlines)
