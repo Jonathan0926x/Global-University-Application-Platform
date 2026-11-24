@@ -890,4 +890,236 @@ export async function attachSyllabusToCourse(
   return res.json();
 }
 
+// --- Milestone 5: Four-Dimensional Explainable Matching Engine Types & APIs ---
+
+export type FactorStatus =
+  | "verified_match"
+  | "partial_match"
+  | "potential_concern"
+  | "insufficient_information"
+  | "not_applicable";
+
+export type MatchCategory = "reach" | "target" | "likely" | "insufficient_data";
+
+export interface MatchFactor {
+  name: string;
+  status: FactorStatus;
+  score_impact?: number | null;
+  detail: string;
+  source_name?: string | null;
+  source_url?: string | null;
+  verified_at?: string | null;
+}
+
+export interface DimensionEvaluation {
+  key: "academic" | "financial" | "readiness" | "transfer";
+  label: string;
+  score: number;
+  weight_configured: number;
+  weight_applied: number;
+  status: FactorStatus;
+  summary: string;
+  factors: MatchFactor[];
+}
+
+export interface InstitutionMatchSummaryInfo {
+  id: string;
+  official_name: string;
+  country_code: string;
+  state_province?: string | null;
+  city?: string | null;
+  institution_type: string;
+  control_type?: string | null;
+  acceptance_rate?: number | null;
+  tuition_in_state?: number | null;
+  tuition_out_of_state?: number | null;
+  avg_net_price?: number | null;
+  cost_of_attendance?: number | null;
+  currency?: string | null;
+  total_enrollment?: number | null;
+  official_website?: string | null;
+  admissions_website?: string | null;
+  application_portal_url?: string | null;
+  primary_source?: string | null;
+  last_verified_at?: string | null;
+}
+
+export interface UniversityMatchRecommendation {
+  id: string;
+  institution_id: string;
+  institution: InstitutionMatchSummaryInfo;
+  applicant_type: string;
+  intended_major?: string | null;
+  match_category: MatchCategory;
+  composite_score: number;
+  score_academic: number;
+  score_financial: number;
+  score_readiness: number;
+  score_transfer: number;
+  data_confidence_score: number;
+  calculation_formula: string;
+  dimensions: DimensionEvaluation[];
+  positive_factors: string[];
+  missing_information: string[];
+  unsatisfied_requirements: string[];
+  financial_concerns: string[];
+  transfer_uncertainties: string[];
+  upcoming_deadlines: Array<Record<string, unknown>>;
+  sources: Array<Record<string, unknown>>;
+  estimated_net_cost?: number | null;
+  published_tuition?: number | null;
+  estimated_living_expenses?: number | null;
+  cost_basis?: string | null;
+  cost_is_estimated: boolean;
+  is_saved_by_student: boolean;
+  is_dismissed: boolean;
+  disclaimer: string;
+  computed_at: string;
+}
+
+export interface MatchingPreferences {
+  id: string;
+  profile_id: string;
+  preferred_countries: string[];
+  preferred_states_provinces: string[];
+  preferred_institution_types: string[];
+  preferred_languages: string[];
+  max_annual_budget?: number | null;
+  currency: string;
+  requires_full_aid: boolean;
+  requires_merit_scholarships: boolean;
+  weight_academic: number;
+  weight_financial: number;
+  weight_readiness: number;
+  weight_transfer: number;
+  updated_at?: string | null;
+}
+
+export interface MatchingRunResponse {
+  applicant_type: string;
+  intended_major?: string | null;
+  total_evaluated: number;
+  counts_by_category: Record<string, number>;
+  weights_used: Record<string, number>;
+  recommendations: UniversityMatchRecommendation[];
+  disclaimer: string;
+}
+
+export async function fetchMatchingPreferences(): Promise<MatchingPreferences | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/matching/preferences`, {
+      headers: { ...auth.getAuthHeader() },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function updateMatchingPreferences(
+  payload: Partial<Omit<MatchingPreferences, "id" | "profile_id" | "updated_at">>
+): Promise<MatchingPreferences> {
+  const res = await fetch(`${API_BASE_URL}/matching/preferences`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to save matching preferences");
+  return res.json();
+}
+
+export async function runMatchingDiscovery(payload: {
+  applicant_type?: "first_year" | "transfer";
+  intended_major?: string | null;
+  countries?: string[];
+  states?: string[];
+  institution_types?: string[];
+  max_annual_budget?: number | null;
+  weight_academic?: number;
+  weight_financial?: number;
+  weight_readiness?: number;
+  weight_transfer?: number;
+  limit?: number;
+  persist?: boolean;
+}): Promise<MatchingRunResponse> {
+  const res = await fetch(`${API_BASE_URL}/matching/run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to run matching discovery");
+  return res.json();
+}
+
+export async function evaluateInstitutionMatch(
+  institutionId: string,
+  applicantType?: "first_year" | "transfer",
+  intendedMajor?: string
+): Promise<UniversityMatchRecommendation | null> {
+  const qs = new URLSearchParams();
+  if (applicantType) qs.append("applicant_type", applicantType);
+  if (intendedMajor) qs.append("intended_major", intendedMajor);
+  const res = await fetch(
+    `${API_BASE_URL}/matching/evaluate/${institutionId}${qs.toString() ? `?${qs.toString()}` : ""}`,
+    {
+      method: "POST",
+      headers: { ...auth.getAuthHeader() },
+    }
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function toggleShortlistInstitution(
+  institutionId: string,
+  saved: boolean
+): Promise<{ institution_id: string; is_saved_by_student: boolean }> {
+  const res = await fetch(
+    `${API_BASE_URL}/matching/recommendations/${institutionId}/save?saved=${saved}`,
+    {
+      method: "POST",
+      headers: { ...auth.getAuthHeader() },
+    }
+  );
+  if (!res.ok) throw new Error("Failed to update shortlist status");
+  return res.json();
+}
+
+export async function fetchMatchingShortlist(): Promise<UniversityMatchRecommendation[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/matching/shortlist`, {
+      headers: { ...auth.getAuthHeader() },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function compareInstitutions(payload: {
+  institution_ids: string[];
+  applicant_type?: "first_year" | "transfer";
+  intended_major?: string | null;
+}): Promise<UniversityMatchRecommendation[]> {
+  const res = await fetch(`${API_BASE_URL}/matching/compare`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to compare institutions");
+  return res.json();
+}
+
+
 

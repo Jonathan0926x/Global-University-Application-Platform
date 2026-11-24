@@ -79,7 +79,7 @@ flowchart TD
 ## 🛠️ Technology Architecture
 
 > [!NOTE]
-> The specifications below outline the **planned technology architecture**. No runtime software code has been installed or deployed yet. Software implementation will follow the [Development Roadmap](docs/15_DEVELOPMENT_ROADMAP.md).
+> **Active Engineering Build (Phase 3, Milestone 5 Live):** UniGlobe runs Next.js 15 App Router, FastAPI + SQLAlchemy 2.0, PostgreSQL 16 + `pgvector` (`6,699` global/US institutions, `94` verified requirements, `3-Tier` transfer articulation, and the `4-Dimensional` explainable university matching engine at `/matching`). Follow [Development Roadmap](docs/15_DEVELOPMENT_ROADMAP.md) and [`PROJECT_PROGRESS.md`](PROJECT_PROGRESS.md) for current milestone status.
 
 ```
 +-----------------------------------------------------------------------------------+

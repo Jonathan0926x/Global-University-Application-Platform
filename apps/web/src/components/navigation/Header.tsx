@@ -14,7 +14,8 @@ import {
   FileText,
   ChevronDown,
   Menu,
-  X
+  X,
+  Sparkles
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 import { LanguageModal } from "@/components/i18n/LanguageModal";
@@ -27,6 +28,7 @@ export function Header() {
 
   const navLinks = [
     { href: "/dashboard", label: t("nav.student_os", "Student OS"), icon: LayoutDashboard },
+    { href: "/matching", label: t("nav.matching", "Match Engine"), icon: Sparkles },
     { href: "/first-year", label: t("nav.first_year", "First-Year Portal"), icon: GraduationCap },
     { href: "/transfer", label: t("nav.transfer", "Transfer Portal"), icon: ArrowRightLeft },
     { href: "/counselor", label: t("nav.counselor", "AI Counselor"), icon: Bot },

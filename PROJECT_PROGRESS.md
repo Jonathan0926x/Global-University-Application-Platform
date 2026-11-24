@@ -38,6 +38,7 @@
 | **First-Year Portal (Core)** | 🚀 **Implemented** | P1 | Phase 1 | Nov 23, 2026 | Engineering |
 | **Transfer Portal (Wedge)** | ✅ **Tested** (Milestone 4 Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Engineering |
 | **University Discovery** | ✅ **Tested** (M1–M3 Complete: 6,699 Inst. / 94 Reqs) | P0 | Phase 3 (M1–M3) | Nov 24, 2026 | Data / Backend |
+| **University Matching Engine** | ✅ **Tested** (Milestone 5 Live: 4D Explainable Engine) | P0 | Phase 3 M5 | Nov 24, 2026 | Full Stack / Backend |
 | **Application Management** | ✅ **Tested** (Checklist Engine Live) | P1 | Phase 3 M3 | Nov 24, 2026 | Full Stack |
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
@@ -220,13 +221,28 @@
 * **Next Action:** Phase 3: Integrate production Cloudflare R2 presigned upload pipeline and OCR API for raster PDF scans.
 
 ### 15. Transfer Intelligence Engine (MVP)
-* **Status:** ⏳ **In Progress**
+* **Status:** ✅ **Tested** (Milestone 4 Verified)
 * **Priority:** P0
 * **Dependencies:** Transfer Portal, University Discovery
-* **Relevant Files:** [`docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md`](docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md)
-* **Acceptance Criteria:** Ingestion of California ASSIST.org articulation tables; automated course-to-course and major prerequisite matching for top 50 CC-to-UC/CSU pathways.
+* **Relevant Files:** [`docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md`](docs/08_TRANSFER_INTELLIGENCE_ARCHITECTURE.md), `apps/api/app/services/articulation_engine.py`, `apps/web/src/app/transfer/page.tsx`
+* **Acceptance Criteria:** Ingestion of California ASSIST.org schema & 3-tier course equivalency engine (Tier 1 Official, Tier 2 Historical, Tier 3 AI-Predicted); degree applicability tracking (`us_quarter`, `us_semester`, `ects`); syllabus parsing & attachment.
 * **Last Verified Date:** November 24, 2026
-* **Next Action:** Phase 3 data ingestion script for California articulation agreements.
+* **Next Action:** Milestone 6 pgvector RAG Counselor grounding.
+
+### 15b. Four-Dimensional Explainable University Matching Engine
+* **Status:** ✅ **Tested** (Milestone 5 Live on `/matching`)
+* **Priority:** P0
+* **Dependencies:** University Discovery (M1–M2), Admissions Requirements Engine (M3), Transfer Intelligence Engine (M4)
+* **Relevant Files:**
+  - [`docs/10_UNIVERSITY_MATCHING_ENGINE.md`](docs/10_UNIVERSITY_MATCHING_ENGINE.md)
+  - `apps/api/alembic/versions/84ea3bee96d4_milestone_5_matching_engine.py`
+  - `apps/api/app/models/matching.py`
+  - `apps/api/app/services/matching_engine.py`
+  - `apps/api/app/api/v1/matching.py`
+  - `apps/web/src/app/matching/page.tsx`
+* **Acceptance Criteria:** Transparent 4-dimension evaluation (Academic Fit, Financial Compatibility, Admissions Readiness, Transfer & Credit Compatibility), auditable formula breakdowns, explicit factor statuses (`verified_match`, `partial_match`, `potential_concern`, `insufficient_information`, `not_applicable`), zero penalty to First-Year applicants on transfer dimension, Reach/Target/Likely/Insufficient Data categorization without deceptive probability claims, shortlist persistence, and up to 4-school side-by-side comparison.
+* **Last Verified Date:** November 24, 2026
+* **Next Action:** Connect RAG counselor context (Milestone 6) and verified application portal routing (Milestone 7).
 
 ### 16. AI College Counselor
 * **Status:** ✅ **Tested** (E2E Audited)

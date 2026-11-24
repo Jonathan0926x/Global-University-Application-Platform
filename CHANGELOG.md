@@ -6,12 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 In Progress (Milestones 5–7)
+## [Unreleased] - Phase 3 In Progress (Milestones 6–7)
 
 ### Planned
-- Milestone 5: 4-Dimensional Explainable University Matching Engine (Reach / Target / Likely).
 - Milestone 6: Live `pgvector` RAG Multilingual AI Counselor (`$0` local embedding default).
 - Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+
+---
+
+## [0.5.0-m5] - 2026-11-24
+
+### Added — Phase 3 Milestone 5: Four-Dimensional Explainable University Matching Engine
+- **Matching Schema & Migration (`84ea3bee96d4`):**
+  - Added `matching_preferences` (criteria, budget, country/institution type preferences, and per-dimension priority weights) and `university_recommendations` (cached composite + 4 dimension scores, category classification, explanation breakdown, and per-student shortlist/dismiss state with unique `(profile_id, institution_id)` constraint).
+- **Explainable 4-Dimension Matching Engine (`apps/api/app/services/matching_engine.py`):**
+  - Independently evaluates **Academic Fit** (`0.30` default; CIP major alignment, international GPA normalization for `0–20` FR/HT, `0–100%`, German `1.0–6.0`, US `4.0`, and SAT/ACT test-blind vs. optional vs. required), **Financial Compatibility** (`0.25` default; distinguishes published IPEDS/institution COA from composite estimates and international aid limits), **Admissions Readiness** (`0.25` default; reuses Milestone 3 `evaluate_dynamic_checklist`), and **Transfer & Credit Compatibility** (`0.20` default; reuses Milestone 4 `evaluate_student_transfer_profile`, Tier 1/2/3 & degree applicability).
+  - First-Year safeguard: marks Transfer Compatibility `not_applicable` (`weight_applied = 0.0`) and proportionally re-normalizes active dimension weights without penalty.
+  - Missing-data safeguard: tags missing inputs as `insufficient_information` (reducing `data_confidence_score` and classifying sparse inputs as `insufficient_data`) rather than silent negative penalties, and exposes exact `calculation_formula` arithmetic without deceptive admission probability claims.
+- **Matching REST APIs & Student UI (`apps/api/app/api/v1/matching.py`, `/matching`):**
+  - Added `GET/PUT /api/v1/matching/preferences`, `POST /api/v1/matching/run`, `POST /api/v1/matching/evaluate/{institution_id}`, `POST /api/v1/matching/recommendations/{institution_id}/save`, `GET /api/v1/matching/shortlist`, and `POST /api/v1/matching/compare`.
+  - Built `/matching` frontend dashboard, `MatchExplanationPanel.tsx`, `ComparisonPanel.tsx`, and added `nav.matching` across Header navigation and `UI_TRANSLATIONS` (10 languages including Arabic RTL).
+  - Verified with **38** passing backend `pytest` tests, **8** passing frontend unit tests, Next.js production build, and live browser testing (First-Year, Transfer, Shortlist, Comparison, and Arabic RTL).
 
 ---
 

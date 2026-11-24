@@ -224,3 +224,12 @@ Based on the multi-dimensional compatibility assessment, the platform generates 
 1. **Affordability-Maximized Strategy:** Prioritizes in-state community college transfer paths, generous need-based aid endowments, and automatic merit scholarship cutoffs.
 2. **Selective / High-Ambition Strategy:** Emphasizes top research universities while enforcing balanced safety options.
 3. **Global Mobility Strategy:** Discovers cross-border institutions in countries offering post-study work visas (e.g., Canada, Germany, UK) with low or subsidized tuition.
+
+---
+
+## Implementation Status (Phase 3, Milestone 5 — Implemented & Verified)
+
+- **Schema & Migration:** `apps/api/app/models/matching.py` (`MatchingPreference`, `UniversityRecommendation`) via Alembic revision `84ea3bee96d4_milestone_5_matching_engine.py`.
+- **Service (`apps/api/app/services/matching_engine.py`):** Evaluates Academic Fit (`0.30` default), Financial Compatibility (`0.25` default), Admissions Readiness (`0.25` default), and Transfer & Credit Compatibility (`0.20` default), re-normalizes weights proportionally when Transfer is `not_applicable` (`first_year` pathway), preserves international grading contexts (`0–20`, `0–100%`, German `1.0–6.0`, US `4.0`), separates published vs. estimated costs, and emits transparent `calculation_formula` + non-probability advisory disclaimers.
+- **API Endpoints (`apps/api/app/api/v1/matching.py`):** `GET/PUT /api/v1/matching/preferences`, `POST /api/v1/matching/run`, `POST /api/v1/matching/evaluate/{institution_id}`, `POST /api/v1/matching/recommendations/{institution_id}/save`, `GET /api/v1/matching/shortlist`, and `POST /api/v1/matching/compare`.
+- **Frontend UI:** `/matching` dashboard (`apps/web/src/app/matching/page.tsx`), `MatchExplanationPanel.tsx`, `ComparisonPanel.tsx`, global nav integration (`Header.tsx`), and 10-language i18n copy (`translations.ts`).

@@ -100,5 +100,18 @@ test("Homepage headline and CTA buttons translate accurately into Spanish, Frenc
   assert.equal(translate("home.hero_title_2", "ar-SA"), "كل جامعة. منصة عالمية واحدة.");
 });
 
+test("Milestone 5 matching navigation and disclaimer keys translate cleanly across LTR and RTL", () => {
+  assert.equal(translate("nav.matching", "en-US"), "Match Engine");
+  assert.equal(translate("nav.matching", "es-419"), "Motor de Compatibilidad");
+  assert.equal(translate("nav.matching", "fr-FR"), "Moteur de Compatibilité");
+  assert.equal(translate("nav.matching", "ht-HT"), "Motè Konpatibilite");
+  assert.equal(translate("nav.matching", "ar-SA"), "محرك المطابقة");
+
+  assert.ok(translate("matching.title", "ar-SA").includes("رباعي الأبعاد"));
+  assert.ok(translate("matching.disclaimer", "ht-HT").includes("jamè pwobabilite"));
+  assert.ok(translate("matching.run_button", "es-MX") === "Ejecutar Análisis");
+});
+
+
 
 

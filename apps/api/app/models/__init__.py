@@ -19,6 +19,7 @@ from app.models.articulation import (
     ArticulationAgreement,
     CourseEquivalency,
 )
+from app.models.matching import MatchingPreference, UniversityRecommendation
 from app.models.application import StandardizedTest, ExtracurricularActivity, Application, ApplicationRequirementStatus
 from app.models.document import Document, DocumentExtraction, DocumentTranslation
 from app.models.counselor import CounselorConversation, CounselorMessage
@@ -48,6 +49,8 @@ __all__ = [
     "CourseCatalog",
     "ArticulationAgreement",
     "CourseEquivalency",
+    "MatchingPreference",
+    "UniversityRecommendation",
     "StandardizedTest",
     "ExtracurricularActivity",
     "Application",
