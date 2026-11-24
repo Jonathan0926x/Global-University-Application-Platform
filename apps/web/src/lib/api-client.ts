@@ -193,3 +193,164 @@ export async function createApplication(
   if (!res.ok) throw new Error("Failed to create application workspace");
   return res.json();
 }
+
+
+export interface Citation {
+  title: string;
+  url: string;
+  institution: string;
+  verified_at: string;
+  summary?: string;
+}
+
+export interface CounselorMessage {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant";
+  content: string;
+  language: string;
+  citations: Citation[];
+  disclaimer: string;
+  created_at: string;
+}
+
+export interface CounselorConversation {
+  id: string;
+  profile_id: string;
+  title: string;
+  primary_language: string;
+  created_at: string;
+  updated_at: string;
+  messages: CounselorMessage[];
+}
+
+export interface DocumentSummary {
+  id: string;
+  profile_id: string;
+  original_filename: string;
+  file_type: string;
+  file_size_bytes: number;
+  file_sha256: string;
+  detected_language: string;
+  document_category: string;
+  uploaded_at: string;
+  has_extraction: boolean;
+  has_translation: boolean;
+}
+
+export interface DocumentDetail {
+  id: string;
+  profile_id: string;
+  original_filename: string;
+  file_type: string;
+  file_size_bytes: number;
+  file_sha256: string;
+  storage_path: string;
+  detected_language: string;
+  document_category: string;
+  uploaded_at: string;
+  extraction?: {
+    id: string;
+    extracted_text: string;
+    detected_institution?: string;
+    detected_qualification?: string;
+    detected_grading_scale?: string;
+    extracted_data_json: any;
+    extraction_confidence: string;
+    extraction_warnings: string[];
+    extracted_at: string;
+  };
+  translations: Array<{
+    id: string;
+    target_language: string;
+    translated_text: string;
+    translated_data_json: any;
+    translation_engine: string;
+    translation_confidence: string;
+    translation_disclaimer: string;
+    is_human_reviewed: boolean;
+    human_reviewer_notes?: string;
+    translated_at: string;
+  }>;
+}
+
+export async function askCounselor(
+  message: string,
+  language?: string,
+  conversationId?: string
+): Promise<CounselorMessage> {
+  const res = await fetch(`${API_BASE_URL}/counselor/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify({
+      message,
+      language,
+      conversation_id: conversationId,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to converse with counselor");
+  return res.json();
+}
+
+export async function fetchCounselorHistory(): Promise<CounselorConversation[]> {
+  const res = await fetch(`${API_BASE_URL}/counselor/history`, {
+    headers: { ...auth.getAuthHeader() },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function uploadDocument(
+  file: File,
+  category: string = "transcript"
+): Promise<DocumentDetail> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("document_category", category);
+
+  const res = await fetch(`${API_BASE_URL}/documents/upload`, {
+    method: "POST",
+    headers: {
+      ...auth.getAuthHeader(),
+    },
+    body: formData,
+  });
+  if (!res.ok) throw new Error("Failed to upload document");
+  return res.json();
+}
+
+export async function fetchDocuments(): Promise<DocumentSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/documents`, {
+    headers: { ...auth.getAuthHeader() },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchDocumentDetail(documentId: string): Promise<DocumentDetail> {
+  const res = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
+    headers: { ...auth.getAuthHeader() },
+  });
+  if (!res.ok) throw new Error("Failed to load document details");
+  return res.json();
+}
+
+export async function translateDocument(
+  documentId: string,
+  targetLanguage: string = "en-US"
+) {
+  const res = await fetch(`${API_BASE_URL}/documents/${documentId}/translate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify({ target_language: targetLanguage }),
+  });
+  if (!res.ok) throw new Error("Failed to translate document");
+  return res.json();
+}
+

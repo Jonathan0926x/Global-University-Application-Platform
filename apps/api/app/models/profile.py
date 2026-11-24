@@ -61,6 +61,7 @@ class StudentProfile(Base):
     standardized_tests = relationship("StandardizedTest", back_populates="profile", cascade="all, delete-orphan")
     extracurriculars = relationship("ExtracurricularActivity", back_populates="profile", cascade="all, delete-orphan", order_by="ExtracurricularActivity.display_order")
     applications = relationship("Application", back_populates="profile", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="profile", cascade="all, delete-orphan")
 
 
 class CitizenshipRecord(Base):

@@ -6,12 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 1 Planned
+## [Unreleased] - Phase 2 In Progress
 
 ### Planned
-- Universal Student Profile document upload and OCR transcript parsing.
-- Advanced transfer credit articulation rules engine (IGETC / CSU-GE / Assist.org mapping).
-- Expanded university catalog ingestion (IPEDS 2024 dataset sync).
+- Advanced transfer credit articulation rules engine (IGETC / CSU-GE / Assist.org full mapping).
+- Ingestion of complete IPEDS institutional dataset into PostgreSQL.
+- Financial aid net price calculator with multi-currency conversion references.
+
+---
+
+## [0.4.0] - 2026-11-24
+
+### Added
+- **Global Language Library & BCP 47 Registry:**
+  - Centralized language registry (`apps/web/src/lib/i18n/languages.ts` and `apps/api/app/core/i18n.py`) supporting 35+ languages across ISO 639-1/3 and BCP 47 tags.
+  - Native and English name search, script families (`Latn`, `Arab`, `Deva`, `Hans`, `Hebr`, `Ethi`), text direction metadata, and translation readiness tiers (`fully_supported`, `beta_preview`, `discovery`).
+- **Right-to-Left (RTL) Layout System:**
+  - Automated document direction switching (`dir="rtl"` vs. `dir="ltr"`), dynamic element alignment, CSS logical properties, and bidirectional typography.
+- **Regional Formatting Engine:**
+  - Strict isolation between display language, regional formatting locale, and reference currency (`formatNumber`, `formatCurrency`, `formatDate`, `formatGPA`).
+  - Guaranteed invariant: Changing display language or reference currency never silently recalculates official university tuition amounts or GPA scales.
+- **Persistent User Language Preferences:**
+  - Centralized preference store via `UserPreference` relational model and REST APIs (`GET/PUT /api/v1/preferences`).
+  - Persistent guest fallback in `localStorage` and device synchronization for authenticated profiles; manual selections override auto-detection without repeated geolocation prompts.
+- **Multilingual AI Admissions Counselor:**
+  - Conversational counseling engine (`apps/api/app/services/counselor.py` and `apps/web/src/app/counselor/page.tsx`) with dynamic language switching.
+  - Multilingual reasoning in Haitian Creole, Spanish, French, Arabic, Hindi, Mandarin, and English.
+  - Verification grounded in official published sources (Assist.org, University of California Transfer Pathways, UC Berkeley CDSS, WES / AACRAO Edge).
+  - Explicit non-binding admissions disclaimers and clickable citations to official university requirement pages.
+- **Secure Academic Document Vault & Translation Integrity:**
+  - Immutably preserves original student transcripts with cryptographic SHA-256 integrity checksums; original files are never overwritten or substituted by translations.
+  - Four distinct representations maintained: Original Document, Extracted Entities & Metadata, Translated Academic Record, and Human Verification Status.
+  - Domain parser identifying academic institutions, qualifications (Haitian Baccalauréat, French Bac, US Community College ADT), grading scales (0-20 scale, 4.0 scale), and course records.
+  - Side-by-side comparison interface (`apps/web/src/app/documents/page.tsx`) with transparent machine-translation disclaimers and qualitative confidence badges (`High Confidence`, `Needs Review`, `Human Verification Required`).
+- **Comprehensive Automated Testing:**
+  - 13 automated backend tests in pytest covering language registries, preference persistence, counselor reasoning, citations preservation, and document vault immutability.
+  - 6 automated frontend unit tests covering language lookups, RTL detection, formatting isolation, and UI dictionary translations.
+  - Monorepo `turbo test` running 19 automated tests with 100% pass rate.
+
 
 ---
 

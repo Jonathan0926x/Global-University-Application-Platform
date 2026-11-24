@@ -22,3 +22,4 @@ class User(Base):
     deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
 
     profile = relationship("StudentProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    preferences = relationship("UserPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")

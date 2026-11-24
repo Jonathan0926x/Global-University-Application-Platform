@@ -25,6 +25,8 @@ token.json
 auth0_credentials.json
 
 # --- Student & Confidential Applicant Data ---
+/data/
+/data/vault/
 /data/students/
 /data/transcripts/
 /data/applicant_records/
