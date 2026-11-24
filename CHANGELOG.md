@@ -9,11 +9,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased] - Phase 1 Planned
 
 ### Planned
-- Monorepo workspace scaffolding (Next.js 14+ frontend, FastAPI backend).
-- PostgreSQL 16 database configuration with `pgvector` extension.
-- Clerk / Auth0 authentication integration and RBAC middleware.
-- Universal Student Profile (USP) schema migrations and CRUD API routes.
-- Community college transfer coursework intake workflow.
+- Universal Student Profile document upload and OCR transcript parsing.
+- Advanced transfer credit articulation rules engine (IGETC / CSU-GE / Assist.org mapping).
+- Expanded university catalog ingestion (IPEDS 2024 dataset sync).
+
+---
+
+## [0.3.0] - 2026-11-23
+
+### Added
+- **Monorepo Architecture (Turborepo & pnpm):**
+  - Root `package.json`, `pnpm-workspace.yaml`, and `turbo.json` with pipeline orchestration for `build`, `dev`, `lint`, and `test`.
+  - Shared `@platform/tsconfig` package with standard, base, and Next.js compiler configurations.
+  - Multi-tier `docker-compose.yml` defining PostgreSQL 16+ with `pgvector` and Redis cache.
+- **Backend Architecture & APIs (FastAPI + Python 3.13):**
+  - Modular FastAPI application (`apps/api`) with structured v1 API routing and async lifespan handlers.
+  - SQLAlchemy 2.0 relational models: `User`, `StudentProfile`, `CitizenshipRecord`, `EducationalSystem`, `GradingSystem`, `EnrollmentRecord`, `Course`, `Institution`, `Application`, `ApplicationRequirementStatus`, `StandardizedTest`, `ExtracurricularActivity`.
+  - Alembic migration environment with initial migration (`f957cf5e4815_initial_schema.py`) executing against PostgreSQL with pgvector.
+  - Auth provider abstraction (`IAuthProvider`, `MockAuthProvider`, `ClerkAuthProvider`) decoupling vendor auth from core application logic.
+  - Seeded initial catalog of higher education institutions (UC Berkeley, UCLA, San Francisco State University, De Anza College).
+  - REST endpoints for health checks (`/api/v1/health`), auth session resolution (`/api/v1/session`), universal profile management (`/api/v1/profile`), and application workspaces (`/api/v1/applications`).
+- **Frontend Architecture & Student OS (Next.js 15+ App Router):**
+  - Complete Next.js App Router application (`apps/web`) with Tailwind CSS, Lucide icons, and Radix UI components.
+  - Global responsive navigation header (`src/components/navigation/Header.tsx`) linking Student OS, First-Year, Transfer, Universities, and Universal Profile.
+  - Unified Student OS Dashboard (`/dashboard`) displaying profile completion, active application workspaces, pathway badges, and real-time requirement progress.
+  - Dedicated First-Year Admissions route (`/first-year`) with high school coursework, standardized test tracking, and essay workspaces.
+  - Dedicated Transfer Admissions route (`/transfer`) with community college coursework intake, GPA calculations, and IGETC/CSU-GE articulation trackers.
+  - Universal Student Profile management page (`/profile`) supporting multi-script name fields, legal identity, academic enrollment history, and dual pathway strategy.
+  - Global University Discovery Catalog (`/universities`) with search, pathway filtering, and one-click application workspace generation.
+- **Automated Testing & Verification:**
+  - Automated pytest test suite in `apps/api/tests` covering auth provider tokens, health checks, profile creation, first-year workflows, transfer workflows, and requirement checklists (9 tests, 100% pass).
+  - Automated frontend test suite in `apps/web/src/lib/api-client.test.ts` executed via Node.js native test runner and type stripping (3 tests, 100% pass).
+  - Monorepo-wide test orchestration via `turbo test` (12 tests total passing).
+  - Verified live execution of backend (`http://127.0.0.1:8000`) and frontend (`http://localhost:3000`) with healthy database connectivity.
+
 
 ---
 

@@ -1,0 +1,13 @@
+{
+  "name": "@platform/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "start": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "test": "if [ -x ~/.local/venv/bin/pytest ]; then ~/.local/venv/bin/pytest -v; else pytest -v; fi",
+    "migrate": "alembic upgrade head",
+    "migrate:generate": "alembic revision --autogenerate",
+    "lint": "python3 -m py_compile app/main.py"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "global-university-application-platform",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "test:api": "pnpm --filter @platform/api test",
+    "test:web": "pnpm --filter @platform/web test",
+    "clean": "turbo clean && rm -rf node_modules apps/*/node_modules packages/*/node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.13"
+  },
+  "packageManager": "pnpm@12.23.0"
+}
