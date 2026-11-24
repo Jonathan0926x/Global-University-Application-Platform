@@ -15,6 +15,7 @@ from app.schemas.application import (
 )
 from app.api.deps import get_current_user
 from app.ingestion.countries_seed import ensure_country_exists
+from app.services.requirements_engine import evaluate_dynamic_checklist
 
 router = APIRouter()
 
@@ -171,29 +172,121 @@ def create_application_workspace(
     db.add(application)
     db.flush()
 
-    # Generate initial dynamic checklist based on applicant pathway
+    checklist = evaluate_dynamic_checklist(
+        db=db,
+        institution=institution,
+        profile=profile,
+        applicant_type=app_in.applicant_type,
+        intended_major=application.intended_major,
+    )
+
     checklist_items = []
-    if app_in.applicant_type == "transfer":
+    if checklist.has_verified_requirements:
+        all_evals = (
+            checklist.completed_requirements
+            + checklist.missing_documents
+            + checklist.outstanding_prerequisites
+            + checklist.other_requirements
+            + checklist.not_applicable_requirements
+        )
+        for ev in all_evals:
+            checklist_items.append(
+                ApplicationRequirementStatus(
+                    application_id=application.id,
+                    institution_requirement_id=ev.requirement_id,
+                    title=ev.title,
+                    category=ev.category,
+                    importance=ev.effective_importance,
+                    status=ev.status,
+                    notes=ev.explanation,
+                    satisfied_by_document_id=ev.satisfied_by_document_id,
+                    satisfied_by_profile_field=ev.satisfied_by_profile_field,
+                    auto_matched=ev.auto_matched,
+                    verification_status=ev.verification_status,
+                    source_url=ev.source_url,
+                )
+            )
+        application.readiness_pct = checklist.readiness_pct
+    elif app_in.applicant_type == "transfer":
         checklist_items = [
-            ApplicationRequirementStatus(application_id=application.id, title="Official College Transcript(s)", category="document", importance="required", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Transfer Personal Statement / Statement of Purpose", category="document", importance="required", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Major Prerequisites Audit (60 transferable units minimum)", category="academic", importance="required", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Professor Recommendation Letter", category="document", importance="optional", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Application Fee or Approved Fee Waiver", category="administrative", importance="required", status="pending")
+            ApplicationRequirementStatus(application_id=application.id, title="Official College Transcript(s)", category="document", importance="required", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Transfer Personal Statement / Statement of Purpose", category="document", importance="required", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Major Prerequisites Audit (60 transferable units minimum)", category="academic", importance="required", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Professor Recommendation Letter", category="document", importance="optional", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Application Fee or Approved Fee Waiver", category="administrative", importance="required", status="pending", verification_status="general_guideline"),
         ]
     else: # first_year
         checklist_items = [
-            ApplicationRequirementStatus(application_id=application.id, title="Official High School Secondary Transcript", category="document", importance="required", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Personal Essay / Statement", category="document", importance="required", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Standardized Exam Scores (SAT/ACT or International Bac)", category="academic", importance="recommended", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="High School Counselor Recommendation", category="document", importance="required", status="pending"),
-            ApplicationRequirementStatus(application_id=application.id, title="Application Fee or Fee Waiver Code", category="administrative", importance="required", status="pending")
+            ApplicationRequirementStatus(application_id=application.id, title="Official High School Secondary Transcript", category="document", importance="required", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Personal Essay / Statement", category="document", importance="required", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Standardized Exam Scores (SAT/ACT or International Bac)", category="academic", importance="recommended", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="High School Counselor Recommendation", category="document", importance="required", status="pending", verification_status="general_guideline"),
+            ApplicationRequirementStatus(application_id=application.id, title="Application Fee or Fee Waiver Code", category="administrative", importance="required", status="pending", verification_status="general_guideline"),
         ]
 
     db.add_all(checklist_items)
     db.commit()
     db.refresh(application)
     return application
+
+
+@router.post("/applications/{application_id}/refresh-checklist", response_model=ApplicationResponse, tags=["Applications"])
+def refresh_application_checklist(
+    application_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+
+    app = db.query(Application).filter(
+        Application.id == application_id,
+        Application.profile_id == profile.id,
+    ).first()
+    if not app:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application workspace not found")
+
+    institution = db.query(Institution).filter(Institution.id == app.institution_id).first()
+    checklist = evaluate_dynamic_checklist(
+        db=db,
+        institution=institution,
+        profile=profile,
+        applicant_type=app.applicant_type,
+        intended_major=app.intended_major,
+    )
+    if checklist.has_verified_requirements:
+        db.query(ApplicationRequirementStatus).filter(
+            ApplicationRequirementStatus.application_id == app.id
+        ).delete()
+        all_evals = (
+            checklist.completed_requirements
+            + checklist.missing_documents
+            + checklist.outstanding_prerequisites
+            + checklist.other_requirements
+            + checklist.not_applicable_requirements
+        )
+        for ev in all_evals:
+            db.add(
+                ApplicationRequirementStatus(
+                    application_id=app.id,
+                    institution_requirement_id=ev.requirement_id,
+                    title=ev.title,
+                    category=ev.category,
+                    importance=ev.effective_importance,
+                    status=ev.status,
+                    notes=ev.explanation,
+                    satisfied_by_document_id=ev.satisfied_by_document_id,
+                    satisfied_by_profile_field=ev.satisfied_by_profile_field,
+                    auto_matched=ev.auto_matched,
+                    verification_status=ev.verification_status,
+                    source_url=ev.source_url,
+                )
+            )
+        app.readiness_pct = checklist.readiness_pct
+        db.commit()
+        db.refresh(app)
+    return app
 
 
 @router.get("/applications/{application_id}", response_model=ApplicationResponse, tags=["Applications"])

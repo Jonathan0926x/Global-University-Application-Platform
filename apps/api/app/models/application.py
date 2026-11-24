@@ -74,11 +74,19 @@ class ApplicationRequirementStatus(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    institution_requirement_id = Column(UUID(as_uuid=True), ForeignKey("institution_requirements.id", ondelete="SET NULL"), nullable=True, index=True)
 
     title = Column(String(300), nullable=False)
-    category = Column(String(50), nullable=False) # document, academic, administrative
-    importance = Column(String(20), default="required", nullable=False) # required, optional, recommended
-    status = Column(String(30), default="pending", nullable=False) # completed, in_progress, pending, waived
+    category = Column(String(50), nullable=False) # document, academic, administrative, exam, financial
+    importance = Column(String(30), default="required", nullable=False) # required, strongly_recommended, recommended, optional, conditional, not_accepted
+    status = Column(String(30), default="pending", nullable=False) # completed, in_progress, pending, not_applicable, waived, needs_verification, missing
     notes = Column(Text, nullable=True)
+
+    satisfied_by_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    satisfied_by_profile_field = Column(String(200), nullable=True)
+    auto_matched = Column(Boolean, default=False, nullable=False)
+    verification_status = Column(String(30), nullable=True)
+    source_url = Column(Text, nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     application = relationship("Application", back_populates="requirements_status")

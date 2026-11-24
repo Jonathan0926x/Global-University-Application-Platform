@@ -37,8 +37,8 @@
 | **Universal Student Profile** | ✅ **Tested** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
 | **First-Year Portal (Core)** | 🚀 **Implemented** | P1 | Phase 1 | Nov 23, 2026 | Engineering |
 | **Transfer Portal (Wedge)** | 🚀 **Implemented** | P0 | Phase 1 | Nov 23, 2026 | Engineering |
-| **University Discovery** | ✅ **Tested** (M1–M2 Complete: 6,699 Inst.) | P0 | Phase 3 (M1–M2) | Nov 24, 2026 | Data / Backend |
-| **Application Management** | ✅ **Tested** | P1 | Phase 1/2 | Nov 23, 2026 | Full Stack |
+| **University Discovery** | ✅ **Tested** (M1–M3 Complete: 6,699 Inst. / 94 Reqs) | P0 | Phase 3 (M1–M3) | Nov 24, 2026 | Data / Backend |
+| **Application Management** | ✅ **Tested** (Checklist Engine Live) | P1 | Phase 3 M3 | Nov 24, 2026 | Full Stack |
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ⏳ **In Progress** | P0 | Phase 2/3 | Phase 2 (M3) | Data / Backend |
 | **AI College Counselor** | ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
@@ -175,20 +175,21 @@
 * **Last Verified Date:** November 23, 2026
 * **Next Action:** Milestone 2.3: Build transfer coursework management interface.
 
-### 12. University Discovery & Directory (Phase 3 M1–M2)
-* **Status:** ✅ **Tested** (Milestone 1 & Milestone 2 Complete — 6,699 Verified Institutions Indexed)
+### 12. University Discovery & Admissions Requirements (Phase 3 M1–M3)
+* **Status:** ✅ **Tested** (Milestones 1–3 Complete — 6,699 Institutions, 94 Verified Requirements, 25 Deadlines)
 * **Priority:** P0
 * **Dependencies:** Database Implementation
 * **Relevant Files:**
   - [`docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md`](docs/06_GLOBAL_UNIVERSITY_DATABASE_ARCHITECTURE.md)
-  - `apps/api/app/models/country.py`, `apps/api/app/models/institution.py`, `apps/api/app/models/provenance.py`
-  - `apps/api/app/ingestion/base.py`, `apps/api/app/ingestion/countries_seed.py`, `apps/api/app/ingestion/openalex_ror.py`, `apps/api/app/ingestion/ipeds.py`, `apps/api/app/ingestion/scorecard.py`, `apps/api/app/ingestion/dedup.py`
-  - `apps/api/app/api/v1/institutions.py`
-  - `apps/api/alembic/versions/5f3c21a2d902_milestone_1_institutional_db_and_.py`, `apps/api/alembic/versions/77ffb27f3bc8_milestone_2_scorecard_outcomes_and_.py`
-  - `apps/web/src/app/universities/page.tsx`, `apps/web/src/app/universities/[id]/page.tsx`
-* **Acceptance Criteria:** Normalized `countries`, multi-campus `institutions` (`6,644` US IPEDS/Scorecard + `55` international institutions across `11` countries), `21,434` `academic_programs` CIP records, `7,074` versioned `institution_costs`, `12,954` non-destructive `data_provenance` (SHA-256) snapshots, authority-ranked conflict detection (`477` flagged without overwriting IPEDS), non-IPEDS duplicate collapse (`0` remaining unlinked U.S. rows), explicit `Not Reported` null handling, paginated 7-filter `/universities` directory, and `/universities/[id]` intelligence detail pages.
+  - [`docs/07_APPLICATION_REQUIREMENT_ENGINE.md`](docs/07_APPLICATION_REQUIREMENT_ENGINE.md)
+  - `apps/api/app/models/country.py`, `apps/api/app/models/institution.py`, `apps/api/app/models/provenance.py`, `apps/api/app/models/requirements.py`
+  - `apps/api/app/ingestion/base.py`, `apps/api/app/ingestion/countries_seed.py`, `apps/api/app/ingestion/openalex_ror.py`, `apps/api/app/ingestion/ipeds.py`, `apps/api/app/ingestion/scorecard.py`, `apps/api/app/ingestion/dedup.py`, `apps/api/app/ingestion/requirements_seed.py`
+  - `apps/api/app/services/requirements_engine.py`, `apps/api/app/api/v1/institutions.py`, `apps/api/app/api/v1/requirements.py`
+  - `apps/api/alembic/versions/5f3c21a2d902_milestone_1_institutional_db_and_.py`, `apps/api/alembic/versions/77ffb27f3bc8_milestone_2_scorecard_outcomes_and_.py`, `apps/api/alembic/versions/84eae1d08b41_milestone_3_admissions_requirements_.py`
+  - `apps/web/src/app/universities/page.tsx`, `apps/web/src/app/universities/[id]/page.tsx`, `apps/web/src/components/universities/AdmissionsIntelligenceSection.tsx`
+* **Acceptance Criteria:** Normalized global institution DB (`6,644` US + `55` international institutions across `11` countries), `27` requirement templates, `11` country qualifications (`US`, `CA`, `GB`, `FR`, `DE`, `HT`, `IN`, `AU`, `JP`), `94` source-verified institutional/major requirements, `36` conditional rules, `25` firm/recommended deadlines, non-fabricating dynamic checklist & eligibility engine (`GET /institutions/{id}/checklist`), DB-grounded multilingual AI counselor citations, and upgraded `/universities/[id]`, `/first-year`, `/transfer`, and `/counselor` UIs.
 * **Last Verified Date:** November 24, 2026
-* **Next Action:** Phase 3 Milestone 3: Global International Registry Expansion & Admissions Requirements Engine.
+* **Next Action:** Phase 3 Milestone 4: 3-Tier Transfer Articulation & Course Equivalency Engine.
 
 ### 13. Application Management & Tracker
 * **Status:** ⭕ **Not Started**

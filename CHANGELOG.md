@@ -6,14 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 In Progress (Milestones 3–7)
+## [Unreleased] - Phase 3 In Progress (Milestones 4–7)
 
 ### Planned
-- Milestone 3: Admissions Requirements Engine (First-Year & Transfer conditional rules and versioned deadlines).
 - Milestone 4: 3-Tier Transfer Articulation Engine (ASSIST.org API-keyed connector + `pgvector` Tier 3 predictions).
 - Milestone 5: 4-Dimensional Explainable University Matching Engine (Reach / Target / Likely).
 - Milestone 6: Live `pgvector` RAG Multilingual AI Counselor (`$0` local embedding default).
 - Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+
+---
+
+## [0.5.0-m3] - 2026-11-24
+
+### Added — Phase 3 Milestone 3: Global Admissions Requirements Intelligence Engine
+- **Normalized Requirements & Deadlines Schema (`84eae1d08b41`):**
+  - Added `requirement_templates`, `institution_requirements`, `requirement_conditions`, `deadlines`, and `country_qualifications`, and extended `application_requirement_status` with nullable provenance/auto-matching columns (`institution_requirement_id`, `satisfied_by_document_id`, `satisfied_by_profile_field`, `auto_matched`, `verification_status`, `source_url`).
+- **Source-Verified Global Requirements & National Qualifications (`apps/api/app/ingestion/requirements_seed.py`):**
+  - Seeded **27** reusable requirement templates, **11** country qualification & national exam frameworks across **9** priority countries (`US`, `CA`, `GB`, `FR`, `DE`, `HT`, `IN`, `AU`, `JP`), **94** verified institutional and program-specific requirements across **21** universities (e.g., UC Berkeley, UCLA, UMich, MIT, De Anza College, University of Toronto, McGill, UBC, Oxford, Cambridge, UCL, Sorbonne Université, Paris-Saclay, TUM, LMU Munich, UEH, Quisqueya University, University of Delhi, IIT Kharagpur, University of Melbourne, University of Tokyo), **36** conditional rules, and **25** deadlines.
+  - Explicitly refuses to fabricate requirements when an institution is uncurated (`requirements_unverified` / `coverage_notice`).
+- **Dynamic Checklist Engine, APIs & Grounded Multilingual Counselor:**
+  - Implemented `apps/api/app/services/requirements_engine.py` evaluating `StudentProfile` GPAs, semester/quarter credits, completed terms, major prerequisites (`Economics`, `Computer Science`), UC 7-course breadth, English/French/German/Japanese proficiency conditions, secondary vs. college Document Vault transcripts, and missing-data safeguards.
+  - Added `GET /api/v1/institutions/{id}/requirements`, `GET /api/v1/institutions/{id}/checklist`, `GET /api/v1/qualifications`, `GET /api/v1/deadlines/upcoming`, and `POST /api/v1/applications/{id}/refresh-checklist`.
+  - Grounded `MultilingualCounselorService` in PostgreSQL requirements/deadlines with real verified citations across English, Haitian Creole, French, Spanish, and Arabic.
+  - Upgraded `/universities/[id]`, `/first-year`, `/transfer`, and `/counselor` UIs; verified with 29 backend `pytest` tests, 7 frontend unit tests, Next.js build, and live browser testing.
 
 ---
 

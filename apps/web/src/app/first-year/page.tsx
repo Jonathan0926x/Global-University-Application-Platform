@@ -16,6 +16,7 @@ import {
   fetchInstitutions,
   fetchApplications,
   createApplication,
+  refreshApplicationChecklist,
   Institution,
   ApplicationWorkspace,
 } from "@/lib/api-client";
@@ -184,11 +185,31 @@ export default function FirstYearPortalPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500">Readiness:</span>
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-extrabold text-emerald-700 border border-emerald-200">
-                      {app.readiness_pct}%
-                    </span>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-zinc-500">Readiness:</span>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-extrabold text-emerald-700 border border-emerald-200">
+                        {app.readiness_pct}%
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const updated = await refreshApplicationChecklist(app.id);
+                        if (updated) {
+                          setApplications((prev) => prev.map((a) => (a.id === app.id ? updated : a)));
+                        }
+                      }}
+                      className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50"
+                    >
+                      Refresh Checklist
+                    </button>
+                    <Link
+                      href={`/universities/${app.institution_id}`}
+                      className="text-[11px] font-semibold text-indigo-600 hover:underline"
+                    >
+                      Requirements Profile →
+                    </Link>
                   </div>
                 </div>
 
@@ -201,25 +222,45 @@ export default function FirstYearPortalPage() {
                     {app.requirements_status.map((req) => (
                       <div
                         key={req.id}
-                        className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 text-xs"
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 text-xs"
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-start gap-2.5">
                           <CheckCircle2
-                            className={`h-4 w-4 ${
+                            className={`h-4 w-4 mt-0.5 shrink-0 ${
                               req.status === "completed" ? "text-emerald-600" : "text-zinc-300"
                             }`}
                           />
                           <div>
-                            <span className="font-semibold text-zinc-900">{req.title}</span>
-                            <span className="ml-2 rounded-full bg-zinc-200 px-1.5 py-0.2 text-[9px] font-medium text-zinc-700 uppercase">
-                              {req.importance}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-zinc-900">{req.title}</span>
+                              <span className="rounded-full bg-zinc-200 px-1.5 py-0.2 text-[9px] font-medium text-zinc-700 uppercase">
+                                {req.importance}
+                              </span>
+                              {req.verification_status === "verified" && (
+                                <span className="rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[9px] font-semibold text-emerald-700 uppercase">
+                                  verified
+                                </span>
+                              )}
+                            </div>
+                            {req.notes && <p className="text-[11px] text-zinc-500 mt-0.5">{req.notes}</p>}
                           </div>
                         </div>
 
-                        <span className="font-medium capitalize text-zinc-500 text-[11px]">
-                          {req.status}
-                        </span>
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          {req.source_url && (
+                            <a
+                              href={req.source_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] font-semibold text-indigo-600 hover:underline"
+                            >
+                              Official Source ↗
+                            </a>
+                          )}
+                          <span className="font-medium capitalize text-zinc-600 text-[11px]">
+                            {req.status.replace(/_/g, " ")}
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>

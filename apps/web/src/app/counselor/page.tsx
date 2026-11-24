@@ -20,6 +20,7 @@ import { useI18n } from "@/lib/i18n/context";
 import {
   askCounselor,
   fetchCounselorHistory,
+  fetchInstitutionDetail,
   CounselorMessage,
   Citation
 } from "@/lib/api-client";
@@ -30,11 +31,28 @@ export default function CounselorPage() {
   const [inputQuery, setInputQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(language.tag);
+  const [contextInstId, setContextInstId] = useState<string | undefined>(undefined);
+  const [contextInstName, setContextInstName] = useState<string | undefined>(undefined);
+  const [contextPathway, setContextPathway] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSelectedLanguage(language.tag);
   }, [language.tag]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const instId = params.get("institution_id") || undefined;
+    const pathway = params.get("pathway") || undefined;
+    setContextInstId(instId);
+    setContextPathway(pathway);
+    if (instId) {
+      fetchInstitutionDetail(instId)
+        .then((d) => setContextInstName(d.official_name))
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     // Initial welcome message from the counselor
@@ -101,7 +119,7 @@ export default function CounselorPage() {
     setLoading(true);
 
     try {
-      const response = await askCounselor(query, selectedLanguage);
+      const response = await askCounselor(query, selectedLanguage, undefined, contextInstId, contextPathway);
       setMessages((prev) => [...prev, response]);
     } catch (err) {
       console.error("Counselor query failed:", err);
@@ -127,25 +145,19 @@ export default function CounselorPage() {
 
   const samplePrompts = [
     {
-      label: "Haitian Student CC Transfer to UC",
+      label: "Kreyòl: Transfè Docs",
+      text: "Ki dokiman mwen bezwen pou m aplike kòm etidyan transfè nan UC Berkeley?",
+    },
+    {
+      label: "Haitian Student CC Transfer",
       text:
         selectedLanguage === "ht-HT"
           ? "Kijan mwen ka transfere soti nan yon community college pou ale nan UC Berkeley si mwen gen yon Baccalauréat Ayisyen?"
           : "How can a student from Haiti transfer from a US Community College to UC Berkeley with a Haitian Baccalauréat?",
     },
     {
-      label: "UC Berkeley CS Prerequisite Matrix",
-      text:
-        selectedLanguage === "ht-HT"
-          ? "Ki egzijans kous ak GPA mwen bezwen pou transfere nan Syans Enfòmatik nan UC Berkeley?"
-          : "What are the required major prerequisites and GPA standards for Computer Science transfer to UC Berkeley?",
-    },
-    {
-      label: "IGETC General Education Certification",
-      text:
-        selectedLanguage === "ht-HT"
-          ? "Kisa IGETC la ye, epi poukisa li enpòtan pou transfè nan UC ak CSU?"
-          : "What is IGETC and how does completing it satisfy lower-division GE requirements for UC and CSU campuses?",
+      label: "Oxford / UK UCAS Intl",
+      text: "What are the international qualifications, English test deadlines, and UCAS dates for University of Oxford?",
     },
   ];
 
@@ -159,13 +171,18 @@ export default function CounselorPage() {
               <Bot className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
                   Multilingual AI Admissions Counselor
                 </h1>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
                   Grounded & Verified
                 </span>
+                {contextInstName && (
+                  <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    Context: {contextInstName}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 Multi-country credential recognition, transfer articulation, and verified university source citations.

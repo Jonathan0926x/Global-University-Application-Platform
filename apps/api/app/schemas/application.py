@@ -6,11 +6,17 @@ from uuid import UUID
 
 class RequirementStatusSchema(BaseModel):
     id: UUID
+    institution_requirement_id: Optional[UUID] = None
     title: str
     category: str
     importance: str
     status: str
     notes: Optional[str] = None
+    satisfied_by_document_id: Optional[UUID] = None
+    satisfied_by_profile_field: Optional[str] = None
+    auto_matched: bool = False
+    verification_status: Optional[str] = None
+    source_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

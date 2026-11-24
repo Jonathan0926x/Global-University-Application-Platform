@@ -62,11 +62,14 @@ def chat_with_admissions_counselor(
     )
     db.add(user_msg)
 
-    # 3. Generate Multilingual Grounded Answer
+    # 3. Generate Multilingual Grounded Answer from Verified Institutional DB
     answer_data = MultilingualCounselorService.answer_admissions_query(
         query=request.message,
         preferred_language=preferred_lang,
-        applicant_type=profile.applicant_type
+        applicant_type=request.applicant_type or profile.applicant_type,
+        db=db,
+        institution_id=request.institution_id,
+        profile=profile,
     )
 
     # 4. Record Assistant Response

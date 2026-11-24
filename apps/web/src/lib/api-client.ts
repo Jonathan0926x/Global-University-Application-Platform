@@ -49,11 +49,17 @@ export interface Institution {
 
 export interface ApplicationRequirement {
   id: string;
+  institution_requirement_id?: string;
   title: string;
-  category: "document" | "academic" | "administrative";
-  importance: "required" | "optional" | "recommended";
-  status: "completed" | "in_progress" | "pending" | "waived";
+  category: "document" | "academic" | "administrative" | "exam" | "financial" | string;
+  importance: "required" | "strongly_recommended" | "recommended" | "optional" | "conditional" | "not_accepted" | string;
+  status: "completed" | "in_progress" | "pending" | "not_applicable" | "waived" | "needs_verification" | "missing" | string;
   notes?: string;
+  satisfied_by_document_id?: string;
+  satisfied_by_profile_field?: string;
+  auto_matched?: boolean;
+  verification_status?: string;
+  source_url?: string;
 }
 
 export interface ApplicationWorkspace {
@@ -277,7 +283,9 @@ export interface DocumentDetail {
 export async function askCounselor(
   message: string,
   language?: string,
-  conversationId?: string
+  conversationId?: string,
+  institutionId?: string,
+  applicantType?: string
 ): Promise<CounselorMessage> {
   const res = await fetch(`${API_BASE_URL}/counselor/chat`, {
     method: "POST",
@@ -289,6 +297,8 @@ export async function askCounselor(
       message,
       language,
       conversation_id: conversationId,
+      institution_id: institutionId,
+      applicant_type: applicantType,
     }),
   });
   if (!res.ok) throw new Error("Failed to converse with counselor");
@@ -569,6 +579,198 @@ export async function fetchInstitutionDetail(id: string): Promise<InstitutionDet
 export async function fetchInstitutionProvenance(id: string): Promise<DataProvenanceItem[]> {
   const res = await fetch(`${API_BASE_URL}/institutions/${id}/provenance`);
   if (!res.ok) return [];
+  return res.json();
+}
+
+// ============================================================================
+// Phase 3 Milestone 3: Global Admissions Requirements Intelligence Engine
+// ============================================================================
+
+export interface RequirementConditionItem {
+  id: string;
+  condition_type: string;
+  condition_field: string;
+  condition_operator: string;
+  condition_value: any;
+  result_importance: string;
+  explanation?: string;
+}
+
+export interface InstitutionRequirementItem {
+  id: string;
+  institution_id: string;
+  program_id?: string;
+  program_name_filter?: string;
+  cip_code?: string;
+  applicant_type: string;
+  importance: string;
+  requirement_type: string;
+  requirement_subtype?: string;
+  category: string;
+  title: string;
+  description?: string;
+  institution_specific_notes?: string;
+  quantity?: number;
+  minimum_value?: string;
+  maximum_value?: string;
+  fee_amount?: number;
+  fee_currency?: string;
+  fee_waiver_available?: boolean;
+  academic_year: string;
+  source_name: string;
+  source_type: string;
+  source_url: string;
+  verified_at?: string;
+  confidence_level: string;
+  verification_status: string;
+  conditions: RequirementConditionItem[];
+}
+
+export interface DeadlineItem {
+  id: string;
+  institution_id: string;
+  program_name_filter?: string;
+  applicant_type: string;
+  deadline_type: string;
+  intake_term: string;
+  deadline_date?: string;
+  deadline_time?: string;
+  timezone?: string;
+  is_firm: boolean;
+  notification_date?: string;
+  academic_year: string;
+  notes?: string;
+  days_remaining?: number;
+  is_past?: boolean;
+  source_name: string;
+  source_url: string;
+  verified_at?: string;
+  verification_status: string;
+  confidence_level: string;
+}
+
+export interface CountryQualificationItem {
+  id: string;
+  country_code: string;
+  qualification_name: string;
+  qualification_type: string;
+  grading_scale?: string;
+  passing_threshold?: string;
+  equivalency_notes?: string;
+  recognition_rules: Record<string, any>;
+  source_name: string;
+  source_url: string;
+  verified_at?: string;
+  verification_status: string;
+}
+
+export interface InstitutionAdmissionsSummary {
+  institution_id: string;
+  official_name: string;
+  country_code: string;
+  academic_year: string;
+  has_verified_requirements: boolean;
+  coverage_notice?: string;
+  admissions_website?: string;
+  application_portal_url?: string;
+  net_price_calculator_url?: string;
+  open_admissions?: boolean;
+  undergrad_application_fee?: number;
+  requirements: InstitutionRequirementItem[];
+  deadlines: DeadlineItem[];
+  country_qualifications: CountryQualificationItem[];
+}
+
+export interface ChecklistItemEvaluation {
+  requirement_id: string;
+  title: string;
+  category: string;
+  requirement_type: string;
+  program_name_filter?: string;
+  original_importance: string;
+  effective_importance: string;
+  status: string;
+  explanation?: string;
+  minimum_value?: string;
+  maximum_value?: string;
+  satisfied_by_document_id?: string;
+  satisfied_by_profile_field?: string;
+  matched_evidence: string[];
+  missing_items: string[];
+  auto_matched: boolean;
+  source_name: string;
+  source_url: string;
+  verified_at?: string;
+  verification_status: string;
+}
+
+export interface DynamicChecklistResponse {
+  institution_id: string;
+  official_name: string;
+  country_code: string;
+  applicant_type: string;
+  is_international_for_target?: boolean;
+  intended_major?: string;
+  academic_year: string;
+  has_verified_requirements: boolean;
+  eligibility_status: string;
+  readiness_pct: number;
+  summary_notice?: string;
+  completed_requirements: ChecklistItemEvaluation[];
+  missing_documents: ChecklistItemEvaluation[];
+  outstanding_prerequisites: ChecklistItemEvaluation[];
+  other_requirements: ChecklistItemEvaluation[];
+  not_applicable_requirements: ChecklistItemEvaluation[];
+  eligibility_concerns: string[];
+  upcoming_deadlines: DeadlineItem[];
+  next_actions: string[];
+  applicable_qualifications: CountryQualificationItem[];
+}
+
+export async function fetchInstitutionRequirements(
+  id: string,
+  params?: { applicant_type?: string; major?: string; academic_year?: string }
+): Promise<InstitutionAdmissionsSummary | null> {
+  try {
+    const qs = new URLSearchParams();
+    if (params?.applicant_type) qs.append("applicant_type", params.applicant_type);
+    if (params?.major) qs.append("major", params.major);
+    if (params?.academic_year) qs.append("academic_year", params.academic_year);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const res = await fetch(`${API_BASE_URL}/institutions/${id}/requirements${suffix}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPersonalizedChecklist(
+  id: string,
+  params?: { applicant_type?: string; major?: string; academic_year?: string }
+): Promise<DynamicChecklistResponse | null> {
+  try {
+    const qs = new URLSearchParams();
+    if (params?.applicant_type) qs.append("applicant_type", params.applicant_type);
+    if (params?.major) qs.append("major", params.major);
+    if (params?.academic_year) qs.append("academic_year", params.academic_year);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const res = await fetch(`${API_BASE_URL}/institutions/${id}/checklist${suffix}`, {
+      headers: { ...auth.getAuthHeader() },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function refreshApplicationChecklist(applicationId: string): Promise<ApplicationWorkspace | null> {
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/refresh-checklist`, {
+    method: "POST",
+    headers: { ...auth.getAuthHeader() },
+  });
+  if (!res.ok) return null;
   return res.json();
 }
 

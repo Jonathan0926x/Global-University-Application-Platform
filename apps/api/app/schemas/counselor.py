@@ -41,3 +41,5 @@ class CounselorQueryRequest(BaseModel):
     message: str
     conversation_id: Optional[UUID] = None
     language: Optional[str] = None  # Student preferred language BCP 47
+    institution_id: Optional[UUID] = None
+    applicant_type: Optional[str] = None

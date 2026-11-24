@@ -121,8 +121,8 @@ The platform tracks work across distinct verification states:
 | **1. Strategic & Technical Documentation** | ✅ **Complete (15/15)** | All 15 foundational specifications and deep-dive models completed. |
 | **2. Architecture Foundation (Phase 1)** | ✅ **Complete & Tested** | Turborepo monorepo, Next.js 15, FastAPI, PostgreSQL 17 + pgvector, Alembic. |
 | **3. Internationalization & Vault (Phase 2)** | ✅ **Complete & E2E Audited** | 36-language BCP 47 registry, 4 RTL layouts (ar, he, fa, ur), Multilingual Counselor, Document Vault with SHA-256 integrity, mobile drawer. |
-| **4. Global University Engine (Phase 3 M1–M2)** | ✅ **Complete & Tested** | `6,699` verified institutions indexed (`6,644` US IPEDS/College Scorecard + `55` international), `21,434` CIP programs, `7,074` cost tables, `12,954` SHA-256 provenance snapshots, `/universities` & `/universities/[id]`. |
-| **5. Automated Test Verification** | ✅ **32 Tests Passing** | 25 pytest tests in backend + 7 node tests in frontend (100% pass). |
+| **4. Global University & Requirements Engine (Phase 3 M1–M3)** | ✅ **Complete & Tested** | `6,699` institutions indexed (`6,644` US + `55` international), `94` source-verified requirements across `21` global universities in `9` countries, `25` deadlines, `11` country qualifications, dynamic checklist engine, `/universities/[id]` & grounded AI counselor. |
+| **5. Automated Test Verification** | ✅ **36 Tests Passing** | 29 pytest tests in backend + 7 node tests in frontend (100% pass). |
 | **6. Live Services** | ✅ **Operational & Verified** | Web at `http://localhost:3000` & API at `http://127.0.0.1:8000`. |
 
 

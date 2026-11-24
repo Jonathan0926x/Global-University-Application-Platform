@@ -26,6 +26,7 @@ import {
   DataProvenanceItem
 } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
+import { AdmissionsIntelligenceSection } from "@/components/universities/AdmissionsIntelligenceSection";
 
 export default function InstitutionDetailPage() {
   const params = useParams();
@@ -335,6 +336,14 @@ export default function InstitutionDetailPage() {
           </dl>
         </div>
       </div>
+
+      {/* Milestone 3: Admissions Requirements, Deadlines & Dynamic Checklist */}
+      <AdmissionsIntelligenceSection
+        institutionId={inst.id}
+        institutionName={inst.official_name}
+        acceptsTransfer={inst.accepts_transfer}
+        acceptsFirstYear={inst.accepts_first_year}
+      />
 
       {/* Branch Campuses (if any) */}
       {inst.campuses && inst.campuses.length > 0 && (
