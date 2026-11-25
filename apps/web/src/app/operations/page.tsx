@@ -3,9 +3,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Activity,
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Clock,
   ExternalLink,
   FileText,
   Globe2,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   XCircle,
 } from "lucide-react";
 import {
@@ -22,6 +25,7 @@ import {
   RejectionReasonOption,
   RoutingQualitySummary,
   RoutingQueueItem,
+  expireStaleRoutes,
   fetchEvidenceQueue,
   fetchRoutingQualitySummary,
   fetchRoutingQueue,
@@ -29,7 +33,10 @@ import {
   inspectEvidenceDocument,
   reviewApplicationRoute,
   reviewEvidenceItem,
+  runBatchRouteHealthChecks,
   runBatchRoutingVerify,
+  runRouteHealthCheck,
+  verifyRoutePathway,
 } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
 
@@ -72,14 +79,17 @@ export default function OperationsConsolePage() {
 
   // Routing queue state
   const [summary, setSummary] = useState<RoutingQualitySummary | null>(null);
-  const [routeStatusFilter, setRouteStatusFilter] = useState<"needs_verification" | "verified" | "unverified" | "all">(
-    "needs_verification"
-  );
+  const [routeStatusFilter, setRouteStatusFilter] = useState<
+    "manual_review" | "needs_verification" | "verified" | "expired" | "unverified" | "all"
+  >("manual_review");
   const [routeSearch, setRouteSearch] = useState("");
   const [routingQueue, setRoutingQueue] = useState<RoutingQueueItem[]>([]);
   const [routeUrlById, setRouteUrlById] = useState<Record<string, string>>({});
   const [routeReasonById, setRouteReasonById] = useState<Record<string, string>>({});
   const [routeNotesById, setRouteNotesById] = useState<Record<string, string>>({});
+  const [routePathwayById, setRoutePathwayById] = useState<Record<string, string>>({});
+  const [healthCheckingId, setHealthCheckingId] = useState<string | null>(null);
+  const [batchHealthRunning, setBatchHealthRunning] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -96,7 +106,7 @@ export default function OperationsConsolePage() {
         fetchVerificationTaxonomies(hdr),
         fetchRoutingQualitySummary(hdr),
         fetchEvidenceQueue(evidenceStatusFilter, hdr),
-        fetchRoutingQueue({ verification_status: routeStatusFilter, q: routeSearch || undefined, limit: 100 }, hdr),
+        fetchRoutingQueue({ verification_status: routeStatusFilter, q: routeSearch || undefined, limit: 500 }, hdr),
       ]);
       setEvidenceReasons(tax.evidence_rejection_reasons);
       setRouteReasons(tax.route_rejection_reasons);
@@ -202,6 +212,75 @@ export default function OperationsConsolePage() {
     }
   };
 
+  const handleSingleHealthCheck = async (routeId: string) => {
+    setBanner(null);
+    setHealthCheckingId(routeId);
+    try {
+      const updated = await runRouteHealthCheck(routeId, authHeaders);
+      setBanner(
+        `Link health check: ${updated.last_health_check_status || "checked"} (HTTP ${updated.last_health_check_http_code ?? "N/A"})` +
+          (updated.final_redirect_url ? ` → ${updated.final_redirect_url}` : "")
+      );
+      await loadAll();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : "Link health check failed");
+    } finally {
+      setHealthCheckingId(null);
+    }
+  };
+
+  const handleBatchHealthCheck = async () => {
+    setBanner(null);
+    setBatchHealthRunning(true);
+    try {
+      const res = await runBatchRouteHealthChecks({ limit: 15, only_stale: true }, authHeaders);
+      setSummary(res.summary);
+      setBanner(
+        `Health-checked ${res.checked} routes: ${res.by_status.healthy || 0} healthy, ${res.by_status.redirected || 0} redirected, ${res.by_status.unreachable || 0} unreachable.`
+      );
+      await loadAll();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : "Batch link health check failed");
+    } finally {
+      setBatchHealthRunning(false);
+    }
+  };
+
+  const handleExpireStaleRoutes = async () => {
+    setBanner(null);
+    try {
+      const res = await expireStaleRoutes(authHeaders);
+      setSummary(res.summary);
+      setBanner(
+        `Checked expired verifications: flagged ${res.flagged_for_reverification} expired route(s) for reverification.`
+      );
+      await loadAll();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : "Failed to expire stale routes");
+    }
+  };
+
+  const handleVerifyPathway = async (rt: RoutingQueueItem) => {
+    setBanner(null);
+    const chosenType = routePathwayById[rt.id] || rt.applicant_type;
+    const notes = (routeNotesById[rt.id] || "").trim();
+    try {
+      await verifyRoutePathway(
+        rt.id,
+        {
+          pathway_verified: true,
+          applicant_type: chosenType,
+          notes: notes || `Verified applicant pathway applicability (${chosenType}).`,
+        },
+        authHeaders
+      );
+      setBanner(`Pathway verified for ${rt.institution_name || rt.platform_name} (${chosenType}).`);
+      await loadAll();
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : "Failed to verify route pathway");
+    }
+  };
+
   return (
     <div dir={direction} className="min-h-screen bg-[#fafafc] text-zinc-900 pb-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
@@ -284,20 +363,49 @@ export default function OperationsConsolePage() {
                 <div className="rounded-xl border border-zinc-200 bg-white p-4">
                   <div className="text-[11px] font-bold uppercase text-zinc-500">Total Directory Routes</div>
                   <div className="mt-1 text-2xl font-extrabold text-zinc-900">{summary.total_routes}</div>
+                  <div className="text-[11px] text-zinc-500">
+                    Domain Match: {summary.by_method.ipeds_domain_match || 0} • System:{" "}
+                    {summary.by_method.ipeds_state_system || 0}
+                  </div>
                 </div>
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
                   <div className="text-[11px] font-bold uppercase text-emerald-800">Verified Official</div>
                   <div className="mt-1 text-2xl font-extrabold text-emerald-900">{summary.verified}</div>
+                  <div className="text-[11px] text-emerald-800/80">
+                    Expired: {summary.health?.verification_expired || 0} • Expiring &lt;30d:{" "}
+                    {summary.health?.verification_expiring_soon_30d || 0}
+                  </div>
                 </div>
-                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                  <div className="text-[11px] font-bold uppercase text-amber-800">Needs Manual Review</div>
-                  <div className="mt-1 text-2xl font-extrabold text-amber-900">{summary.needs_verification}</div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 flex flex-col justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase text-amber-800">Manual Review Queue</div>
+                    <div className="mt-1 text-2xl font-extrabold text-amber-900">{summary.needs_verification}</div>
+                    <div className="text-[11px] text-amber-900/80">
+                      Pending: {summary.needs_verification} • Manually Reviewed: {summary.manually_reviewed_count || 0}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("routing");
+                      setRouteStatusFilter("manual_review");
+                    }}
+                    className="mt-1.5 text-left text-[11px] font-bold text-amber-900 underline hover:text-amber-700"
+                  >
+                    Open Manual Review Queue →
+                  </button>
                 </div>
                 <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                  <div className="text-[11px] font-bold uppercase text-zinc-500">Domain + System Verified</div>
+                  <div className="text-[11px] font-bold uppercase text-zinc-500">Link Health &amp; Pathways</div>
                   <div className="mt-1 text-xs font-semibold text-zinc-700 space-y-0.5">
-                    <div>Domain Match: {summary.by_method.ipeds_domain_match || 0}</div>
-                    <div>State/Central System: {summary.by_method.ipeds_state_system || 0}</div>
+                    <div>
+                      Healthy: {summary.health?.health_check_status?.healthy || 0} • Redirected:{" "}
+                      {summary.health?.health_check_status?.redirected || 0}
+                    </div>
+                    <div>
+                      Unreachable: {(summary.health?.health_check_status?.unreachable || 0) + (summary.health?.health_check_status?.error || 0)} • Pathways Verified:{" "}
+                      {summary.health?.pathway_verified || 0}
+                    </div>
                   </div>
                 </div>
                 <div className="rounded-xl border border-zinc-200 bg-white p-4">
@@ -332,14 +440,33 @@ export default function OperationsConsolePage() {
               </div>
 
               {activeTab === "routing" && (
-                <button
-                  type="button"
-                  onClick={handleRunBatchVerify}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Run Deterministic Batch Audit
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBatchHealthCheck}
+                    disabled={batchHealthRunning}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-60"
+                  >
+                    <Activity className="h-3.5 w-3.5 text-emerald-600" />
+                    {batchHealthRunning ? "Checking Links..." : "Check Link Health (15)"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExpireStaleRoutes}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-bold text-zinc-800 hover:bg-zinc-50"
+                  >
+                    <Clock className="h-3.5 w-3.5 text-amber-600" />
+                    Flag Expired
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRunBatchVerify}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Run Deterministic Batch Audit
+                  </button>
+                </div>
               )}
             </div>
 
@@ -528,19 +655,28 @@ export default function OperationsConsolePage() {
             {activeTab === "routing" && (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3.5">
-                  <div className="flex items-center gap-1.5">
-                    {(["needs_verification", "verified", "unverified", "all"] as const).map((st) => (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(
+                      [
+                        { id: "manual_review", label: "Manual Review & Pending" },
+                        { id: "needs_verification", label: `Needs Verification (${summary?.needs_verification ?? 0})` },
+                        { id: "verified", label: "Verified" },
+                        { id: "expired", label: "Expired" },
+                        { id: "unverified", label: "Unverified" },
+                        { id: "all", label: "All" },
+                      ] as const
+                    ).map((st) => (
                       <button
-                        key={st}
+                        key={st.id}
                         type="button"
-                        onClick={() => setRouteStatusFilter(st)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold border capitalize ${
-                          routeStatusFilter === st
+                        onClick={() => setRouteStatusFilter(st.id)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold border ${
+                          routeStatusFilter === st.id
                             ? "bg-zinc-900 text-white border-zinc-900"
                             : "bg-white text-zinc-700 border-zinc-200"
                         }`}
                       >
-                        {st.replace(/_/g, " ")}
+                        {st.label}
                       </button>
                     ))}
                   </div>
@@ -557,141 +693,237 @@ export default function OperationsConsolePage() {
                   </div>
                 </div>
 
-                {routingQueue.map((rt) => (
-                  <div key={rt.id} className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3 shadow-xs">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-700">
-                            <Globe2 className="h-3 w-3" />
-                            {rt.country_code} • {rt.platform_type.replace(/_/g, " ")}
-                          </span>
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                              rt.verification_status === "verified"
-                                ? "bg-emerald-100 text-emerald-800"
-                                : rt.verification_status === "unverified"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-amber-100 text-amber-800"
-                            }`}
-                          >
-                            {rt.verification_status.replace(/_/g, " ")}
-                          </span>
-                          {rt.verification_method && (
-                            <span className="text-[11px] font-mono text-zinc-500">
-                              method: {rt.verification_method}
-                            </span>
-                          )}
+                {routingQueue.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-8 text-center text-xs text-zinc-600">
+                    No routing records match filter &ldquo;{routeStatusFilter.replace(/_/g, " ")}&rdquo;.
+                  </div>
+                ) : (
+                  routingQueue.map((rt) => {
+                    const isExpired = Boolean(
+                      rt.verification_expires_at && new Date(rt.verification_expires_at).getTime() <= Date.now()
+                    );
+                    return (
+                      <div key={rt.id} className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3 shadow-xs">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-700">
+                                <Globe2 className="h-3 w-3" />
+                                {rt.country_code} • {rt.platform_type.replace(/_/g, " ")}
+                              </span>
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                                  rt.verification_status === "verified"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : rt.verification_status === "unverified"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {rt.verification_status.replace(/_/g, " ")}
+                              </span>
+                              {rt.verification_method && (
+                                <span className="text-[11px] font-mono text-zinc-500">
+                                  method: {rt.verification_method}
+                                </span>
+                              )}
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  rt.pathway_verified
+                                    ? "bg-indigo-100 text-indigo-800"
+                                    : "bg-zinc-100 text-zinc-600"
+                                }`}
+                              >
+                                <ShieldCheck className="h-3 w-3" />
+                                {rt.pathway_verified
+                                  ? `Pathway Verified: ${rt.applicant_type}`
+                                  : `Pathway Unverified (${rt.applicant_type})`}
+                              </span>
+                              {rt.last_health_check_status ? (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                    rt.last_health_check_status === "healthy"
+                                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                      : rt.last_health_check_status === "redirected"
+                                        ? "bg-blue-50 text-blue-800 border border-blue-200"
+                                        : "bg-red-50 text-red-800 border border-red-200"
+                                  }`}
+                                >
+                                  <Activity className="h-3 w-3" />
+                                  {rt.last_health_check_status.toUpperCase()}
+                                  {rt.last_health_check_http_code ? ` (${rt.last_health_check_http_code})` : ""}
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-zinc-50 border border-zinc-200 px-2 py-0.5 text-[10px] text-zinc-500">
+                                  Link health unchecked
+                                </span>
+                              )}
+                              {rt.verification_expires_at && (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    isExpired ? "bg-red-100 text-red-800" : "bg-zinc-100 text-zinc-700"
+                                  }`}
+                                >
+                                  <Clock className="h-3 w-3" />
+                                  {isExpired ? "EXPIRED" : `Expires ${formatShortDate(rt.verification_expires_at)}`}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="mt-1.5 text-base font-extrabold text-zinc-900">
+                              {rt.institution_name || rt.platform_name}
+                            </h3>
+                            <div dir="ltr" className="mt-1 font-mono text-xs text-indigo-700 break-all">
+                              {rt.official_url}
+                            </div>
+                            {rt.final_redirect_url && rt.final_redirect_url !== rt.official_url && (
+                              <div dir="ltr" className="mt-0.5 font-mono text-[11px] text-blue-700 break-all">
+                                Redirected destination ({rt.redirect_chain_length ?? 1} hop
+                                {(rt.redirect_chain_length ?? 1) === 1 ? "" : "s"}): {rt.final_redirect_url}
+                              </div>
+                            )}
+                            {rt.institution_website && (
+                              <div className="text-[11px] text-zinc-500 mt-0.5">
+                                Official Site: <span dir="ltr">{rt.institution_website}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleSingleHealthCheck(rt.id)}
+                              disabled={healthCheckingId === rt.id}
+                              className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
+                            >
+                              <Activity className="h-3 w-3 text-emerald-600" />
+                              {healthCheckingId === rt.id ? "Checking..." : "Check Health"}
+                            </button>
+                            <a
+                              href={rt.official_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+                            >
+                              Open Link <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
                         </div>
-                        <h3 className="mt-1.5 text-base font-extrabold text-zinc-900">
-                          {rt.institution_name || rt.platform_name}
-                        </h3>
-                        <div dir="ltr" className="mt-1 font-mono text-xs text-indigo-700 break-all">
-                          {rt.official_url}
+
+                        {rt.trust_checks?.warnings && rt.trust_checks.warnings.length > 0 && (
+                          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                            <span>{rt.trust_checks.warnings.join(" • ")}</span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-2.5 items-end bg-zinc-50 rounded-xl p-3 border border-zinc-200/80">
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Corrected HTTPS URL (optional)
+                            </label>
+                            <input
+                              type="url"
+                              dir="ltr"
+                              value={routeUrlById[rt.id] || ""}
+                              onChange={(e) => setRouteUrlById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
+                              placeholder={rt.official_url}
+                              className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Applicant Pathway Applicability
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                aria-label="Applicant Pathway Applicability"
+                                value={routePathwayById[rt.id] || rt.applicant_type}
+                                onChange={(e) => setRoutePathwayById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
+                                className="flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-xs"
+                              >
+                                <option value="all">All Undergraduate</option>
+                                <option value="first_year">First-Year Only</option>
+                                <option value="transfer">Transfer Only</option>
+                                <option value="international_first_year">Intl First-Year</option>
+                                <option value="international_transfer">Intl Transfer</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => handleVerifyPathway(rt)}
+                                className="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-700 shrink-0"
+                              >
+                                Verify Pathway
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Rejection Reason (if unverified)
+                            </label>
+                            <select
+                              aria-label="Route Rejection Reason"
+                              value={routeReasonById[rt.id] || routeReasons[0]?.code || "broken_or_404"}
+                              onChange={(e) => setRouteReasonById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
+                              className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
+                            >
+                              {routeReasons.map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {r.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">Verifier Notes</label>
+                            <input
+                              type="text"
+                              value={routeNotesById[rt.id] || ""}
+                              onChange={(e) => setRouteNotesById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
+                              placeholder="Tenant confirmed on admissions site..."
+                              className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleRouteDecision(rt.id, "verified")}
+                              className="flex-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                            >
+                              Verify URL
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRouteDecision(rt.id, "unverified")}
+                              className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
+                            >
+                              Reject
+                            </button>
+                          </div>
                         </div>
-                        {rt.institution_website && (
-                          <div className="text-[11px] text-zinc-500 mt-0.5">
-                            Official Site: <span dir="ltr">{rt.institution_website}</span>
+
+                        {rt.audits && rt.audits.length > 0 && (
+                          <div className="border-t border-zinc-100 pt-2 space-y-1 text-[11px] text-zinc-600">
+                            {rt.audits.slice(0, 3).map((a) => (
+                              <div key={a.id} className="flex items-center justify-between gap-2">
+                                <span>
+                                  <strong className="uppercase">{a.action}</strong> ({a.from_status} → {a.to_status}) by{" "}
+                                  {a.actor_role}: {a.notes || ""}
+                                </span>
+                                <span dir="ltr" className="font-mono shrink-0">
+                                  {formatShortDate(a.created_at)}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
-
-                      <a
-                        href={rt.official_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 shrink-0"
-                      >
-                        Open Link <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-
-                    {rt.trust_checks?.warnings && rt.trust_checks.warnings.length > 0 && (
-                      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900 flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-                        <span>{rt.trust_checks.warnings.join(" • ")}</span>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-2.5 items-end bg-zinc-50 rounded-xl p-3 border border-zinc-200/80">
-                      <div>
-                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
-                          Corrected HTTPS URL (optional)
-                        </label>
-                        <input
-                          type="url"
-                          dir="ltr"
-                          value={routeUrlById[rt.id] || ""}
-                          onChange={(e) => setRouteUrlById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
-                          placeholder={rt.official_url}
-                          className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
-                          Rejection Reason (if unverified)
-                        </label>
-                        <select
-                          aria-label="Route Rejection Reason"
-                          value={routeReasonById[rt.id] || routeReasons[0]?.code || "broken_or_404"}
-                          onChange={(e) => setRouteReasonById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
-                          className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
-                        >
-                          {routeReasons.map((r) => (
-                            <option key={r.code} value={r.code}>
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">Verifier Notes</label>
-                        <input
-                          type="text"
-                          value={routeNotesById[rt.id] || ""}
-                          onChange={(e) => setRouteNotesById((prev) => ({ ...prev, [rt.id]: e.target.value }))}
-                          placeholder="Tenant confirmed on admissions site..."
-                          className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleRouteDecision(rt.id, "verified")}
-                          className="flex-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
-                        >
-                          Verify URL
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRouteDecision(rt.id, "unverified")}
-                          className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-
-                    {rt.audits && rt.audits.length > 0 && (
-                      <div className="border-t border-zinc-100 pt-2 space-y-1 text-[11px] text-zinc-600">
-                        {rt.audits.slice(0, 3).map((a) => (
-                          <div key={a.id} className="flex items-center justify-between gap-2">
-                            <span>
-                              <strong className="uppercase">{a.action}</strong> ({a.from_status} → {a.to_status}) by{" "}
-                              {a.actor_role}: {a.notes || ""}
-                            </span>
-                            <span dir="ltr" className="font-mono shrink-0">
-                              {formatShortDate(a.created_at)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    );
+                  })
+                )}
               </div>
             )}
           </>

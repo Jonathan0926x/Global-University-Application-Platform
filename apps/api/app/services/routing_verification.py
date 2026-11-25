@@ -7,7 +7,7 @@ centralized/statewide system allowlists — while preserving non-matching or
 third-party CRM URLs for explicit human verifier review with immutable audits.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 from uuid import UUID
@@ -18,6 +18,19 @@ from sqlalchemy.orm import Session, joinedload
 from app.ingestion.routing_seed import validate_routing_url
 from app.models.institution import Institution
 from app.models.routing import ApplicationRoute, ApplicationRouteAudit
+
+VERIFICATION_VALIDITY_DAYS = 180
+
+
+def compute_verification_expiration(
+    verified_at: Optional[datetime], days: int = VERIFICATION_VALIDITY_DAYS
+) -> Optional[datetime]:
+    """Compute expiration date from a verified_at timestamp."""
+    if not verified_at:
+        return None
+    if verified_at.tzinfo is None:
+        verified_at = verified_at.replace(tzinfo=timezone.utc)
+    return verified_at + timedelta(days=days)
 
 
 ROUTE_REJECTION_REASONS: List[Dict[str, str]] = [
@@ -133,6 +146,38 @@ def evaluate_route_trust(route: ApplicationRoute, inst: Optional[Institution]) -
     if has_tracking_fragment:
         warnings.append("Contains analytics fragment (#_ga=...); clean base URL recommended.")
 
+    # Expiration, link-health, redirect, and pathway warnings
+    now = datetime.now(timezone.utc)
+    is_expired = False
+    expiring_soon = False
+    if route.verification_status == "verified" and route.verification_expires_at:
+        exp = route.verification_expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp <= now:
+            is_expired = True
+            warnings.append(f"Verification expired on {exp.strftime('%Y-%m-%d')}; needs reverification.")
+        elif exp <= now + timedelta(days=30):
+            expiring_soon = True
+            warnings.append(f"Verification expires soon ({exp.strftime('%Y-%m-%d')}).")
+
+    redirect_cross_domain = False
+    if route.final_redirect_url:
+        redir_dom = _registrable_domain(urlparse(route.final_redirect_url).hostname)
+        if redir_dom and reg_domain and redir_dom != reg_domain:
+            redirect_cross_domain = True
+            warnings.append(f"Portal redirects cross-domain to {redir_dom}; confirm final destination.")
+
+    if route.last_health_check_status in ("unreachable", "error"):
+        warnings.append(
+            f"Last link-health check reported '{route.last_health_check_status}' (HTTP {route.last_health_check_http_code or 'N/A'})."
+        )
+
+    if route.verification_status == "verified" and route.pathway_verified is not True:
+        warnings.append(
+            f"Pathway '{route.applicant_type}' applicability not independently verified (first-year vs. transfer)."
+        )
+
     auto_verifiable = bool(
         url_check["valid"]
         and url_check.get("scheme_secure")
@@ -166,6 +211,14 @@ def evaluate_route_trust(route: ApplicationRoute, inst: Optional[Institution]) -
             "has_tracking_fragment": has_tracking_fragment,
             "portal_domain": reg_domain,
             "institution_domains": sorted(inst_domains),
+            "verification_expired": is_expired,
+            "verification_expiring_soon": expiring_soon,
+            "pathway_verified": bool(route.pathway_verified),
+            "last_health_check_status": route.last_health_check_status,
+            "last_health_check_http_code": route.last_health_check_http_code,
+            "final_redirect_url": route.final_redirect_url,
+            "redirect_chain_length": route.redirect_chain_length,
+            "redirect_cross_domain": redirect_cross_domain,
         },
         "warnings": warnings,
     }
@@ -183,18 +236,23 @@ def get_routing_quality_summary(db: Session) -> Dict[str, Any]:
     auto_candidates = 0
     manual_remaining = 0
 
+    manually_reviewed_count = 0
     for r in rows:
         by_status[r.verification_status] = by_status.get(r.verification_status, 0) + 1
         meth = r.verification_method or (
             "curated_official" if r.verification_status == "verified" else "pending_review"
         )
         by_method[meth] = by_method.get(meth, 0) + 1
+        if r.verification_method in ("manual_verifier", "manual_rejected"):
+            manually_reviewed_count += 1
         if r.verification_status == "needs_verification":
             ev = evaluate_route_trust(r, r.institution)
             if ev["auto_verifiable"]:
                 auto_candidates += 1
             else:
                 manual_remaining += 1
+
+    from app.services.routing_health import get_route_health_summary
 
     return {
         "total_routes": len(rows),
@@ -204,6 +262,8 @@ def get_routing_quality_summary(db: Session) -> Dict[str, Any]:
         "by_method": by_method,
         "auto_verifiable_candidates": auto_candidates,
         "manual_review_remaining": manual_remaining,
+        "manually_reviewed_count": manually_reviewed_count,
+        "health": get_route_health_summary(db),
     }
 
 
@@ -293,6 +353,7 @@ def reverify_ipeds_routes(
             r.confidence_level = "high"
             r.verification_method = meth
             r.verified_at = now
+            r.verification_expires_at = compute_verification_expiration(now)
             r.verified_by_user_id = actor_user_id
             r.verification_notes = (
                 f"Verified via {meth}: HTTPS + NCES IPEDS HD2023 provenance + "
@@ -336,6 +397,8 @@ def review_single_route(
     notes: Optional[str] = None,
     corrected_url: Optional[str] = None,
     international_instructions: Optional[str] = None,
+    pathway_verified: Optional[bool] = None,
+    applicant_type: Optional[str] = None,
 ) -> ApplicationRoute:
     norm_decision = (decision or "").strip().lower()
     if norm_decision not in ("verified", "unverified", "needs_verification"):
@@ -370,6 +433,25 @@ def review_single_route(
     if international_instructions is not None:
         route.international_instructions = international_instructions.strip() or None
 
+    if applicant_type is not None and applicant_type.strip():
+        norm_type = applicant_type.strip().lower()
+        valid_types = {
+            "first_year",
+            "transfer",
+            "international_first_year",
+            "international_transfer",
+            "all",
+        }
+        if norm_type not in valid_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid applicant_type '{applicant_type}'. Must be one of {sorted(valid_types)}.",
+            )
+        route.applicant_type = norm_type
+
+    if pathway_verified is not None:
+        route.pathway_verified = pathway_verified
+
     ev = evaluate_route_trust(route, route.institution)
     if norm_decision == "verified" and not ev["checks"]["url_structurally_valid"]:
         raise HTTPException(
@@ -386,6 +468,7 @@ def review_single_route(
         route.confidence_level = "high"
         route.verification_method = "manual_verifier"
         route.verified_at = now
+        route.verification_expires_at = compute_verification_expiration(now)
         route.verified_by_user_id = actor_user_id
         action = "verified"
     elif norm_decision == "unverified":

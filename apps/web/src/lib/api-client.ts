@@ -78,6 +78,13 @@ export interface ApplicationRouteItem {
   verification_status: string;
   confidence_level: string;
   verified_at?: string | null;
+  verification_expires_at?: string | null;
+  last_health_check_at?: string | null;
+  last_health_check_status?: string | null;
+  last_health_check_http_code?: number | null;
+  pathway_verified?: boolean | null;
+  final_redirect_url?: string | null;
+  redirect_chain_length?: number | null;
   last_checked_at: string;
   is_active: boolean;
 }
@@ -157,6 +164,16 @@ export interface RejectionReasonOption {
   description: string;
 }
 
+export interface RouteHealthSummary {
+  total_active_routes: number;
+  health_check_status: Record<string, number>;
+  verification_expired: number;
+  verification_expiring_soon_30d: number;
+  pathway_verified: number;
+  pathway_assumed: number;
+  routes_with_redirect_tracking: number;
+}
+
 export interface RoutingQualitySummary {
   total_routes: number;
   verified: number;
@@ -165,6 +182,17 @@ export interface RoutingQualitySummary {
   by_method: Record<string, number>;
   auto_verifiable_candidates: number;
   manual_review_remaining: number;
+  manually_reviewed_count?: number;
+  health?: RouteHealthSummary;
+}
+
+export interface RouteHealthCheckItem {
+  route_id: string;
+  status: string;
+  http_code?: number | null;
+  final_redirect_url?: string | null;
+  redirect_chain_length?: number | null;
+  cross_domain_redirect: boolean;
 }
 
 export interface ApplicationRouteAuditItem {
@@ -1552,11 +1580,69 @@ export async function reviewApplicationRoute(
     notes?: string;
     corrected_url?: string;
     international_instructions?: string;
+    pathway_verified?: boolean;
+    applicant_type?: string;
   },
   authHeaders?: Record<string, string>
 ): Promise<RoutingQueueItem> {
   return opsFetch(
     `/admin/routing/${routeId}/review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    authHeaders
+  );
+}
+
+export async function runRouteHealthCheck(
+  routeId: string,
+  authHeaders?: Record<string, string>
+): Promise<RoutingQueueItem> {
+  return opsFetch(`/admin/routing/${routeId}/health-check`, { method: "POST" }, authHeaders);
+}
+
+export async function runBatchRouteHealthChecks(
+  params?: { limit?: number; only_stale?: boolean },
+  authHeaders?: Record<string, string>
+): Promise<{
+  checked: number;
+  by_status: Record<string, number>;
+  results: RouteHealthCheckItem[];
+  summary: RoutingQualitySummary;
+}> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.append("limit", String(params.limit));
+  if (params?.only_stale !== undefined) qs.append("only_stale", String(params.only_stale));
+  return opsFetch(
+    `/admin/routing/health-check${qs.toString() ? `?${qs.toString()}` : ""}`,
+    { method: "POST" },
+    authHeaders
+  );
+}
+
+export async function expireStaleRoutes(
+  authHeaders?: Record<string, string>
+): Promise<{
+  expired_checked: number;
+  flagged_for_reverification: number;
+  summary: RoutingQualitySummary;
+}> {
+  return opsFetch("/admin/routing/expire-stale", { method: "POST" }, authHeaders);
+}
+
+export async function verifyRoutePathway(
+  routeId: string,
+  payload: {
+    pathway_verified: boolean;
+    applicant_type?: string;
+    notes?: string;
+  },
+  authHeaders?: Record<string, string>
+): Promise<RoutingQueueItem> {
+  return opsFetch(
+    `/admin/routing/${routeId}/pathway`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

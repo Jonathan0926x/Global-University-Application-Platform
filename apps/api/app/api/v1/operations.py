@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import require_admin_claims
@@ -16,10 +17,14 @@ from app.models.routing import ApplicationRoute, ApplicationSubmissionEvidence
 from app.models.user import User
 from app.schemas.routing import (
     ApplicationRouteAuditSchema,
+    BatchHealthCheckResponse,
     BatchRouteVerifyResponse,
     EvidenceQueueItemSchema,
     EvidenceReviewRequest,
+    ExpireRoutesResponse,
     RejectionReasonOptionSchema,
+    RouteHealthSummarySchema,
+    RoutePathwayVerifyRequest,
     RouteReviewRequest,
     RoutingQualitySummarySchema,
     RoutingQueueItemSchema,
@@ -28,6 +33,13 @@ from app.services.evidence_ops import (
     EVIDENCE_REJECTION_REASONS,
     execute_evidence_review,
     serialize_evidence,
+)
+from app.services.routing_health import (
+    flag_expired_routes_for_reverification,
+    get_route_health_summary,
+    perform_route_health_check,
+    run_batch_health_checks,
+    set_pathway_verified,
 )
 from app.services.routing_verification import (
     ROUTE_REJECTION_REASONS,
@@ -95,18 +107,39 @@ def get_admin_routing_summary(
 
 @router.get("/admin/routing/queue", response_model=List[RoutingQueueItemSchema], tags=["Verification Operations"])
 def list_routing_verification_queue(
-    verification_status: str = Query("needs_verification", description="needs_verification | verified | unverified | all"),
+    verification_status: str = Query(
+        "needs_verification",
+        description="needs_verification | manual_review | verified | unverified | expired | all",
+    ),
     q: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=250),
+    limit: int = Query(500, ge=1, le=1000),
     claims: UserClaims = Depends(require_admin_claims),
     db: Session = Depends(get_db),
 ):
+    from datetime import datetime, timezone
+
     qry = (
         db.query(ApplicationRoute)
         .options(joinedload(ApplicationRoute.institution), joinedload(ApplicationRoute.audits))
         .filter(ApplicationRoute.is_active == True)
     )
-    if verification_status and verification_status != "all":
+    if verification_status == "manual_review":
+        # Always surface both pending manual review routes (needs_verification)
+        # AND routes previously reviewed by a human verifier/admin.
+        qry = qry.filter(
+            or_(
+                ApplicationRoute.verification_status == "needs_verification",
+                ApplicationRoute.verification_method.in_(["manual_verifier", "manual_rejected"]),
+            )
+        )
+    elif verification_status == "expired":
+        now = datetime.now(timezone.utc)
+        qry = qry.filter(
+            ApplicationRoute.verification_status == "verified",
+            ApplicationRoute.verification_expires_at != None,
+            ApplicationRoute.verification_expires_at <= now,
+        )
+    elif verification_status and verification_status != "all":
         qry = qry.filter(ApplicationRoute.verification_status == verification_status)
     if q:
         pat = f"%{q.strip()}%"
@@ -119,6 +152,7 @@ def list_routing_verification_queue(
     rows = (
         qry.order_by(
             (ApplicationRoute.verification_status == "needs_verification").desc(),
+            ApplicationRoute.verification_method.in_(["manual_verifier", "manual_rejected"]).desc(),
             ApplicationRoute.last_checked_at.desc(),
         )
         .limit(limit)
@@ -151,6 +185,109 @@ def run_batch_routing_verification(
     )
 
 
+@router.post("/admin/routing/health-check", response_model=BatchHealthCheckResponse, tags=["Verification Operations"])
+def run_batch_route_health_checks(
+    limit: int = Query(15, ge=1, le=100),
+    only_stale: bool = Query(True),
+    claims: UserClaims = Depends(require_admin_claims),
+    db: Session = Depends(get_db),
+):
+    actor = db.query(User).filter(User.external_auth_id == claims.user_id).first()
+    res = run_batch_health_checks(
+        db=db,
+        limit=limit,
+        only_stale=only_stale,
+        actor_user_id=actor.id if actor else None,
+        actor_role=claims.role,
+        actor_email=claims.email,
+    )
+    return BatchHealthCheckResponse(
+        checked=res["checked"],
+        by_status=res["by_status"],
+        results=res["results"],
+        summary=RoutingQualitySummarySchema(**get_routing_quality_summary(db)),
+    )
+
+
+@router.post("/admin/routing/expire-stale", response_model=ExpireRoutesResponse, tags=["Verification Operations"])
+def expire_stale_verified_routes(
+    claims: UserClaims = Depends(require_admin_claims),
+    db: Session = Depends(get_db),
+):
+    actor = db.query(User).filter(User.external_auth_id == claims.user_id).first()
+    res = flag_expired_routes_for_reverification(
+        db=db,
+        actor_user_id=actor.id if actor else None,
+        actor_role=claims.role,
+        actor_email=claims.email,
+    )
+    return ExpireRoutesResponse(
+        expired_checked=res["expired_checked"],
+        flagged_for_reverification=res["flagged_for_reverification"],
+        summary=RoutingQualitySummarySchema(**get_routing_quality_summary(db)),
+    )
+
+
+@router.post("/admin/routing/{route_id}/health-check", response_model=RoutingQueueItemSchema, tags=["Verification Operations"])
+def check_single_route_health(
+    route_id: UUID,
+    claims: UserClaims = Depends(require_admin_claims),
+    db: Session = Depends(get_db),
+):
+    route = (
+        db.query(ApplicationRoute)
+        .options(joinedload(ApplicationRoute.institution), joinedload(ApplicationRoute.audits))
+        .filter(ApplicationRoute.id == route_id)
+        .first()
+    )
+    if not route:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application route not found.")
+
+    actor = db.query(User).filter(User.external_auth_id == claims.user_id).first()
+    perform_route_health_check(
+        db=db,
+        route=route,
+        actor_user_id=actor.id if actor else None,
+        actor_role=claims.role,
+        actor_email=claims.email,
+        commit=True,
+    )
+    return _serialize_routing_queue_item(route)
+
+
+@router.post("/admin/routing/{route_id}/pathway", response_model=RoutingQueueItemSchema, tags=["Verification Operations"])
+def verify_route_pathway(
+    route_id: UUID,
+    payload: RoutePathwayVerifyRequest,
+    claims: UserClaims = Depends(require_admin_claims),
+    db: Session = Depends(get_db),
+):
+    route = (
+        db.query(ApplicationRoute)
+        .options(joinedload(ApplicationRoute.institution), joinedload(ApplicationRoute.audits))
+        .filter(ApplicationRoute.id == route_id)
+        .first()
+    )
+    if not route:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application route not found.")
+
+    actor = db.query(User).filter(User.external_auth_id == claims.user_id).first()
+    try:
+        updated = set_pathway_verified(
+            db=db,
+            route=route,
+            verified=payload.pathway_verified,
+            applicant_type=payload.applicant_type,
+            actor_user_id=actor.id if actor else None,
+            actor_role=claims.role,
+            actor_email=claims.email,
+            notes=payload.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return _serialize_routing_queue_item(updated)
+
+
 @router.post("/admin/routing/{route_id}/review", response_model=RoutingQueueItemSchema, tags=["Verification Operations"])
 def review_application_route(
     route_id: UUID,
@@ -179,6 +316,8 @@ def review_application_route(
         notes=payload.notes,
         corrected_url=payload.corrected_url,
         international_instructions=payload.international_instructions,
+        pathway_verified=payload.pathway_verified,
+        applicant_type=payload.applicant_type,
     )
     return _serialize_routing_queue_item(updated)
 

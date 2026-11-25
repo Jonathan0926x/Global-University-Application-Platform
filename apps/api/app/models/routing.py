@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
 )
@@ -57,6 +58,23 @@ class ApplicationRoute(Base):
     verification_method = Column(String(60), nullable=True)
     # curated_official | ipeds_domain_match | ipeds_state_system | manual_verifier | manual_rejected
     verification_notes = Column(Text, nullable=True)
+
+    # Verification expiration
+    verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Link-health check tracking
+    last_health_check_at = Column(DateTime(timezone=True), nullable=True)
+    last_health_check_status = Column(String(20), nullable=True)
+    # healthy | unreachable | redirected | error
+    last_health_check_http_code = Column(Integer, nullable=True)
+
+    # Pathway verification
+    pathway_verified = Column(Boolean, nullable=True)
+    # True = applicant_type verified independently; None = assumed from seed data
+
+    # Redirect destination tracking
+    final_redirect_url = Column(Text, nullable=True)
+    redirect_chain_length = Column(Integer, nullable=True)
 
     last_checked_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False, index=True)

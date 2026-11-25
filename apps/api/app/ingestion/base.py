@@ -701,6 +701,22 @@ class IngestionPipeline:
                     existing.primary_source = item.source_type
 
                 self._register_in_cache(existing, caches)
+
+                # Reverification trigger: if institutional website or portal URL changed, flag verified routes
+                for url_field in ("official_website", "admissions_website", "application_portal_url"):
+                    if url_field in changed_fields:
+                        from app.services.routing_health import flag_routes_for_institution_website_change
+
+                        flag_routes_for_institution_website_change(
+                            db=self.db,
+                            institution_id=existing.id,
+                            old_website=changed_fields[url_field],
+                            new_website=getattr(existing, url_field),
+                            field_name=url_field,
+                            actor_role="system",
+                            commit=False,
+                        )
+
                 new_snapshot = self._snapshot_dict(existing)
                 new_hash = compute_canonical_hash(new_snapshot)
 

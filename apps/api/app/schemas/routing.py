@@ -23,6 +23,13 @@ class ApplicationRouteSchema(BaseModel):
     verified_by_user_id: Optional[UUID] = None
     verification_method: Optional[str] = None
     verification_notes: Optional[str] = None
+    verification_expires_at: Optional[datetime] = None
+    last_health_check_at: Optional[datetime] = None
+    last_health_check_status: Optional[str] = None
+    last_health_check_http_code: Optional[int] = None
+    pathway_verified: Optional[bool] = None
+    final_redirect_url: Optional[str] = None
+    redirect_chain_length: Optional[int] = None
     last_checked_at: datetime
     is_active: bool = True
 
@@ -57,6 +64,16 @@ class RoutingQueueItemSchema(ApplicationRouteSchema):
     audits: List[ApplicationRouteAuditSchema] = []
 
 
+class RouteHealthSummarySchema(BaseModel):
+    total_active_routes: int = 0
+    health_check_status: Dict[str, int] = {}
+    verification_expired: int = 0
+    verification_expiring_soon_30d: int = 0
+    pathway_verified: int = 0
+    pathway_assumed: int = 0
+    routes_with_redirect_tracking: int = 0
+
+
 class RoutingQualitySummarySchema(BaseModel):
     total_routes: int
     verified: int
@@ -65,6 +82,8 @@ class RoutingQualitySummarySchema(BaseModel):
     by_method: Dict[str, int] = {}
     auto_verifiable_candidates: int = 0
     manual_review_remaining: int = 0
+    manually_reviewed_count: int = 0
+    health: Optional[RouteHealthSummarySchema] = None
 
 
 class RouteReviewRequest(BaseModel):
@@ -73,6 +92,36 @@ class RouteReviewRequest(BaseModel):
     notes: Optional[str] = None
     corrected_url: Optional[str] = None
     international_instructions: Optional[str] = None
+    pathway_verified: Optional[bool] = None
+    applicant_type: Optional[str] = None
+
+
+class RoutePathwayVerifyRequest(BaseModel):
+    pathway_verified: bool
+    applicant_type: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class RouteHealthCheckItemSchema(BaseModel):
+    route_id: str
+    status: str
+    http_code: Optional[int] = None
+    final_redirect_url: Optional[str] = None
+    redirect_chain_length: Optional[int] = None
+    cross_domain_redirect: bool = False
+
+
+class BatchHealthCheckResponse(BaseModel):
+    checked: int
+    by_status: Dict[str, int] = {}
+    results: List[RouteHealthCheckItemSchema] = []
+    summary: RoutingQualitySummarySchema
+
+
+class ExpireRoutesResponse(BaseModel):
+    expired_checked: int
+    flagged_for_reverification: int
+    summary: RoutingQualitySummarySchema
 
 
 class BatchRouteVerifyResponse(BaseModel):

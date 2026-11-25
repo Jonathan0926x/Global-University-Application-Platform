@@ -13,6 +13,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.7.2-m7] - 2026-11-24
+
+### Added — Milestone 7.2: Route Link-Health, Expiration, Pathway Verification, Redirect Tracking & Reverification
+- **Schema & Migration (`c3e8a4f19d72`):**
+  - Extended `application_routes` with `verification_expires_at` (180-day default validity), `last_health_check_at`, `last_health_check_status` (`healthy` / `redirected` / `unreachable` / `error`), `last_health_check_http_code`, `pathway_verified`, `final_redirect_url`, and `redirect_chain_length`.
+  - Backfilled `verification_expires_at` for all verified routes (`verified_at + 180 days`) and marked curated flagship/centralized portals `pathway_verified = TRUE` while leaving IPEDS auto-verified routes flagged as pathway-unverified until explicitly confirmed.
+- **Health, Expiration, Redirect & Reverification Governance (`routing_health.py`, `routing_verification.py`, `base.py`, `operations.py`):**
+  - Added SSRF-safe HTTP HEAD/GET link-health checks (`POST /api/v1/admin/routing/{id}/health-check` and `POST /api/v1/admin/routing/health-check`) tracking HTTP response codes, redirect chain length, final destination URL, and cross-domain redirect audit alerts.
+  - Added verification expiration sweeps (`POST /api/v1/admin/routing/expire-stale`) and automatic reverification triggers in `IngestionPipeline` (`apps/api/app/ingestion/base.py`) when an institution's `official_website`, `admissions_website`, or `application_portal_url` changes.
+  - Added explicit pathway applicability verification (`POST /api/v1/admin/routing/{id}/pathway` + `pathway_verified` / `applicant_type` fields on `POST /api/v1/admin/routing/{id}/review`).
+- **Operations Console Visibility (`/operations`):**
+  - Updated `GET /api/v1/admin/routing/queue` (`limit` up to `500`/`1000`, `manual_review` and `expired` filters) and `/operations` UI so all **14** pending `needs_verification` routes plus manually reviewed routes (`manual_verifier` / `manual_rejected`) stay visible in the dashboard without silent exclusion, complete with health/expiration/pathway/redirect badges and controls.
+  - Verified with **50** passing backend `pytest` tests (`tests/test_milestone7_application_routing.py`), **10** passing frontend unit tests, and clean Next.js `pnpm build` (**14/14** routes).
+
+---
+
 ## [0.7.1-m7] - 2026-11-24
 
 ### Added — Milestone 7.1: Routing Data Quality & Confirmation Verification Operations

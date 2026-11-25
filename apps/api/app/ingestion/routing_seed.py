@@ -9,7 +9,7 @@ Strict Grounding Guarantees:
    `needs_verification` (`medium` confidence) and NEVER forged when NULL.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
 import re
 from typing import Any, Dict, List, Optional
@@ -392,6 +392,8 @@ def seed_verified_application_routes(db: Session) -> Dict[str, int]:
                     verification_status="verified",
                     confidence_level="high",
                     verified_at=now,
+                    verification_expires_at=now + timedelta(days=180),
+                    pathway_verified=True,
                     last_checked_at=now,
                     is_active=True,
                 )
@@ -435,6 +437,8 @@ def seed_verified_application_routes(db: Session) -> Dict[str, int]:
                     verification_status="verified",
                     confidence_level="high",
                     verified_at=now,
+                    verification_expires_at=now + timedelta(days=180),
+                    pathway_verified=True,
                     last_checked_at=now,
                     is_active=True,
                 )

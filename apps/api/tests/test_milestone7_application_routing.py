@@ -604,3 +604,208 @@ def test_routing_data_quality_batch_and_manual_verifier_audit(client):
             db.commit()
         finally:
             db.close()
+
+
+def test_route_health_expiration_pathway_redirect_and_reverification_triggers(client):
+    from app.services.routing_health import (
+        flag_routes_for_institution_website_change,
+        perform_route_health_check,
+        run_batch_health_checks,
+    )
+
+    verifier_headers = {"Authorization": "Bearer mock_verifier_health_qa@uniglobe.edu"}
+    student_headers = _auth("student_health_qa")
+
+    db = SessionLocal()
+    inst_id = uuid.uuid4()
+    try:
+        db.add(
+            Institution(
+                id=inst_id,
+                official_name=f"Synthetic Health Governance Univ {inst_id.hex[:6]}",
+                ipeds_unit_id=f"97{inst_id.hex[:4]}",
+                country_code="US",
+                institution_type="university",
+                official_website="https://www.healthgovqa.edu/",
+            )
+        )
+        db.flush()
+        rt_verified = ApplicationRoute(
+            institution_id=inst_id,
+            platform_name="Health Gov QA Portal",
+            platform_type="direct_portal",
+            country_code="US",
+            applicant_type="all",
+            official_url="https://apply.healthgovqa.edu/portal",
+            source_name="NCES IPEDS HD2023",
+            verification_status="verified",
+            verification_method="ipeds_domain_match",
+            confidence_level="high",
+            verified_at=datetime.now(timezone.utc) - timedelta(days=200),
+            verification_expires_at=datetime.now(timezone.utc) - timedelta(days=5),
+            is_active=True,
+        )
+        rt_manual = ApplicationRoute(
+            institution_id=inst_id,
+            platform_name="Manual CRM QA Portal",
+            platform_type="direct_portal",
+            country_code="US",
+            applicant_type="all",
+            official_url="https://healthgovqa.elluciancrmrecruit.com/Apply",
+            source_name="NCES IPEDS HD2023",
+            verification_status="needs_verification",
+            confidence_level="medium",
+            is_active=True,
+        )
+        db.add_all([rt_verified, rt_manual])
+        db.commit()
+        verified_id = str(rt_verified.id)
+        manual_id = str(rt_manual.id)
+    finally:
+        db.close()
+
+    try:
+        # 1. RBAC blocks students from health/expire/pathway endpoints
+        assert client.post("/api/v1/admin/routing/expire-stale", headers=student_headers).status_code == 403
+        assert client.post("/api/v1/admin/routing/health-check", headers=student_headers).status_code == 403
+        assert client.post(f"/api/v1/admin/routing/{verified_id}/health-check", headers=student_headers).status_code == 403
+        assert (
+            client.post(
+                f"/api/v1/admin/routing/{verified_id}/pathway",
+                json={"pathway_verified": True, "applicant_type": "first_year"},
+                headers=student_headers,
+            ).status_code
+            == 403
+        )
+
+        # 2. Pathway verification endpoint updates pathway_verified + applicant_type with audit log
+        pw_res = client.post(
+            f"/api/v1/admin/routing/{verified_id}/pathway",
+            json={
+                "pathway_verified": True,
+                "applicant_type": "first_year",
+                "notes": "Confirmed portal only accepts first-year applicants.",
+            },
+            headers=verifier_headers,
+        )
+        assert pw_res.status_code == 200
+        pw_body = pw_res.json()
+        assert pw_body["pathway_verified"] is True
+        assert pw_body["applicant_type"] == "first_year"
+        assert pw_body["audits"][0]["action"] == "pathway_verification_updated"
+
+        # 3. Link-health check records HTTP status, redirect destination, and cross-domain warnings (mock probe)
+        db = SessionLocal()
+        try:
+            rt_v = db.query(ApplicationRoute).filter(ApplicationRoute.id == uuid.UUID(verified_id)).first()
+            hc_out = perform_route_health_check(
+                db,
+                rt_v,
+                actor_role="data_verifier",
+                probe_fn=lambda _u: {
+                    "ok": True,
+                    "http_code": 200,
+                    "final_url": "https://apply.commonapp.org/healthgovqa",
+                    "redirect_chain_length": 2,
+                    "error": None,
+                },
+            )
+            assert hc_out["status"] == "redirected"
+            assert hc_out["http_code"] == 200
+            assert hc_out["cross_domain_redirect"] is True
+            assert rt_v.final_redirect_url == "https://apply.commonapp.org/healthgovqa"
+            assert rt_v.redirect_chain_length == 2
+
+            # Also verify 404 flags unreachable
+            rt_m = db.query(ApplicationRoute).filter(ApplicationRoute.id == uuid.UUID(manual_id)).first()
+            hc_m = perform_route_health_check(
+                db,
+                rt_m,
+                actor_role="data_verifier",
+                probe_fn=lambda _u: {
+                    "ok": True,
+                    "http_code": 404,
+                    "final_url": _u,
+                    "redirect_chain_length": 0,
+                    "error": None,
+                },
+            )
+            assert hc_m["status"] == "unreachable"
+            assert rt_m.last_health_check_http_code == 404
+
+            # Also exercise batch runner with mock probe
+            batch_hc = run_batch_health_checks(
+                db,
+                limit=2,
+                only_stale=False,
+                probe_fn=lambda _u: {
+                    "ok": True,
+                    "http_code": 200,
+                    "final_url": _u,
+                    "redirect_chain_length": 0,
+                    "error": None,
+                },
+            )
+            assert batch_hc["checked"] == 2
+        finally:
+            db.close()
+
+        # 4. Expired queue & expire-stale workflow flags expired verified route back to needs_verification
+        exp_q = client.get("/api/v1/admin/routing/queue?verification_status=expired", headers=verifier_headers)
+        assert exp_q.status_code == 200
+        assert any(x["id"] == verified_id for x in exp_q.json())
+
+        exp_res = client.post("/api/v1/admin/routing/expire-stale", headers=verifier_headers)
+        assert exp_res.status_code == 200
+        assert exp_res.json()["flagged_for_reverification"] >= 1
+
+        # Promote verified route again via manual verifier (sets fresh 180-day expiration),
+        # then simulate institutional website change -> automatically reverts to needs_verification
+        re_ver = client.post(
+            f"/api/v1/admin/routing/{verified_id}/review",
+            json={"decision": "verified", "notes": "Reverified active portal URL."},
+            headers=verifier_headers,
+        )
+        assert re_ver.status_code == 200
+        assert re_ver.json()["verification_expires_at"] is not None
+        assert re_ver.json()["verification_method"] == "manual_verifier"
+
+        # 5. Manual review queue surfaces both pending needs_verification AND manually reviewed routes
+        mq = client.get("/api/v1/admin/routing/queue?verification_status=manual_review&limit=500", headers=verifier_headers)
+        assert mq.status_code == 200
+        mq_ids = {x["id"] for x in mq.json()}
+        assert verified_id in mq_ids  # manually verified stays visible!
+        assert manual_id in mq_ids  # needs_verification stays visible!
+
+        # 6. Institutional website change trigger flags verified route back to needs_verification
+        db = SessionLocal()
+        try:
+            trig = flag_routes_for_institution_website_change(
+                db=db,
+                institution_id=inst_id,
+                old_website="https://www.healthgovqa.edu/",
+                new_website="https://www.newhealthgovqa.edu/",
+                field_name="official_website",
+            )
+            assert trig["flagged"] == 1
+            rt_after = db.query(ApplicationRoute).filter(ApplicationRoute.id == uuid.UUID(verified_id)).first()
+            assert rt_after.verification_status == "needs_verification"
+            assert rt_after.audits[0].action == "institution_website_changed"
+        finally:
+            db.close()
+
+        # Verify summary health counters are populated cleanly
+        sum_res = client.get("/api/v1/admin/routing/summary", headers=verifier_headers)
+        assert sum_res.status_code == 200
+        assert "health" in sum_res.json()
+        assert sum_res.json()["health"]["pathway_verified"] >= 1
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(ApplicationRoute).filter(ApplicationRoute.institution_id == inst_id).delete(
+                synchronize_session=False
+            )
+            db.query(Institution).filter(Institution.id == inst_id).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()
