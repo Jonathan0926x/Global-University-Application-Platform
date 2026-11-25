@@ -43,7 +43,7 @@
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
 | **AI College Counselor** | ✅ **Tested** (Milestone 6 Live: Hybrid pgvector RAG) | P0 | Phase 3 M6 | Nov 24, 2026 | AI / Backend |
-| **Scholarship & Net Price** | ✅ **Tested** (Phase 4: Scholarships, Net Price & Credentials Live) | P1 | Phase 4 | Nov 25, 2026 | Backend / Full Stack |
+| **Scholarship & Net Price** | ✅ **Tested** (Phase 4 Catalog Audit Complete: 69/69 Verified & Coverage Dashboard Live) | P1 | Phase 4 | Nov 25, 2026 | Backend / Full Stack |
 | **Security & Privacy Testing**| ✅ **Tested** (DB Audit Triggers + DNS Pinning + Outbound Firewall) | P0 | Phase 1–5 | Nov 25, 2026 | Security / QA |
 | **Beta Release (Pilot)** | ⭕ **Not Started** | P0 | Phase 5 | Phase 5 (M6) | Entire Team |
 
@@ -272,15 +272,15 @@
 * **Priority:** P1
 * **Dependencies:** University Discovery, Universal Student Profile
 * **Relevant Files:**
-  - [`docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md`](docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md), [`docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md`](docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md)
+  - [`docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md`](docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md), [`docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md`](docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md), [`docs/audits/phase4_catalog_coverage_audit.json`](docs/audits/phase4_catalog_coverage_audit.json)
   - `apps/api/alembic/versions/e4a7c2d901b5_phase4_financial_and_credential_engines.py`, `apps/api/alembic/versions/f1c9e4a2b870_phase4_provenance_and_freshness_governance.py`
-  - `apps/api/app/models/rag.py`, `apps/api/app/models/credentials.py`, `apps/api/app/models/requirements.py`, `apps/api/app/ingestion/phase4_seed.py`, `apps/api/app/ingestion/phase4_batch1_seed.py`, `apps/api/app/ingestion/phase4_batch2_seed.py`, `apps/api/app/ingestion/phase4_batch3_seed.py`, `apps/api/app/ingestion/phase4_batch4_seed.py`
-  - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`, `apps/api/app/services/freshness_governance.py`
+  - `apps/api/app/models/rag.py`, `apps/api/app/models/credentials.py`, `apps/api/app/models/requirements.py`, `apps/api/app/ingestion/phase4_seed.py`, `apps/api/app/ingestion/phase4_catalog_audit_remediation.py`, `apps/api/app/ingestion/phase4_batch1_seed.py`, `apps/api/app/ingestion/phase4_batch2_seed.py`, `apps/api/app/ingestion/phase4_batch3_seed.py`, `apps/api/app/ingestion/phase4_batch4_seed.py`
+  - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`, `apps/api/app/services/freshness_governance.py`, `apps/api/app/services/coverage_analytics.py`
   - `apps/api/app/api/v1/financial.py`, `apps/api/app/api/v1/credentials.py`
   - `apps/web/src/app/financial/page.tsx`, `apps/web/src/app/credentials/page.tsx`
-* **Acceptance Criteria:** **69** verified global scholarship programs in PostgreSQL (**27** baseline + **11** Batch 1 Africa/Caribbean + **10** Batch 2 Latin America + **11** Batch 3 Asia & Southeast Asia + **10** Batch 4 Europe & Erasmus+ across `NL, CH, SE, NO, FI, IT, ES, BE/EU` with 15-field `claim_provenance` and native `GBP`/`EUR`/`CAD`/`ZAR`/`GHS`/`NGN`/`DOP`/`BRL`/`MXN`/`COP`/`CLP`/`ARS`/`PEN`/`CNY`/`INR`/`KRW`/`SGD`/`MYR`/`IDR`/`PKR`/`BDT`/`VND`/`PHP`/`CHF`/`SEK`/`NOK` isolation), **`verified_funding_coverage` (`24/69` = `34.8%`)** governance tracking surfaced on `/financial` across all 10 locales, **18** deterministic eligibility rule dimensions and **5** canonical outcomes (`ineligible > requires_manual_review > insufficient_information > conditionally_eligible > eligible`), strict separation of EU/EEA vs. non-EU citizenship, independent citizenship vs. residency rules, and **full-degree (`EMJM`) vs. short-term exchange mobility (`exchange_mobility`)**, native exam gates (`ENEM`, `ENP`, `CSCA`, `HSK-5`) without unsupported GPA conversions, component-aware COA category allocation, Dual-View International Credential Evaluator (`11` grading scales + `12` recognition corridors), `f1c9e4a2b870` provenance & freshness governance, **85** backend `pytest` + **12** frontend tests + **16/16** Next.js routes + live browser QA.
+* **Acceptance Criteria:** **69 / 69** global scholarship programs audited and annotated in PostgreSQL (**27** remediated legacy + **42** re-verified Batches 1–4 across **100%** 15-field `claim_provenance` with `0` fabricated USD conversions on non-USD awards, **`36.2%` (`25/69`)** `verified_funding_coverage` vs **`26.1%` (`18/69`)** `actionable_coverage`, `MA` Morocco vs `MR` Mauritania distinct ISO country rows + African region mapping, strict `first_year` vs `transfer` vs `exchange_mobility` isolation, Dual-View International Credential Evaluator (`11` grading scales + `12` recognition corridors), `GET /api/v1/financial/coverage-audit` analytics & interactive `/financial` Coverage Audit tab across all 10 locales incl. `ar-SA` RTL), **91** backend `pytest` + **12** frontend tests + **16/16** Next.js routes + live browser QA.
 * **Last Verified Date:** November 25, 2026
-* **Next Action:** Review Batch 4 (Europe & Erasmus+) completion report (`29_PHASE_4_GLOBAL_SCHOLARSHIP_EXPANSION_BATCH_4_REPORT.md`) before authorizing any further regional expansion; deploy outbound worker firewall (`infra/firewall/`) before production launch.
+* **Next Action:** Review Global Catalog Verification & Coverage Audit report (`30_PHASE_4_GLOBAL_CATALOG_VERIFICATION_COVERAGE_AUDIT_REPORT.md`); deploy outbound worker firewall (`infra/firewall/`) before Phase 5 production launch.
 
 ### 18. Security & Privacy Hardening
 * **Status:** ✅ **Tested** (Audit Retention Triggers, DNS Pinning & Outbound Firewall Configs)

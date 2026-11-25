@@ -602,6 +602,8 @@ def _has_verified_funding_coverage(p: ScholarshipProgram, ref_now: datetime) -> 
     """
     if not p.is_current or not p.is_verified or p.requires_manual_review:
         return False
+    if (p.funding_type or "").strip().lower() == "exchange_mobility":
+        return False
     currency = (p.award_currency or "").strip().upper()
     if not currency or currency == "UNK":
         return False
@@ -622,7 +624,8 @@ def _has_verified_funding_coverage(p: ScholarshipProgram, ref_now: datetime) -> 
         return False
     claims = breakdown["claims"]
     return (
-        claims.get("eligibility_rules") in ("current", "approaching_expiration")
+        claims.get("program_existence") in ("current", "approaching_expiration")
+        and claims.get("eligibility_rules") in ("current", "approaching_expiration")
         and claims.get("award_amounts") in ("current", "approaching_expiration")
     )
 

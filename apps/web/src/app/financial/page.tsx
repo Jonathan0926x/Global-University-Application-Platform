@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Award,
+  BarChart3,
   Calculator,
+  CalendarCheck2,
   CheckCircle2,
   Coins,
   ExternalLink,
@@ -15,10 +17,12 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  CatalogCoverageAuditResponse,
   Institution,
   NetPriceCalculationResponse,
   ScholarshipMatchResponse,
   calculateNetPrice,
+  fetchCatalogCoverageAudit,
   fetchInstitutions,
   matchScholarships,
 } from "@/lib/api-client";
@@ -34,7 +38,7 @@ function fmtMoney(val?: number | null, currency = "USD"): string {
 
 export default function FinancialIntelligencePage() {
   const { t, direction, language } = useI18n();
-  const [activeTab, setActiveTab] = useState<"scholarships" | "net_price">("scholarships");
+  const [activeTab, setActiveTab] = useState<"scholarships" | "net_price" | "coverage_audit">("scholarships");
 
   // Shared student inputs (kept distinct: citizenship !== residence)
   const [citizenship, setCitizenship] = useState("HT");
@@ -61,6 +65,8 @@ export default function FinancialIntelligencePage() {
   const [includeCompetitive, setIncludeCompetitive] = useState(true);
   const [netLoading, setNetLoading] = useState(false);
   const [netResult, setNetResult] = useState<NetPriceCalculationResponse | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditData, setAuditData] = useState<CatalogCoverageAuditResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const statusLabel = (st: string): string => {
@@ -207,6 +213,11 @@ export default function FinancialIntelligencePage() {
         }
       })
       .catch(() => {});
+    setAuditLoading(true);
+    fetchCatalogCoverageAudit()
+      .then((audit) => setAuditData(audit))
+      .catch(() => {})
+      .finally(() => setAuditLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -277,6 +288,19 @@ export default function FinancialIntelligencePage() {
           >
             <Calculator className="h-3.5 w-3.5" aria-hidden="true" />
             {t("fin.tab_net_price", "Net Price Calculator")}
+          </button>
+          <button
+            id="fin-tab-coverage-audit"
+            role="tab"
+            aria-selected={activeTab === "coverage_audit"}
+            type="button"
+            onClick={() => setActiveTab("coverage_audit")}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold ${
+              activeTab === "coverage_audit" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("fin.tab_coverage_audit", "Coverage Audit")}
           </button>
         </div>
 
@@ -349,6 +373,8 @@ export default function FinancialIntelligencePage() {
                 <option value="UA">UA</option>
                 <option value="AM">AM</option>
                 <option value="ES">ES</option>
+                <option value="MA">MA</option>
+                <option value="MR">MR</option>
               </select>
             </div>
             <div>
@@ -411,6 +437,8 @@ export default function FinancialIntelligencePage() {
                 <option value="UA">UA</option>
                 <option value="AM">AM</option>
                 <option value="ES">ES</option>
+                <option value="MA">MA</option>
+                <option value="MR">MR</option>
               </select>
             </div>
             <div>
@@ -535,6 +563,8 @@ export default function FinancialIntelligencePage() {
                 <option value="PT">PT</option>
                 <option value="AT">AT</option>
                 <option value="ES">ES</option>
+                <option value="MA">MA</option>
+                <option value="MR">MR</option>
               </select>
             </div>
           </div>
@@ -776,6 +806,26 @@ export default function FinancialIntelligencePage() {
                             {t("fin.badge_statutory", "Statutory / Published Policy")}
                           </span>
                         )}
+                        {s.transfer_supported === true && (
+                          <span className="rounded-full bg-teal-50 border border-teal-200 px-2 py-0.5 text-[10px] font-bold text-teal-800">
+                            {t("fin.badge_transfer_yes", "Transfer Eligible")}
+                          </span>
+                        )}
+                        {s.transfer_supported === false && s.degree_levels?.includes("bachelors") && (
+                          <span className="rounded-full bg-zinc-100 border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
+                            {t("fin.badge_transfer_no", "No Transfer Pathway")}
+                          </span>
+                        )}
+                        {s.transfer_supported === null && s.degree_levels?.includes("bachelors") && (
+                          <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                            {t("fin.badge_transfer_unknown", "Transfer Status Unconfirmed")}
+                          </span>
+                        )}
+                        {s.amount_classification && s.amount_classification !== "unspecified" && (
+                          <span className="rounded-full bg-zinc-50 border border-zinc-200 px-2 py-0.5 text-[10px] font-mono text-zinc-600">
+                            {s.amount_classification.replace(/_/g, " ")}
+                          </span>
+                        )}
                       </div>
                       <h2 className="mt-1.5 text-base font-extrabold text-zinc-900">{s.title}</h2>
                       {s.sponsoring_institution && (
@@ -784,6 +834,16 @@ export default function FinancialIntelligencePage() {
                         </div>
                       )}
                       <p className="text-xs text-zinc-600 mt-1">{s.eligibility_summary}</p>
+                      {(s.freshness_status !== "current" || (s.freshness_warnings && s.freshness_warnings.length > 0)) && (
+                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-900">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-700" aria-hidden="true" />
+                          <span>
+                            {s.freshness_warnings && s.freshness_warnings.length > 0
+                              ? s.freshness_warnings.join(" • ")
+                              : s.conflict_notes || `${t("fin.freshness_label", "Freshness")}: ${freshnessLabel(s.freshness_status)}`}
+                          </span>
+                        </div>
+                      )}
                       {(s.funding_scope?.length || s.duration_renewal_summary) && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-600">
                           {s.funding_scope && s.funding_scope.length > 0 && (
@@ -825,6 +885,15 @@ export default function FinancialIntelligencePage() {
                       >
                         {s.source_name} <ExternalLink className="h-3 w-3" aria-hidden="true" />
                       </a>
+                      {s.verified_at && (
+                        <div className="flex items-center md:justify-end gap-1 text-[10px] text-zinc-500">
+                          <CalendarCheck2 className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+                          <span>
+                            {t("fin.badge_verified_on", "Verified")}:{" "}
+                            <span dir="ltr" className="font-mono">{s.verified_at.slice(0, 10)}</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -856,6 +925,252 @@ export default function FinancialIntelligencePage() {
               ))}
             </div>
             <p className="text-[11px] text-zinc-500">{schResult.disclaimer}</p>
+          </div>
+        )}
+
+        {/* TAB 3: GLOBAL COVERAGE & VERIFICATION AUDIT */}
+        {activeTab === "coverage_audit" && (
+          <div id="fin-coverage-audit-panel" className="space-y-5">
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-5 space-y-1">
+              <h2 className="text-base font-extrabold text-zinc-900">
+                {t("fin.audit_title", "Global Catalog Verification & Accessibility Coverage Audit")}
+              </h2>
+              <p className="text-xs text-zinc-700">
+                {t(
+                  "fin.audit_subtitle",
+                  "Separates total catalog listings from verified published funding and currently open actionable opportunities without invented currency conversions."
+                )}
+              </p>
+            </div>
+
+            {auditLoading || !auditData ? (
+              <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-xs text-zinc-600">
+                {t("common.loading", "Loading...")}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                  <div className="rounded-xl border border-zinc-200 bg-white p-4">
+                    <div className="text-[11px] font-bold uppercase text-zinc-500">
+                      {t("fin.audit_catalog_reviewed", "Catalog Reviewed")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-2xl font-extrabold text-zinc-900">
+                      {auditData.programs_reviewed}/{auditData.total_active_programs}
+                    </div>
+                    <div dir="ltr" className="text-[10px] text-zinc-500">
+                      {auditData.legacy_reviewed_count} legacy + {auditData.batch1_4_reverified_count} Batches 1–4
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+                    <div className="text-[11px] font-bold uppercase text-indigo-800">
+                      {t("fin.audit_provenance_15", "15-Field Provenance")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-2xl font-extrabold text-indigo-950">
+                      {Math.round(auditData.complete_provenance_ratio * 100)}%
+                    </div>
+                    <div dir="ltr" className="text-[10px] text-indigo-800">
+                      {auditData.complete_provenance_count}/{auditData.total_active_programs}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                    <div className="text-[11px] font-bold uppercase text-emerald-800">
+                      {t("fin.verified_funding_coverage", "Verified Funding Coverage")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-2xl font-extrabold text-emerald-900">
+                      {(auditData.verified_funding_coverage * 100).toFixed(1)}%
+                    </div>
+                    <div className="text-[10px] text-emerald-800">
+                      {auditData.verified_funding_programs}/{auditData.total_active_programs} verified amount+rules
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-4">
+                    <div className="text-[11px] font-bold uppercase text-teal-800">
+                      {t("fin.audit_actionable_label", "Actionable Open Funding")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-2xl font-extrabold text-teal-900">
+                      {(auditData.actionable_coverage_ratio * 100).toFixed(1)}%
+                    </div>
+                    <div className="text-[10px] text-teal-800">
+                      {auditData.actionable_coverage_count}/{auditData.total_active_programs} open/non-expired
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4">
+                    <div className="text-[11px] font-bold uppercase text-purple-800">
+                      {t("fin.stat_review", "Manual Review")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-2xl font-extrabold text-purple-900">
+                      {auditData.requires_manual_review_count}
+                    </div>
+                    <div className="text-[10px] text-purple-800">
+                      {auditData.conflicting_count} conflict / variable policy
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                    <div className="text-[11px] font-bold uppercase text-amber-800">
+                      {t("fin.audit_waf_unavailable", "WAF / Unavailable")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-2xl font-extrabold text-amber-900">
+                      {auditData.source_unavailable_count}
+                    </div>
+                    <div dir="ltr" className="text-[10px] text-amber-800">HTTP 403 / timeout</div>
+                  </div>
+                </div>
+
+                {/* Pathway Breakdown + Curated Reference Intersections */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+                    <h3 className="text-sm font-extrabold text-zinc-900">
+                      {t("fin.audit_pathway_section", "Pathway & Degree Accessibility Breakdown")}
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                      {Object.entries(auditData.by_pathway).map(([key, count]) => (
+                        <div key={key} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                          <div className="text-[10px] font-bold uppercase text-zinc-500">
+                            {key.replace(/_/g, " ")}
+                          </div>
+                          <div dir="ltr" className="mt-1 text-lg font-extrabold text-zinc-900">
+                            {count}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="overflow-x-auto pt-2">
+                      <table className="w-full text-xs text-start border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-200 text-[10px] uppercase text-zinc-500">
+                            <th className="py-1.5 pe-2">Degree</th>
+                            <th className="py-1.5 px-2">Catalog</th>
+                            <th className="py-1.5 px-2">Verified Funding</th>
+                            <th className="py-1.5 ps-2">Actionable</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(auditData.by_degree_level).map(([deg, stats]) => (
+                            <tr key={deg} className="border-b border-zinc-100">
+                              <td className="py-1.5 pe-2 font-bold capitalize">{deg.replace(/_/g, " ")}</td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono">{stats.catalog}</td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono text-emerald-700">{stats.verified_funding}</td>
+                              <td dir="ltr" className="py-1.5 ps-2 font-mono text-indigo-700">{stats.actionable}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+                    <h3 className="text-sm font-extrabold text-zinc-900">
+                      {t("fin.audit_scenarios_section", "Curated Cross-Dimensional Coverage Scenarios")}
+                    </h3>
+                    <div className="space-y-2.5">
+                      {auditData.intersections.map((inter) => (
+                        <div key={inter.key} className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 text-xs space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-bold text-zinc-900">{inter.label}</span>
+                            <span dir="ltr" className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[10px] font-bold text-indigo-900">
+                              {inter.matched_count} matched ({inter.verified_funding_count} funded)
+                            </span>
+                          </div>
+                          {inter.sample_titles.length > 0 && (
+                            <div className="text-[11px] text-zinc-600">{inter.sample_titles.join(" • ")}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Citizenship & Destination Country Coverage Matrices */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+                    <h3 className="text-sm font-extrabold text-zinc-900">
+                      {t("fin.audit_by_citizenship", "By Citizenship")} (<span dir="ltr" className="font-mono">{auditData.citizenships_with_verified_funding_count}</span>)
+                    </h3>
+                    <div className="max-h-72 overflow-y-auto overflow-x-auto">
+                      <table className="w-full text-xs text-start border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-200 text-[10px] uppercase text-zinc-500">
+                            <th className="py-1.5 pe-2">Citizenship</th>
+                            <th className="py-1.5 px-2">Matched</th>
+                            <th className="py-1.5 px-2">Verified Funding</th>
+                            <th className="py-1.5 ps-2">Actionable</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditData.by_citizenship.map((row) => (
+                            <tr key={row.country_code} className="border-b border-zinc-100">
+                              <td className="py-1.5 pe-2 font-semibold">
+                                <span dir="ltr" className="font-mono text-zinc-500 me-1.5">{row.country_code}</span>
+                                {row.country_name}
+                              </td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono">{row.eligible_or_conditional_count}</td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono text-emerald-700">{row.verified_funding_eligible_count}</td>
+                              <td dir="ltr" className="py-1.5 ps-2 font-mono text-indigo-700">{row.actionable_eligible_count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+                    <h3 className="text-sm font-extrabold text-zinc-900">
+                      {t("fin.audit_by_destination", "By Destination Country")} (<span dir="ltr" className="font-mono">{auditData.by_destination.length}</span>)
+                    </h3>
+                    <div className="max-h-72 overflow-y-auto overflow-x-auto">
+                      <table className="w-full text-xs text-start border-collapse">
+                        <thead>
+                          <tr className="border-b border-zinc-200 text-[10px] uppercase text-zinc-500">
+                            <th className="py-1.5 pe-2">Destination</th>
+                            <th className="py-1.5 px-2">Catalog</th>
+                            <th className="py-1.5 px-2">Verified Funding</th>
+                            <th className="py-1.5 px-2">Actionable</th>
+                            <th className="py-1.5 ps-2">Review</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditData.by_destination.map((row) => (
+                            <tr key={row.country_code} className="border-b border-zinc-100">
+                              <td className="py-1.5 pe-2 font-semibold">
+                                <span dir="ltr" className="font-mono text-zinc-500 me-1.5">{row.country_code}</span>
+                                {row.country_name}
+                              </td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono">{row.catalog_count}</td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono text-emerald-700">{row.verified_funding_count}</td>
+                              <td dir="ltr" className="py-1.5 px-2 font-mono text-indigo-700">{row.actionable_count}</td>
+                              <td dir="ltr" className="py-1.5 ps-2 font-mono text-purple-700">{row.manual_review_or_unavailable_count}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manual Review & Source-Unavailable Queue */}
+                <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+                  <h3 className="text-sm font-extrabold text-zinc-900">
+                    {t("fin.audit_manual_queue", "Manual Review, Variable Formulaic & Source-Unavailable Programs")} (<span dir="ltr" className="font-mono">{auditData.manual_review_programs.length}</span>)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-80 overflow-y-auto">
+                    {auditData.manual_review_programs.map((item, idx) => (
+                      <div key={`${item.title}-${idx}`} className="rounded-xl border border-purple-200 bg-purple-50/30 p-3 text-xs space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-bold text-zinc-900">
+                            <span dir="ltr" className="font-mono text-zinc-500 me-1">[{item.country_code}]</span>
+                            {item.title}
+                          </span>
+                          <span className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-900">
+                            {freshnessLabel(item.freshness_status)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-600">{item.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

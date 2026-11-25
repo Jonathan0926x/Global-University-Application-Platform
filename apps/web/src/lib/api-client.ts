@@ -1770,6 +1770,9 @@ export interface ScholarshipEligibilityResult {
   failed_reasons: string[];
   funding_scope?: string[];
   duration_renewal_summary?: string | null;
+  amount_classification?: string | null;
+  transfer_supported?: boolean | null;
+  conflict_notes?: string | null;
   freshness_status?: string;
   application_cycle_status?: string;
   claim_freshness?: Record<string, string>;
@@ -2048,5 +2051,80 @@ export async function evaluateProfileCredentials(
     { headers: { ...auth.getAuthHeader() } }
   );
   if (!res.ok) throw new Error("Failed to evaluate student profile credentials");
+  return res.json();
+}
+
+export interface CatalogCoverageAuditResponse {
+  audited_at: string;
+  total_catalog_programs: number;
+  total_active_programs: number;
+  programs_reviewed: number;
+  legacy_reviewed_count: number;
+  legacy_total_count: number;
+  batch1_4_reverified_count: number;
+  complete_provenance_count: number;
+  complete_provenance_ratio: number;
+  verified_eligibility_count: number;
+  verified_funding_programs: number;
+  verified_funding_coverage: number;
+  actionable_coverage_count: number;
+  actionable_coverage_ratio: number;
+  unknown_eligibility_count: number;
+  requires_manual_review_count: number;
+  expired_claim_count: number;
+  source_unavailable_count: number;
+  conflicting_count: number;
+  dual_citizenship_restricted_programs: number;
+  citizenship_residency_separated_programs: number;
+  multi_destination_programs: number;
+  citizenships_with_verified_funding_count: number;
+  by_pathway: Record<string, number>;
+  by_degree_level: Record<string, Record<string, number>>;
+  by_citizenship: Array<{
+    country_code: string;
+    country_name: string;
+    eligible_or_conditional_count: number;
+    verified_funding_eligible_count: number;
+    actionable_eligible_count: number;
+  }>;
+  by_destination: Array<{
+    country_code: string;
+    country_name: string;
+    catalog_count: number;
+    verified_funding_count: number;
+    actionable_count: number;
+    manual_review_or_unavailable_count: number;
+    closed_cycle_count: number;
+  }>;
+  intersections: Array<{
+    key: string;
+    label: string;
+    matched_count: number;
+    verified_funding_count: number;
+    sample_titles: string[];
+  }>;
+  manual_review_programs: Array<{
+    title: string;
+    country_code: string;
+    freshness_status: string;
+    amount_classification: string;
+    source_url: string;
+    reason: string;
+  }>;
+  unavailable_source_programs: Array<{
+    title: string;
+    country_code: string;
+    freshness_status: string;
+    http_status?: number | null;
+    source_url: string;
+    note: string;
+  }>;
+}
+
+export async function fetchCatalogCoverageAudit(): Promise<CatalogCoverageAuditResponse> {
+  const res = await fetch(`${API_BASE_URL}/financial/coverage-audit`, {
+    headers: { ...auth.getAuthHeader() },
+  });
+  if (!res.ok) throw new Error("Failed to fetch catalog coverage audit");
   return res.json();
 }

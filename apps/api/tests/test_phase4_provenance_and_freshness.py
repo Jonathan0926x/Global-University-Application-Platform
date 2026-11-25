@@ -296,7 +296,8 @@ def test_independent_validation_detects_url_duplicate_provenance_expiry_and_conf
 
 
 def test_legacy_records_preserve_honest_unknown_metadata_and_backward_compatibility(client, db):
-    # Legacy records must NEVER carry fabricated reviewer names or source versions
+    # Remediated legacy records must NEVER carry fabricated reviewer names or invented source versions,
+    # while CSS-Profile/need-dependent awards keep requires_manual_review on individualized amounts.
     mit = (
         db.query(ScholarshipProgram)
         .filter(ScholarshipProgram.title == "MIT Need-Blind Admissions & Full-Need Institutional Aid")
@@ -305,8 +306,21 @@ def test_legacy_records_preserve_honest_unknown_metadata_and_backward_compatibil
     assert mit is not None
     assert mit.verified_by is None
     assert mit.source_version is None
-    assert mit.source_type == "unknown"
+    assert mit.source_type == "official_institutional"
     assert mit.freshness_status == "requires_manual_review"
+    assert mit.claim_provenance and "award_amounts" in mit.claim_provenance
+
+    # Verify fallback honesty for un-audited unknown-source records still yields requires_manual_review
+    unknown_fallback = ScholarshipProgram(
+        country_code="US",
+        title="Unverified Source Fallback Check",
+        eligibility_summary="Fallback check",
+        source_name="Unknown",
+        source_url="https://example.edu/aid",
+        source_type="unknown",
+        freshness_status="requires_manual_review",
+    )
+    assert evaluate_scholarship_freshness(unknown_fallback) == "requires_manual_review"
 
     # Existing API contracts stay backward compatible and surface Step 1 governance fields
     res = client.post(
@@ -327,7 +341,7 @@ def test_legacy_records_preserve_honest_unknown_metadata_and_backward_compatibil
     assert mit_api["eligibility_status"] == "eligible"
     assert mit_api["freshness_status"] == "requires_manual_review"
     assert mit_api["verified_by"] is None
-    assert mit_api["source_type"] == "unknown"
+    assert mit_api["source_type"] == "official_institutional"
 
     cred_res = client.post(
         "/api/v1/credentials/evaluate",

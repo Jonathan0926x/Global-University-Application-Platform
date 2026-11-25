@@ -8,12 +8,14 @@ from app.models.institution import Institution
 from app.models.profile import StudentProfile
 from app.models.rag import ScholarshipProgram
 from app.schemas.phase4 import (
+    CatalogCoverageAuditResponse,
     NetPriceCalculateRequest,
     NetPriceCalculationResponse,
     ScholarshipEligibilityResultSchema,
     ScholarshipMatchRequest,
     ScholarshipMatchResponse,
 )
+from app.services.coverage_analytics import generate_global_coverage_audit
 from app.services.financial_engine import (
     calculate_net_price,
     ensure_phase4_seeded,
@@ -133,3 +135,16 @@ def run_net_price_calculator(
         params=payload.model_dump(),
     )
     return NetPriceCalculationResponse(**res)
+
+
+@router.get(
+    "/financial/coverage-audit",
+    response_model=CatalogCoverageAuditResponse,
+    tags=["Financial & Scholarships"],
+)
+def get_catalog_coverage_audit(db: Session = Depends(get_db)):
+    """
+    Returns live Workstream E–G global catalog verification metrics, pathway coverage,
+    citizenship & destination analytics, reference intersections, and manual-review queue.
+    """
+    return CatalogCoverageAuditResponse(**generate_global_coverage_audit(db))

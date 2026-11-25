@@ -33,9 +33,14 @@ from app.ingestion.phase4_batch4_seed import (
     BATCH4_EUROPE_SCHOLARSHIPS,
     seed_phase4_batch4_europe,
 )
+from app.ingestion.phase4_catalog_audit_remediation import (
+    LEGACY_AUDIT_SPECS,
+    remediate_and_verify_catalog,
+)
 from app.models.country import Country
 from app.models.institution import Institution
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
+from app.services.coverage_analytics import generate_global_coverage_audit
 from app.services.financial_engine import (
     calculate_net_price,
     evaluate_single_scholarship,
@@ -43,6 +48,7 @@ from app.services.financial_engine import (
 )
 from app.services.freshness_governance import (
     evaluate_scholarship_claim_breakdown,
+    evaluate_scholarship_freshness,
     is_valid_official_url,
     validate_scholarship_catalog,
 )
@@ -1588,5 +1594,242 @@ def test_16e_batch4_native_currencies_isolated_in_usd_net_price():
                 assert applied["estimated_max_usd"] > 0
     finally:
         db.close()
+
+
+# ==============================================================================
+# Step 3 Audit Regression Suite (Workstreams A-G): Legacy Remediation, Batch
+# 1-4 Reverification, Zero Fabricated FX, Transfer vs First-Year, MA vs MR
+# Separation, and Global Coverage Analytics Endpoint
+# ==============================================================================
+
+
+def test_17a_full_catalog_69_reviewed_complete_15_field_provenance_no_fabricated_fx():
+    db = SessionLocal()
+    try:
+        rem = remediate_and_verify_catalog(db)
+        assert rem["legacy_reviewed"] == len(LEGACY_AUDIT_SPECS) == 27
+        assert rem["batch1_4_reverified"] == 42
+        assert rem["total_audited"] == 69
+
+        validation = validate_scholarship_catalog(db)
+        assert validation["total_checked"] == 69
+        assert validation["invalid_urls"] == []
+        assert validation["duplicates"] == []
+        assert validation["missing_provenance"] == []
+        assert validation["conflicting_records"] == []
+
+        active = db.query(ScholarshipProgram).filter(ScholarshipProgram.is_current == True).all()
+        assert len(active) == 69
+        for p in active:
+            prov = p.claim_provenance or {}
+            assert REQUIRED_15_CLAIM_KEYS.issubset(prov.keys()), f"Missing 15-field provenance on {p.title}"
+            # Critical audit invariant: NO non-USD award may carry fabricated USD estimates
+            if (p.award_currency or "USD") != "USD":
+                assert p.award_amount_min_usd is None and p.award_amount_max_usd is None and p.award_fixed_usd is None, (
+                    f"Non-USD program {p.title} ({p.award_currency}) must not carry fabricated USD amounts"
+                )
+    finally:
+        db.close()
+
+
+def test_17b_legacy_remediation_fixes_eiffel_imperial_tum_mcgill_and_403_waf_honestly():
+    db = SessionLocal()
+    try:
+        remediate_and_verify_catalog(db)
+
+        eiffel = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "France Excellence Eiffel & Campus France Government Aid"
+        ).first()
+        assert eiffel is not None
+        assert set(eiffel.degree_levels or []) == {"masters", "doctoral"}
+        ug_res = evaluate_single_scholarship(
+            eiffel,
+            {"citizenships": ["HT"], "country_of_residence": "HT", "destination_country": "FR", "degree_level": "bachelors"},
+        )
+        assert ug_res["eligibility_status"] == "ineligible"
+
+        imperial = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Imperial College President's Undergraduate Scholarships"
+        ).first()
+        assert imperial is not None
+        assert imperial.award_currency == "GBP"
+        assert imperial.native_amount_min == 1000.0
+        assert imperial.native_amount_max == 1000.0
+        assert imperial.award_amount_max_usd is None
+
+        tum = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "TUM Deutschlandstipendium & Non-EU Tuition Waiver Policy"
+        ).first()
+        assert tum is not None
+        assert tum.award_currency == "EUR"
+        assert tum.native_amount_min == 3600.0
+        assert tum.award_amount_max_usd is None
+
+        mcgill = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "McGill Mastercard Foundation Scholars Program & Major Entrance Scholarships"
+        ).first()
+        assert mcgill is not None
+        assert evaluate_scholarship_freshness(mcgill) == "conflicting_information"
+
+        # 403 WAF-gated university/foundation portals report source_unavailable without crashing
+        reach_oxford = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Reach Oxford & Palgrave Brown Undergraduate Scholarships"
+        ).first()
+        assert reach_oxford is not None
+        assert (reach_oxford.claim_provenance or {}).get("audit_metadata", {}).get("http_status") == 403
+        assert evaluate_scholarship_freshness(reach_oxford) == "source_unavailable"
+    finally:
+        db.close()
+
+
+def test_17c_morocco_and_mauritania_distinct_countries_and_regional_eligibility():
+    db = SessionLocal()
+    try:
+        remediate_and_verify_catalog(db)
+        ma = db.query(Country).filter(Country.code == "MA").first()
+        mr = db.query(Country).filter(Country.code == "MR").first()
+        assert ma is not None and ma.name == "Morocco" and ma.currency_code == "MAD"
+        assert mr is not None and mr.name == "Mauritania" and mr.currency_code == "MRU"
+        assert ma.code != mr.code
+
+        si_sisgp = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title.ilike("%Swedish Institute Scholarship for Global Professionals%")
+        ).first()
+        assert si_sisgp is not None
+        ma_eval = evaluate_single_scholarship(
+            si_sisgp,
+            {
+                "citizenships": ["MA"],
+                "country_of_residence": "MA",
+                "destination_country": "SE",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+                "gpa_4": 3.85,
+                "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 7.0}},
+            },
+        )
+        mr_eval = evaluate_single_scholarship(
+            si_sisgp,
+            {
+                "citizenships": ["MR"],
+                "country_of_residence": "MR",
+                "destination_country": "SE",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+                "gpa_4": 3.85,
+                "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 7.0}},
+            },
+        )
+        assert ma_eval["eligibility_status"] in ("eligible", "conditionally_eligible")
+        assert mr_eval["eligibility_status"] == "ineligible"
+    finally:
+        db.close()
+
+
+def test_17d_transfer_vs_first_year_separation_never_inferred_blindly():
+    db = SessionLocal()
+    try:
+        remediate_and_verify_catalog(db)
+        yale = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Yale Need-Blind Worldwide & Full-Need Financial Aid"
+        ).first()
+        jkcf = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Jack Kent Cooke Undergraduate Transfer Scholarship"
+        ).first()
+        pearson = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Lester B. Pearson International Scholarship"
+        ).first()
+        assert yale is not None and jkcf is not None and pearson is not None
+
+        transfer_ctx = {
+            "citizenships": ["HT"],
+            "country_of_residence": "US",
+            "destination_country": "US",
+            "degree_level": "bachelors",
+            "applicant_type": "transfer",
+            "us_community_college_enrolled": True,
+            "gpa_4": 3.9,
+            "financial_need_level": "high",
+            "household_income_usd": 20000.0,
+        }
+        yale_tx = evaluate_single_scholarship(yale, transfer_ctx)
+        jkcf_tx = evaluate_single_scholarship(jkcf, transfer_ctx)
+        pearson_tx = evaluate_single_scholarship(pearson, transfer_ctx)
+        assert yale_tx["transfer_supported"] is True
+        assert yale_tx["eligibility_status"] == "eligible"
+        assert jkcf_tx["transfer_supported"] is True
+        assert jkcf_tx["eligibility_status"] == "insufficient_information"
+        assert pearson_tx["transfer_supported"] is False
+        assert pearson_tx["eligibility_status"] == "ineligible"
+
+        audit = generate_global_coverage_audit(db)
+        assert audit["by_pathway"]["first_year_verified"] > audit["by_pathway"]["transfer_verified"]
+        assert audit["by_pathway"]["transfer_explicitly_excluded"] >= 1
+    finally:
+        db.close()
+
+
+def test_17e_exchange_mobility_and_css_sai_excluded_from_verified_funding_and_net_price():
+    db = SessionLocal()
+    try:
+        remediate_and_verify_catalog(db)
+        validation = validate_scholarship_catalog(db)
+        # 24 Batch 1-4 non-mobility + 1 Imperial GBP 1,000 fixed verified = 25/69 (36.2%)
+        assert validation["verified_funding_programs"] == 25
+        assert abs(validation["verified_funding_coverage"] - (25 / 69)) < 0.002
+
+        us_inst = db.query(Institution).filter(Institution.country_code == "US").first()
+        assert us_inst is not None
+        np_res = calculate_net_price(
+            db,
+            us_inst,
+            None,
+            {
+                "residency_classification": "international",
+                "housing_preference": "on_campus",
+                "applicant_type": "first_year",
+                "degree_level": "bachelors",
+                "citizenship_country": "HT",
+                "country_of_residence": "US",
+                "destination_country": "US",
+                "financial_need_level": "high",
+                "household_income_usd": 20000.0,
+                "include_competitive_aid": True,
+            },
+        )
+        applied_titles = {a["title"] for a in np_res["verified_applicable_aid"] + np_res["conditional_aid"]}
+        # Variable formulaic CSS Profile awards (MIT/Yale) must stay out of guaranteed USD deductions
+        assert "MIT Need-Blind Admissions & Full-Need Institutional Aid" not in applied_titles
+        assert "Yale Need-Blind Worldwide & Full-Need Financial Aid" not in applied_titles
+        assert "Erasmus+ Higher Education Student Mobility Grant (Short-Term Exchange Only)" not in applied_titles
+        assert all(a["award_currency"] == "USD" for a in np_res["verified_applicable_aid"] + np_res["conditional_aid"])
+    finally:
+        db.close()
+
+
+def test_17f_coverage_audit_endpoint_contract_and_metrics(client):
+    res = client.get("/api/v1/financial/coverage-audit")
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["total_active_programs"] == 69
+    assert data["programs_reviewed"] == 69
+    assert data["legacy_reviewed_count"] == 27
+    assert data["batch1_4_reverified_count"] == 42
+    assert data["complete_provenance_count"] == 69
+    assert data["complete_provenance_ratio"] == 1.0
+    assert data["verified_funding_programs"] == 25
+    assert data["actionable_coverage_count"] <= data["verified_funding_programs"]
+    assert data["actionable_coverage_count"] == 18
+    assert len(data["by_citizenship"]) >= 12
+    assert len(data["by_destination"]) >= 15
+    inter_keys = {row["key"] for row in data["intersections"]}
+    assert {
+        "ht_ca_first_year_ug",
+        "ng_europe_masters",
+        "in_asia_doctoral",
+        "ht_us_transfer_cc",
+        "ma_eu_vs_mr_eu",
+    }.issubset(inter_keys)
+
 
 

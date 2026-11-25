@@ -1,0 +1,887 @@
+{
+  "audited_at": "2026-11-25T21:02:20.104015+00:00",
+  "total_catalog_programs": 69,
+  "total_active_programs": 69,
+  "programs_reviewed": 69,
+  "legacy_reviewed_count": 27,
+  "legacy_total_count": 27,
+  "batch1_4_reverified_count": 42,
+  "complete_provenance_count": 69,
+  "complete_provenance_ratio": 1.0,
+  "verified_eligibility_count": 68,
+  "verified_funding_programs": 25,
+  "verified_funding_coverage": 0.3623,
+  "actionable_coverage_count": 18,
+  "actionable_coverage_ratio": 0.2609,
+  "unknown_eligibility_count": 1,
+  "requires_manual_review_count": 18,
+  "expired_claim_count": 16,
+  "source_unavailable_count": 8,
+  "conflicting_count": 1,
+  "dual_citizenship_restricted_programs": 1,
+  "citizenship_residency_separated_programs": 3,
+  "multi_destination_programs": 8,
+  "citizenships_with_verified_funding_count": 33,
+  "by_pathway": {
+    "first_year_verified": 40,
+    "transfer_verified": 16,
+    "transfer_explicitly_excluded": 18,
+    "transfer_unconfirmed_unknown": 12,
+    "community_college_required": 1,
+    "graduate_doctoral_only": 22,
+    "exchange_mobility_only": 1
+  },
+  "by_degree_level": {
+    "bachelors": {
+      "catalog": 46,
+      "verified_funding": 13,
+      "actionable": 10
+    },
+    "masters": {
+      "catalog": 26,
+      "verified_funding": 13,
+      "actionable": 10
+    },
+    "doctoral": {
+      "catalog": 16,
+      "verified_funding": 8,
+      "actionable": 5
+    },
+    "exchange_mobility": {
+      "catalog": 1,
+      "verified_funding": 0,
+      "actionable": 0
+    }
+  },
+  "by_citizenship": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "eligible_or_conditional_count": 32,
+      "verified_funding_eligible_count": 10,
+      "actionable_eligible_count": 8
+    },
+    {
+      "country_code": "CA",
+      "country_name": "Canada",
+      "eligible_or_conditional_count": 31,
+      "verified_funding_eligible_count": 10,
+      "actionable_eligible_count": 8
+    },
+    {
+      "country_code": "HT",
+      "country_name": "Haiti",
+      "eligible_or_conditional_count": 37,
+      "verified_funding_eligible_count": 13,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "JM",
+      "country_name": "Jamaica",
+      "eligible_or_conditional_count": 38,
+      "verified_funding_eligible_count": 14,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "NG",
+      "country_name": "Nigeria",
+      "eligible_or_conditional_count": 38,
+      "verified_funding_eligible_count": 14,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "GH",
+      "country_name": "Ghana",
+      "eligible_or_conditional_count": 36,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 9
+    },
+    {
+      "country_code": "KE",
+      "country_name": "Kenya",
+      "eligible_or_conditional_count": 37,
+      "verified_funding_eligible_count": 13,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "ZA",
+      "country_name": "South Africa",
+      "eligible_or_conditional_count": 37,
+      "verified_funding_eligible_count": 13,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "MA",
+      "country_name": "Morocco",
+      "eligible_or_conditional_count": 36,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "MR",
+      "country_name": "Mauritania",
+      "eligible_or_conditional_count": 35,
+      "verified_funding_eligible_count": 11,
+      "actionable_eligible_count": 9
+    },
+    {
+      "country_code": "BR",
+      "country_name": "Brazil",
+      "eligible_or_conditional_count": 37,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "MX",
+      "country_name": "Mexico",
+      "eligible_or_conditional_count": 36,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "CO",
+      "country_name": "Colombia",
+      "eligible_or_conditional_count": 34,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "CL",
+      "country_name": "Chile",
+      "eligible_or_conditional_count": 33,
+      "verified_funding_eligible_count": 11,
+      "actionable_eligible_count": 9
+    },
+    {
+      "country_code": "PE",
+      "country_name": "Peru",
+      "eligible_or_conditional_count": 36,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "IN",
+      "country_name": "India",
+      "eligible_or_conditional_count": 33,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 9
+    },
+    {
+      "country_code": "CN",
+      "country_name": "China",
+      "eligible_or_conditional_count": 30,
+      "verified_funding_eligible_count": 10,
+      "actionable_eligible_count": 8
+    },
+    {
+      "country_code": "KR",
+      "country_name": "South Korea",
+      "eligible_or_conditional_count": 31,
+      "verified_funding_eligible_count": 10,
+      "actionable_eligible_count": 9
+    },
+    {
+      "country_code": "PK",
+      "country_name": "Pakistan",
+      "eligible_or_conditional_count": 35,
+      "verified_funding_eligible_count": 14,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "BD",
+      "country_name": "Bangladesh",
+      "eligible_or_conditional_count": 36,
+      "verified_funding_eligible_count": 14,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "VN",
+      "country_name": "Vietnam",
+      "eligible_or_conditional_count": 34,
+      "verified_funding_eligible_count": 13,
+      "actionable_eligible_count": 11
+    },
+    {
+      "country_code": "PH",
+      "country_name": "Philippines",
+      "eligible_or_conditional_count": 34,
+      "verified_funding_eligible_count": 13,
+      "actionable_eligible_count": 11
+    },
+    {
+      "country_code": "ID",
+      "country_name": "Indonesia",
+      "eligible_or_conditional_count": 32,
+      "verified_funding_eligible_count": 12,
+      "actionable_eligible_count": 10
+    },
+    {
+      "country_code": "GB",
+      "country_name": "United Kingdom",
+      "eligible_or_conditional_count": 31,
+      "verified_funding_eligible_count": 10,
+      "actionable_eligible_count": 8
+    },
+    {
+      "country_code": "FR",
+      "country_name": "France",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "DE",
+      "country_name": "Germany",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "NL",
+      "country_name": "Netherlands",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "CH",
+      "country_name": "Switzerland",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "SE",
+      "country_name": "Sweden",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "NO",
+      "country_name": "Norway",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "FI",
+      "country_name": "Finland",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "IT",
+      "country_name": "Italy",
+      "eligible_or_conditional_count": 29,
+      "verified_funding_eligible_count": 8,
+      "actionable_eligible_count": 6
+    },
+    {
+      "country_code": "ES",
+      "country_name": "Spain",
+      "eligible_or_conditional_count": 30,
+      "verified_funding_eligible_count": 9,
+      "actionable_eligible_count": 7
+    }
+  ],
+  "by_destination": [
+    {
+      "country_code": "US",
+      "country_name": "United States",
+      "catalog_count": 13,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 13,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "GB",
+      "country_name": "United Kingdom",
+      "catalog_count": 7,
+      "verified_funding_count": 3,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 5,
+      "closed_cycle_count": 3
+    },
+    {
+      "country_code": "DE",
+      "country_name": "Germany",
+      "catalog_count": 4,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 2,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "BB",
+      "country_name": "Barbados",
+      "catalog_count": 3,
+      "verified_funding_count": 3,
+      "actionable_count": 2,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "CA",
+      "country_name": "Canada",
+      "catalog_count": 3,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "BE",
+      "country_name": "Belgium",
+      "catalog_count": 2,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "BR",
+      "country_name": "Brazil",
+      "catalog_count": 2,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "CH",
+      "country_name": "Switzerland",
+      "catalog_count": 2,
+      "verified_funding_count": 2,
+      "actionable_count": 2,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "CL",
+      "country_name": "Chile",
+      "catalog_count": 2,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "CN",
+      "country_name": "China",
+      "catalog_count": 2,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "ES",
+      "country_name": "Spain",
+      "catalog_count": 2,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "FR",
+      "country_name": "France",
+      "catalog_count": 2,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "MX",
+      "country_name": "Mexico",
+      "catalog_count": 2,
+      "verified_funding_count": 1,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 2,
+      "closed_cycle_count": 2
+    },
+    {
+      "country_code": "AR",
+      "country_name": "Argentina",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "AU",
+      "country_name": "Australia",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "BD",
+      "country_name": "Bangladesh",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "CO",
+      "country_name": "Colombia",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "DO",
+      "country_name": "Dominican Republic",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "FI",
+      "country_name": "Finland",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "GH",
+      "country_name": "Ghana",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "ID",
+      "country_name": "Indonesia",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "IN",
+      "country_name": "India",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "IT",
+      "country_name": "Italy",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "JP",
+      "country_name": "Japan",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "KR",
+      "country_name": "South Korea",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "MY",
+      "country_name": "Malaysia",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "NG",
+      "country_name": "Nigeria",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "NL",
+      "country_name": "Netherlands",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "NO",
+      "country_name": "Norway",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "PE",
+      "country_name": "Peru",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 1,
+      "closed_cycle_count": 1
+    },
+    {
+      "country_code": "PH",
+      "country_name": "Philippines",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "PK",
+      "country_name": "Pakistan",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "SE",
+      "country_name": "Sweden",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "SG",
+      "country_name": "Singapore",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "VN",
+      "country_name": "Vietnam",
+      "catalog_count": 1,
+      "verified_funding_count": 1,
+      "actionable_count": 1,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    },
+    {
+      "country_code": "ZA",
+      "country_name": "South Africa",
+      "catalog_count": 1,
+      "verified_funding_count": 0,
+      "actionable_count": 0,
+      "manual_review_or_unavailable_count": 0,
+      "closed_cycle_count": 0
+    }
+  ],
+  "intersections": [
+    {
+      "key": "ht_ca_first_year_ug",
+      "label": "Haitian citizen seeking undergraduate funding in Canada (first-year)",
+      "matched_count": 2,
+      "verified_funding_count": 0,
+      "sample_titles": [
+        "Lester B. Pearson International Scholarship",
+        "UBC International Scholars Program (KMES / Vantage / OIS)"
+      ]
+    },
+    {
+      "key": "ng_europe_masters",
+      "label": "Nigerian citizen seeking a Master's scholarship in Europe (all EU/UK/CH/SE/NO)",
+      "matched_count": 12,
+      "verified_funding_count": 8,
+      "sample_titles": [
+        "Erasmus Mundus Joint Masters (EMJM) Full-Degree Scholarship (Erasmus+)",
+        "Erasmus+ Higher Education Student Mobility Grant (Short-Term Exchange Only)",
+        "ETH Zurich Excellence Scholarship & Opportunity Programme (ESOP \u2014 Master's)",
+        "DAAD Development-Related Postgraduate Courses (EPOS)",
+        "University of Turku (UTU) International Tuition Fee Waiver Scholarship (Finland)"
+      ]
+    },
+    {
+      "key": "in_asia_doctoral",
+      "label": "Indian citizen seeking doctoral funding in Asia (SG / CN / JP / KR / MY)",
+      "matched_count": 4,
+      "verified_funding_count": 3,
+      "sample_titles": [
+        "CAS-ANSO Scholarship (2027 Call \u2014 USTC / UCAS / CAS)",
+        "Beasiswa Kemitraan Negara Berkembang (KNB Scholarship, Kemdiktisaintek RI)",
+        "Malaysia International Scholarship (MIS, MOHE)",
+        "A*STAR Graduate Scholarship (AGS \u2014 PhD)"
+      ]
+    },
+    {
+      "key": "ht_us_transfer_cc",
+      "label": "International transfer applicant (Haiti + US Community College) seeking undergraduate aid in the US",
+      "matched_count": 6,
+      "verified_funding_count": 0,
+      "sample_titles": [
+        "Jack Kent Cooke Undergraduate Transfer Scholarship",
+        "MIT Need-Blind Admissions & Full-Need Institutional Aid",
+        "OAS Academic Scholarship Program (Upper-Division Transfer / Final 2 Years)",
+        "Princeton Financial Aid \u2014 No-Loan Full-Need Grant",
+        "Stanford University Need-Based Undergraduate Aid"
+      ]
+    },
+    {
+      "key": "ma_eu_vs_mr_eu",
+      "label": "Moroccan citizen (MA) vs. Mauritanian citizen (MR) Master's access in Europe",
+      "matched_count": 11,
+      "verified_funding_count": 0,
+      "sample_titles": [
+        "MA eligible: 11 (incl. SI SISGP)",
+        "MR eligible: 10 (SI SISGP Morocco-only excluded)"
+      ]
+    }
+  ],
+  "manual_review_programs": [
+    {
+      "title": "Melbourne International Undergraduate Scholarship",
+      "country_code": "AU",
+      "freshness_status": "source_unavailable",
+      "amount_classification": "conditional_tier_unpublished",
+      "source_url": "https://scholarships.unimelb.edu.au/awards/melbourne-international-undergraduate-scholarship",
+      "reason": "Official unimelb.edu.au URL returned HTTP 403 WAF to automated verification; legacy USD estimate ($6.5k\u2013$36k) removed and reset to AUD unpublished."
+    },
+    {
+      "title": "McGill Mastercard Foundation Scholars Program & Major Entrance Scholarships",
+      "country_code": "CA",
+      "freshness_status": "conflicting_information",
+      "amount_classification": "conflicting",
+      "source_url": "https://www.mcgill.ca/studentaid/scholarships-aid",
+      "reason": "Legacy record conflates Undergraduate Major Entrance Scholarships with the Graduate Mastercard Foundation Scholars Program (Master's level at McGill). Requires separate split/manual review."
+    },
+    {
+      "title": "Heidelberg / Baden-W\u00fcrttemberg Non-EU Tuition & Exemption Policy",
+      "country_code": "DE",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "published_mixed_fee_policy",
+      "source_url": "https://www.uni-heidelberg.de/en/study/management-of-studies/semester-fees",
+      "reason": "Legacy row combined \u20ac1,500/sem Baden-W\u00fcrttemberg fee policy with \u20ac3,600/yr Deutschlandstipendium; statutory non-EU tuition waiver requires manual exemption verification."
+    },
+    {
+      "title": "TUM Deutschlandstipendium & Non-EU Tuition Waiver Policy",
+      "country_code": "DE",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "published_fixed_plus_conditional_waiver",
+      "source_url": "https://www.tum.de/en/studies/fees",
+      "reason": "Replaced hardcoded USD $3,900 conversion with EUR 3,600/yr Deutschlandstipendium; separate non-EU TUM tuition waiver depends on merit/hardship review."
+    },
+    {
+      "title": "Reach Oxford & Palgrave Brown Undergraduate Scholarships",
+      "country_code": "GB",
+      "freshness_status": "source_unavailable",
+      "amount_classification": "source_unavailable",
+      "source_url": "https://www.ox.ac.uk/admissions/undergraduate/fees-and-funding/oxford-support",
+      "reason": "Official ox.ac.uk URL returned HTTP 403 WAF during automated fetch; fabricated USD conversion removed and GBP amount kept null pending direct review."
+    },
+    {
+      "title": "UCL Global Undergraduate Scholarship",
+      "country_code": "GB",
+      "freshness_status": "source_unavailable",
+      "amount_classification": "source_unavailable",
+      "source_url": "https://www.ucl.ac.uk/scholarships/ucl-global-undergraduate-scholarship",
+      "reason": "Official ucl.ac.uk URL returned HTTP 403 WAF during automated fetch; legacy USD estimate removed and reset to GBP unpublished."
+    },
+    {
+      "title": "California College Promise Grant (De Anza College Fee Waiver)",
+      "country_code": "US",
+      "freshness_status": "source_unavailable",
+      "amount_classification": "conditional_per_unit",
+      "source_url": "https://www.deanza.edu/financialaid/grants/ccpg.html",
+      "reason": "deanza.edu returned HTTP 403 WAF during automated fetch; unit-dependent waiver ($46/unit) requires course-load verification before Net Price subtraction."
+    },
+    {
+      "title": "Federal Pell Grant (US Statutory Need Aid)",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "conditional_sai_formula",
+      "source_url": "https://studentaid.gov/understand-aid/types/grants/pell",
+      "reason": "Actual Pell award depends on computed FAFSA Student Aid Index (SAI) and enrollment intensity; full $7,395 cap cannot be assumed solely from income range."
+    },
+    {
+      "title": "Jack Kent Cooke Undergraduate Transfer Scholarship",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "waf_blocked_manual_review",
+      "source_url": "https://www.jkcf.org/our-scholarships/undergraduate-transfer-scholarship/",
+      "reason": "jkcf.org returned HTTP 403 Cloudflare protection during automated verification; eligibility rules retained from Step 2 while award amounts await manual WAF portal review."
+    },
+    {
+      "title": "MIT Need-Blind Admissions & Full-Need Institutional Aid",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "need_based_variable",
+      "source_url": "https://sfs.mit.edu/undergraduate-students/apply-for-aid/international/",
+      "reason": "Need-based package is individualized via CSS Profile & IDOC assessment rather than a fixed statutory table."
+    },
+    {
+      "title": "OAS Academic Scholarship Program (Upper-Division Transfer / Final 2 Years)",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "waf_blocked_manual_review",
+      "source_url": "https://www.oas.org/en/scholarships/",
+      "reason": "oas.org returned HTTP 403 WAF during automated fetch; eligibility rules retained while upper-division transfer grant awaits manual portal verification."
+    },
+    {
+      "title": "Princeton Financial Aid \u2014 No-Loan Full-Need Grant",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "need_based_variable",
+      "source_url": "https://admission.princeton.edu/cost-aid",
+      "reason": "Freshness status: requires_manual_review"
+    },
+    {
+      "title": "Stanford University Need-Based Undergraduate Aid",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "need_based_variable",
+      "source_url": "https://financialaid.stanford.edu/",
+      "reason": "Freshness status: requires_manual_review"
+    },
+    {
+      "title": "UC Blue and Gold Opportunity Plan (UC Berkeley)",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "conditional_last_dollar_gift_aid",
+      "source_url": "https://financialaid.berkeley.edu/",
+      "reason": "Covers net systemwide tuition AFTER counting Pell/Cal Grant offsets; fixed $14k\u2013$15.8k deduction would double-count alongside Pell/Cal Grant without FAFSA/SAI integration."
+    },
+    {
+      "title": "UC Blue and Gold Opportunity Plan (UC San Diego)",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "conditional_last_dollar_gift_aid",
+      "source_url": "https://fas.ucsd.edu/",
+      "reason": "Broken legacy fas.ucsd.edu sub-path updated to fas.ucsd.edu (200 OK); last-dollar gift aid requires Pell/Cal Grant stacking review."
+    },
+    {
+      "title": "UC Blue and Gold Opportunity Plan (UCLA)",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "conditional_last_dollar_gift_aid",
+      "source_url": "https://financialaid.ucla.edu/",
+      "reason": "Last-dollar UC tuition promise cannot be summed naively atop Pell without aid-stacking calculation."
+    },
+    {
+      "title": "UMich Go Blue Guarantee",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "conditional_last_dollar_gift_aid",
+      "source_url": "https://goblueguarantee.umich.edu/",
+      "reason": "Tuition promise offsets net tuition after federal/state gift aid and requires asset verification <= $125,000."
+    },
+    {
+      "title": "Yale Need-Blind Worldwide & Full-Need Financial Aid",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "amount_classification": "need_based_variable",
+      "source_url": "https://finaid.yale.edu/",
+      "reason": "Broken legacy path replaced by finaid.yale.edu (200 OK); individualized need-based scholarship requires CSS Profile calculation."
+    }
+  ],
+  "unavailable_source_programs": [
+    {
+      "title": "Melbourne International Undergraduate Scholarship",
+      "country_code": "AU",
+      "freshness_status": "source_unavailable",
+      "http_status": 403,
+      "source_url": "https://scholarships.unimelb.edu.au/awards/melbourne-international-undergraduate-scholarship",
+      "note": "Official unimelb.edu.au URL returned HTTP 403 WAF to automated verification; legacy USD estimate ($6.5k\u2013$36k) removed and reset to AUD unpublished."
+    },
+    {
+      "title": "AGCID Programa de Becas Rep\u00fablica de Chile para Estudios de Mag\u00edster",
+      "country_code": "CL",
+      "freshness_status": "current",
+      "http_status": 403,
+      "source_url": "https://www.agcid.gob.cl/becas/becas-para-extranjeros/",
+      "note": "agcid.gob.cl returned HTTP 403 WAF on Nov 25, 2026 recheck (originally verified in Batch 2; annual June-Nov cycle unannounced for 2027)."
+    },
+    {
+      "title": "Chevening Scholarships (UK FCDO)",
+      "country_code": "GB",
+      "freshness_status": "expired",
+      "http_status": 0,
+      "source_url": "https://www.chevening.org/scholarships/who-can-apply/eligibility/",
+      "note": "Intermittent TLS timeout on Nov 25, 2026 recheck (originally verified live in Batch 1; 2027-2028 cycle closed Oct 7, 2026; next cycle unannounced)."
+    },
+    {
+      "title": "Reach Oxford & Palgrave Brown Undergraduate Scholarships",
+      "country_code": "GB",
+      "freshness_status": "source_unavailable",
+      "http_status": 403,
+      "source_url": "https://www.ox.ac.uk/admissions/undergraduate/fees-and-funding/oxford-support",
+      "note": "Official ox.ac.uk URL returned HTTP 403 WAF during automated fetch; fabricated USD conversion removed and GBP amount kept null pending direct review."
+    },
+    {
+      "title": "UCL Global Undergraduate Scholarship",
+      "country_code": "GB",
+      "freshness_status": "source_unavailable",
+      "http_status": 403,
+      "source_url": "https://www.ucl.ac.uk/scholarships/ucl-global-undergraduate-scholarship",
+      "note": "Official ucl.ac.uk URL returned HTTP 403 WAF during automated fetch; legacy USD estimate removed and reset to GBP unpublished."
+    },
+    {
+      "title": "California College Promise Grant (De Anza College Fee Waiver)",
+      "country_code": "US",
+      "freshness_status": "source_unavailable",
+      "http_status": 403,
+      "source_url": "https://www.deanza.edu/financialaid/grants/ccpg.html",
+      "note": "deanza.edu returned HTTP 403 WAF during automated fetch; unit-dependent waiver ($46/unit) requires course-load verification before Net Price subtraction."
+    },
+    {
+      "title": "Jack Kent Cooke Undergraduate Transfer Scholarship",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "http_status": 403,
+      "source_url": "https://www.jkcf.org/our-scholarships/undergraduate-transfer-scholarship/",
+      "note": "jkcf.org returned HTTP 403 Cloudflare protection during automated verification; eligibility rules retained from Step 2 while award amounts await manual WAF portal review."
+    },
+    {
+      "title": "OAS Academic Scholarship Program (Upper-Division Transfer / Final 2 Years)",
+      "country_code": "US",
+      "freshness_status": "requires_manual_review",
+      "http_status": 403,
+      "source_url": "https://www.oas.org/en/scholarships/",
+      "note": "oas.org returned HTTP 403 WAF during automated fetch; eligibility rules retained while upper-division transfer grant awaits manual portal verification."
+    }
+  ]
+}

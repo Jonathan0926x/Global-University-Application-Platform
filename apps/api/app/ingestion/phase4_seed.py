@@ -16,6 +16,7 @@ from app.ingestion.phase4_batch1_seed import seed_phase4_batch1_africa_caribbean
 from app.ingestion.phase4_batch2_seed import seed_phase4_batch2_latin_america
 from app.ingestion.phase4_batch3_seed import seed_phase4_batch3_asia_pacific
 from app.ingestion.phase4_batch4_seed import seed_phase4_batch4_europe
+from app.ingestion.phase4_catalog_audit_remediation import remediate_and_verify_catalog
 from app.models.country import Country
 from app.models.credentials import CredentialRecognitionRule, GradeConversionRule
 from app.models.institution import Institution
@@ -1305,6 +1306,7 @@ def seed_phase4_financial_and_credentials(db: Session) -> Dict[str, int]:
     batch2_res = seed_phase4_batch2_latin_america(db)
     batch3_res = seed_phase4_batch3_asia_pacific(db)
     batch4_res = seed_phase4_batch4_europe(db)
+    audit_res = remediate_and_verify_catalog(db)
     return {
         "scholarships_created": (
             scholarships_created
@@ -1319,6 +1321,7 @@ def seed_phase4_financial_and_credentials(db: Session) -> Dict[str, int]:
             + batch2_res["batch2_updated"]
             + batch3_res["batch3_updated"]
             + batch4_res["batch4_updated"]
+            + audit_res["total_audited"]
         ),
         "rules_created": (
             rules_created

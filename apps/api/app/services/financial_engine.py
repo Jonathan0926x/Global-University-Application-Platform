@@ -58,7 +58,10 @@ SUPPORTED_DEGREE_LEVELS = {
 }
 
 REGION_COUNTRIES: Dict[str, set] = {
-    "africa": {"NG", "GH", "KE", "ZA", "ET", "RW", "SN", "CI", "EG", "MA", "TN", "UG", "TZ", "CM", "ZM", "ZW"},
+    "africa": {
+        "NG", "GH", "KE", "ZA", "ET", "RW", "SN", "CI", "EG", "MA", "MR",
+        "TN", "UG", "TZ", "CM", "ZM", "ZW", "DZ", "LY", "SD", "LR",
+    },
     "sub_saharan_africa": {"NG", "GH", "KE", "ZA", "ET", "RW", "SN", "CI", "UG", "TZ", "CM", "ZM", "ZW"},
     "caribbean": {"HT", "JM", "TT", "BB", "BS", "DO", "CU", "LC", "GD", "VC", "AG", "DM", "KN"},
     "caricom": {"JM", "BB", "TT", "BS", "BZ", "DM", "GD", "LC", "VC", "AG", "KN", "GY", "HT", "SR"},
@@ -135,6 +138,15 @@ def ensure_phase4_seeded(db: Session) -> None:
         .limit(1)
         .first()
     )
+    has_audit_remediated = (
+        db.query(ScholarshipProgram.id)
+        .filter(
+            ScholarshipProgram.title == "Imperial College President's Undergraduate Scholarships",
+            ScholarshipProgram.award_currency == "GBP",
+        )
+        .limit(1)
+        .first()
+    )
     if (
         has_rule is None
         or has_yale is None
@@ -142,6 +154,7 @@ def ensure_phase4_seeded(db: Session) -> None:
         or has_batch2 is None
         or has_batch3 is None
         or has_batch4 is None
+        or has_audit_remediated is None
     ):
         seed_phase4_financial_and_credentials(db)
 
@@ -948,6 +961,8 @@ def evaluate_single_scholarship(
         "requires_manual_review": bool(sch.requires_manual_review),
         "claim_provenance": sch.claim_provenance or {},
         "conflict_notes": sch.conflict_notes,
+        "amount_classification": ((sch.claim_provenance or {}).get("audit_metadata") or {}).get("amount_classification"),
+        "transfer_supported": ((sch.claim_provenance or {}).get("audit_metadata") or {}).get("transfer_supported"),
     }
 
 
@@ -973,9 +988,9 @@ def match_scholarships_deterministic(
     for p in qry.all():
         cb = evaluate_scholarship_claim_breakdown(p)
         freshness = evaluate_scholarship_freshness(p)
-        # Exclude record-expired / unavailable / conflicting programs, while retaining existence-current programs
-        # (even if a deadline or award-amount sub-claim has expired — those remain segregated in UI / review_required_aid).
-        if cb["record_expired"] or freshness in ("source_unavailable", "conflicting_information"):
+        # Exclude expired records while retaining active source_unavailable/conflicting programs under
+        # funding_bucket='review_required' so students/reviewers see transparent warnings (Net Price still excludes them).
+        if cb["record_expired"]:
             continue
         if freshness == "expired" and not cb["existence_current"]:
             continue
@@ -1338,7 +1353,11 @@ def calculate_net_price(
             insufficient_info_aid.append(_make_aid_entry(s, "potential", {}, 0.0, 0.0, reason=reason))
             continue
 
-        # 3. Unknown scope, unknown/non-matching currency, or missing dollar amount -> unallocated potential aid
+        # 3. Unknown scope, exchange-only mobility, unknown/non-matching currency, or missing dollar amount -> unallocated potential aid
+        if (s.get("funding_type") or "").strip().lower() == "exchange_mobility":
+            reason = "Exchange / short-term mobility grant is excluded from full-degree net-price cost calculations."
+            unallocated_potential_aid.append(_make_aid_entry(s, "potential", {}, 0.0, 0.0, reason=reason))
+            continue
         if not has_scope:
             reason = "Funding scope (tuition/housing/stipend) is unspecified; excluded from category net-price discounts."
             unallocated_potential_aid.append(_make_aid_entry(s, "potential", {}, 0.0, 0.0, reason=reason))

@@ -82,6 +82,8 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     requires_manual_review: bool = False
     claim_provenance: Dict[str, Any] = {}
     conflict_notes: Optional[str] = None
+    amount_classification: Optional[str] = None
+    transfer_supported: Optional[bool] = None
 
 
 class ScholarshipMatchRequest(BaseModel):
@@ -129,6 +131,39 @@ class ScholarshipMatchResponse(BaseModel):
     ]
     results: List[ScholarshipEligibilityResultSchema]
     disclaimer: str
+
+
+class CatalogCoverageAuditResponse(BaseModel):
+    audited_at: str
+    total_catalog_programs: int
+    total_active_programs: int
+    programs_reviewed: int
+    legacy_reviewed_count: int
+    legacy_total_count: int
+    batch1_4_reverified_count: int
+    complete_provenance_count: int
+    complete_provenance_ratio: float
+    verified_eligibility_count: int
+    verified_funding_programs: int
+    verified_funding_coverage: float
+    actionable_coverage_count: int
+    actionable_coverage_ratio: float
+    unknown_eligibility_count: int
+    requires_manual_review_count: int
+    expired_claim_count: int
+    source_unavailable_count: int
+    conflicting_count: int
+    dual_citizenship_restricted_programs: int
+    citizenship_residency_separated_programs: int
+    multi_destination_programs: int
+    citizenships_with_verified_funding_count: int
+    by_pathway: Dict[str, int]
+    by_degree_level: Dict[str, Dict[str, int]]
+    by_citizenship: List[Dict[str, Any]]
+    by_destination: List[Dict[str, Any]]
+    intersections: List[Dict[str, Any]]
+    manual_review_programs: List[Dict[str, Any]]
+    unavailable_source_programs: List[Dict[str, Any]]
 
 
 class CostLineItemSchema(BaseModel):
