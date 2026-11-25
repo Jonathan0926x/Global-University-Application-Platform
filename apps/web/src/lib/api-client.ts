@@ -1884,10 +1884,29 @@ export interface CredentialEvaluationResponse {
   advisory_disclaimer: string;
 }
 
+export interface ProfileEnrollmentCredentialItem {
+  enrollment_id: string;
+  institution_name: string;
+  institution_country: string;
+  enrollment_type: string;
+  cumulative_gpa?: number | null;
+  gpa_scale?: number | null;
+  inferred_system_key: string;
+  evaluation: CredentialEvaluationResponse;
+}
+
+export interface ProfileCredentialEvaluationResponse {
+  has_profile: boolean;
+  destination_country_code: string;
+  enrollments_evaluated: ProfileEnrollmentCredentialItem[];
+  advisory_disclaimer: string;
+}
+
 export async function matchScholarships(payload: {
   citizenship_country?: string;
   residency_state?: string;
   applicant_type?: string;
+  degree_level?: string;
   gpa_4?: number;
   financial_need_level?: string;
   household_income_usd?: number;
@@ -1946,5 +1965,16 @@ export async function evaluateInternationalCredential(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error("Failed to evaluate international credential");
+  return res.json();
+}
+
+export async function evaluateProfileCredentials(
+  destinationCountry = "US"
+): Promise<ProfileCredentialEvaluationResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/credentials/profile-evaluate?destination_country=${encodeURIComponent(destinationCountry)}`,
+    { headers: { ...auth.getAuthHeader() } }
+  );
+  if (!res.ok) throw new Error("Failed to evaluate student profile credentials");
   return res.json();
 }

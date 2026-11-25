@@ -56,11 +56,13 @@ class ScholarshipMatchRequest(BaseModel):
     citizenship_country: Optional[str] = None
     residency_state: Optional[str] = None
     applicant_type: Optional[str] = None  # first_year | transfer | both
+    degree_level: str = "bachelors"  # bachelors | masters | doctoral
     gpa_4: Optional[float] = Field(default=None, ge=0.0, le=4.0)
     financial_need_level: Optional[str] = None  # high | moderate | low
     household_income_usd: Optional[float] = Field(default=None, ge=0.0)
     destination_country: Optional[str] = None
     institution_id: Optional[UUID] = None
+    us_community_college_enrolled: Optional[bool] = None
     include_ineligible: bool = True
 
 
@@ -192,4 +194,22 @@ class CredentialEvaluationResponse(BaseModel):
     conversion: GradeConversionOutcomeSchema
     recognition_rules: List[CredentialRecognitionRuleSchema] = []
     country_qualifications: List[Dict[str, Any]] = []
+    advisory_disclaimer: str
+
+
+class ProfileEnrollmentCredentialItemSchema(BaseModel):
+    enrollment_id: UUID
+    institution_name: str
+    institution_country: str
+    enrollment_type: str
+    cumulative_gpa: Optional[float] = None
+    gpa_scale: Optional[float] = None
+    inferred_system_key: str
+    evaluation: CredentialEvaluationResponse
+
+
+class ProfileCredentialEvaluationResponse(BaseModel):
+    has_profile: bool
+    destination_country_code: str
+    enrollments_evaluated: List[ProfileEnrollmentCredentialItemSchema] = []
     advisory_disclaimer: str

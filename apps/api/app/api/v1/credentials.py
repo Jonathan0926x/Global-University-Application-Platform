@@ -2,21 +2,38 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_current_profile, get_db
 from app.models.credentials import CredentialRecognitionRule
+from app.models.profile import StudentProfile
 from app.schemas.phase4 import (
     CredentialEvaluateRequest,
     CredentialEvaluationResponse,
     CredentialRecognitionRuleSchema,
     GradingSystemOptionSchema,
+    ProfileCredentialEvaluationResponse,
 )
 from app.services.credential_engine import (
     ensure_credentials_seeded,
     evaluate_credential,
+    evaluate_profile_credentials,
     list_grading_systems,
 )
 
 router = APIRouter()
+
+
+@router.get(
+    "/credentials/profile-evaluate",
+    response_model=ProfileCredentialEvaluationResponse,
+    tags=["International Credentials"],
+)
+def evaluate_authenticated_profile_credentials(
+    destination_country: str = Query("US"),
+    profile: Optional[StudentProfile] = Depends(get_current_profile),
+    db: Session = Depends(get_db),
+):
+    res = evaluate_profile_credentials(db, profile, destination_country_code=destination_country)
+    return ProfileCredentialEvaluationResponse(**res)
 
 
 @router.get(

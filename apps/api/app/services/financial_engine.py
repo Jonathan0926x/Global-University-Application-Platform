@@ -30,9 +30,15 @@ FINANCIAL_DISCLAIMER = (
 
 
 def ensure_phase4_seeded(db: Session) -> None:
-    """Seed verified Phase 4 scholarships, rules, and credential tables if empty."""
+    """Seed verified Phase 4 scholarships, rules, and credential tables if empty or un-synced."""
     has_rule = db.query(ScholarshipEligibilityRule.id).limit(1).first()
-    if has_rule is None:
+    has_yale = (
+        db.query(ScholarshipProgram.id)
+        .filter(ScholarshipProgram.title == "Yale Need-Blind Worldwide & Full-Need Financial Aid")
+        .limit(1)
+        .first()
+    )
+    if has_rule is None or has_yale is None:
         seed_phase4_financial_and_credentials(db)
 
 
@@ -46,6 +52,8 @@ def _derive_student_context(
     applicant_type: Optional[str] = None
     gpa_4: Optional[float] = None
     gpa_display: str = "Not Reported"
+    has_us_cc = False
+    has_enrollment_history = False
 
     if profile is not None:
         cit_rows = (
@@ -60,6 +68,11 @@ def _derive_student_context(
         applicant_type = profile.applicant_type if profile.applicant_type != "undecided" else None
 
         enrollments = list(profile.enrollments or [])
+        has_enrollment_history = len(enrollments) > 0
+        for enr in enrollments:
+            enr_cc = (enr.institution_country or "").strip().upper()[:2]
+            if enr.enrollment_type == "community_college" and (enr_cc == "US" or not enr_cc):
+                has_us_cc = True
         for enr in reversed(enrollments):
             if enr.cumulative_gpa is not None:
                 scale_val = float(enr.gpa_scale) if getattr(enr, "gpa_scale", None) else 4.0
@@ -99,11 +112,23 @@ def _derive_student_context(
         else:
             need_level = "low"
 
+    if overrides.get("us_community_college_enrolled") is True:
+        has_us_cc = True
+
+    degree_level = (
+        overrides.get("degree_level")
+        or (profile.intended_degree_level if profile and profile.intended_degree_level else None)
+        or "bachelors"
+    ).strip().lower()
+
     return {
         "citizenships": citizenships,
         "primary_citizenship": citizenships[0] if citizenships else None,
         "residency_state": residency_state,
         "applicant_type": applicant_type,
+        "degree_level": degree_level,
+        "has_us_community_college": has_us_cc,
+        "has_enrollment_history": has_enrollment_history,
         "gpa_4": gpa_4,
         "gpa_display": gpa_display,
         "financial_need_level": need_level,
@@ -183,6 +208,14 @@ def _eval_rule(
         if need in allowed_levels:
             return {"status": "pass", "detail": f"Financial need level '{need}' aligns with program criteria."}
         return {"status": "fail", "detail": f"Requires {'/'.join(allowed_levels)} financial need (reported '{need}')."}
+
+    if dim == "enrollment_context":
+        if val.get("requires_us_community_college"):
+            if ctx.get("has_us_community_college"):
+                return {"status": "pass", "detail": "Active U.S. community college enrollment verified on student profile."}
+            if ctx.get("has_enrollment_history"):
+                return {"status": "fail", "detail": "Requires current enrollment at an accredited U.S. 2-year community college."}
+            return {"status": "missing_data", "detail": "Confirm current enrollment at a U.S. 2-year community college on your Student Profile."}
 
     return {"status": "pass", "detail": "Criterion satisfied."}
 
@@ -306,7 +339,11 @@ def match_scholarships_deterministic(
         # Keep institution-specific + portable global/national scholarships
         qry = qry.filter((ScholarshipProgram.institution_id == inst_uuid) | (ScholarshipProgram.institution_id.is_(None)))
 
-    programs = qry.all()
+    programs = [
+        p
+        for p in qry.all()
+        if ctx["degree_level"] in [d.lower() for d in (p.degree_levels or ["bachelors"])]
+    ]
     evaluated = [evaluate_single_scholarship(p, ctx) for p in programs]
 
     rank_order = {"eligible": 0, "conditionally_eligible": 1, "ineligible": 2}
@@ -518,6 +555,10 @@ def calculate_net_price(
     }
     sch_match = match_scholarships_deterministic(db, profile, overrides, include_ineligible=False)
 
+    coa_cap = total_coa if total_coa is not None else 0.0
+    inc_val = params.get("household_income_usd")
+    need_lvl = (params.get("financial_need_level") or "").strip().lower()
+
     aid_offsets: List[Dict[str, Any]] = []
     guar_min = 0.0
     guar_max = 0.0
@@ -529,6 +570,21 @@ def calculate_net_price(
             continue
         amin = float(s["award_amount_min_usd"] or 0.0)
         amax = float(s["award_amount_max_usd"] or amin)
+        if coa_cap > 0:
+            amax = min(amax, coa_cap)
+            amin = min(amin, amax)
+
+        # Conservative income-aware cap for institutional 100%-demonstrated-need full-ride programs
+        if s["award_type"] == "full_ride" and s["requires_financial_need"] and s["provider_type"] == "university":
+            if inc_val is not None:
+                est_efc = max(0.0, (float(inc_val) - 75000.0) * 0.28)
+                need_cap = max(0.0, coa_cap - est_efc) if coa_cap > 0 else amax
+                amax = min(amax, round(need_cap, 2))
+                amin = min(amin, amax)
+            elif need_lvl == "moderate" and coa_cap > 0:
+                amax = min(amax, round(coa_cap * 0.65, 2))
+                amin = min(amin, amax)
+
         if amax <= 0.0:
             continue
         aid_offsets.append(
@@ -538,8 +594,8 @@ def calculate_net_price(
                 "provider_type": s["provider_type"],
                 "eligibility_status": s["eligibility_status"],
                 "is_guaranteed_statutory": s["is_guaranteed_statutory"],
-                "estimated_min_usd": amin,
-                "estimated_max_usd": amax,
+                "estimated_min_usd": round(amin, 2),
+                "estimated_max_usd": round(amax, 2),
                 "source_url": s["source_url"],
             }
         )
@@ -550,7 +606,13 @@ def calculate_net_price(
             comp_min += amin
             comp_max += amax
 
-    coa_cap = total_coa if total_coa is not None else 0.0
+    # Keep component ceilings coherent with Gross Total COA (awards cannot stack above COA)
+    guar_min = min(coa_cap, round(guar_min, 2)) if total_coa else 0.0
+    guar_max = min(coa_cap, round(guar_max, 2)) if total_coa else 0.0
+    comp_cap = max(0.0, round(coa_cap - guar_min, 2)) if total_coa else 0.0
+    comp_min = min(comp_cap, round(comp_min, 2))
+    comp_max = min(comp_cap, round(comp_max, 2))
+
     eligible_min = min(coa_cap, round(guar_min + (comp_min if include_competitive else 0.0), 2)) if total_coa else 0.0
     eligible_max = min(coa_cap, round(guar_max + (comp_max if include_competitive else 0.0), 2)) if total_coa else 0.0
 

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.ingestion.phase4_seed import seed_phase4_financial_and_credentials
 from app.models.credentials import CredentialRecognitionRule, GradeConversionRule
+from app.models.profile import StudentProfile
 from app.models.requirements import CountryQualification
 
 CREDENTIAL_ADVISORY_DISCLAIMER = (
@@ -251,5 +252,168 @@ def evaluate_credential(
             }
             for q in quals
         ],
+        "advisory_disclaimer": CREDENTIAL_ADVISORY_DISCLAIMER,
+    }
+
+
+def _infer_grading_system_for_enrollment(
+    country_code: str,
+    gpa_scale: Optional[float],
+    enrollment_type: str,
+) -> str:
+    cc = (country_code or "US").strip().upper()[:2]
+    sc = float(gpa_scale) if gpa_scale else 4.0
+
+    if abs(sc - 20.0) < 0.01:
+        return "ht_20" if cc == "HT" else "fr_20"
+    if cc == "DE" or (abs(sc - 6.0) < 0.01) or (abs(sc - 5.0) < 0.01):
+        return "de_abitur"
+    if abs(sc - 45.0) < 0.01:
+        return "ib_45"
+    if abs(sc - 10.0) < 0.01:
+        return "in_cgpa10" if cc == "IN" else "br_10"
+    if abs(sc - 100.0) < 0.01:
+        if cc == "IN":
+            return "in_pct"
+        if cc == "AU":
+            return "au_atar"
+        return "ca_pct"
+
+    defaults_by_country = {
+        "FR": "fr_20",
+        "HT": "ht_20",
+        "DE": "de_abitur",
+        "GB": "uk_alevel",
+        "IN": "in_cgpa10" if enrollment_type == "undergraduate" else "in_pct",
+        "CA": "ca_pct",
+        "NG": "ng_waec",
+        "BR": "br_10",
+        "AU": "au_atar",
+        "IB": "ib_45",
+    }
+    return defaults_by_country.get(cc, "us_4")
+
+
+def evaluate_profile_credentials(
+    db: Session,
+    profile: Optional[StudentProfile],
+    destination_country_code: str = "US",
+) -> Dict[str, Any]:
+    """
+    Evaluates all academic enrollments stored on a student's Universal Profile,
+    inferring their native grading systems while preserving dual-view records.
+    """
+    ensure_credentials_seeded(db)
+    dest_cc = (destination_country_code or "US").strip().upper()[:2]
+    if profile is None:
+        return {
+            "has_profile": False,
+            "destination_country_code": dest_cc,
+            "enrollments_evaluated": [],
+            "advisory_disclaimer": CREDENTIAL_ADVISORY_DISCLAIMER,
+        }
+
+    evaluated: List[Dict[str, Any]] = []
+    for enr in list(profile.enrollments or []):
+        if enr.cumulative_gpa is None:
+            continue
+        inst_cc = (
+            enr.institution_country
+            or (enr.institution.country_code if enr.institution else None)
+            or profile.country_of_residence
+            or profile.country_code
+            or "US"
+        ).strip().upper()[:2]
+        inst_name = (
+            enr.institution.official_name
+            if enr.institution
+            else (enr.institution_name_manual or f"{inst_cc} Institution")
+        )
+        scale = float(enr.gpa_scale) if enr.gpa_scale else 4.0
+        sys_key = _infer_grading_system_for_enrollment(inst_cc, scale, enr.enrollment_type)
+        gpa_val = float(enr.cumulative_gpa)
+        acad_lvl = "secondary" if enr.enrollment_type == "secondary" else "undergraduate"
+
+        if sys_key == "us_4":
+            rec_rules = (
+                db.query(CredentialRecognitionRule)
+                .filter(
+                    CredentialRecognitionRule.source_country_code == inst_cc,
+                    CredentialRecognitionRule.destination_country_code == dest_cc,
+                )
+                .all()
+            )
+            quals = (
+                db.query(CountryQualification)
+                .filter(CountryQualification.country_code.in_([inst_cc, dest_cc]))
+                .all()
+            )
+            eval_out = {
+                "conversion": {
+                    "native_record": {
+                        "country_code": inst_cc,
+                        "grading_system_key": "us_4",
+                        "scale_name": f"0.0–{scale:g} Scale",
+                        "raw_input": f"{gpa_val:.2f}",
+                        "classification": "Direct Domestic / 4.0 Scale Record",
+                        "is_passing": gpa_val >= 2.0,
+                        "is_inverted_scale": False,
+                        "academic_level": acad_lvl,
+                    },
+                    "informational_equivalency": {
+                        "us_4_0_point": round(min(4.0, (gpa_val / scale) * 4.0) if scale > 0 else gpa_val, 2),
+                        "us_4_0_low": round(min(4.0, (gpa_val / scale) * 4.0) if scale > 0 else gpa_val, 2),
+                        "us_4_0_high": round(min(4.0, (gpa_val / scale) * 4.0) if scale > 0 else gpa_val, 2),
+                        "us_letter_equivalent": "A" if gpa_val >= 3.7 else "B+" if gpa_val >= 3.3 else "B" if gpa_val >= 3.0 else "C+",
+                        "german_bavarian_equivalent": None,
+                        "methodology": "direct_scale",
+                        "methodology_citation": "Normalized directly from institutional 4.0-compatible GPA record.",
+                        "percentile_note": None,
+                        "confidence_level": "high",
+                    },
+                },
+                "recognition_rules": rec_rules,
+                "country_qualifications": [
+                    {
+                        "country_code": q.country_code,
+                        "qualification_name": q.qualification_name,
+                        "qualification_type": q.qualification_type,
+                        "grading_scale": q.grading_scale,
+                        "passing_threshold": q.passing_threshold,
+                        "equivalency_notes": q.equivalency_notes,
+                        "source_name": q.source_name,
+                        "source_url": q.source_url,
+                    }
+                    for q in quals
+                ],
+                "advisory_disclaimer": CREDENTIAL_ADVISORY_DISCLAIMER,
+            }
+        else:
+            eval_out = evaluate_credential(
+                db,
+                source_country_code=inst_cc,
+                grading_system_key=sys_key,
+                raw_grade=f"{gpa_val:g}",
+                destination_country_code=dest_cc,
+                academic_level=acad_lvl,
+            )
+
+        evaluated.append(
+            {
+                "enrollment_id": enr.id,
+                "institution_name": inst_name,
+                "institution_country": inst_cc,
+                "enrollment_type": enr.enrollment_type,
+                "cumulative_gpa": gpa_val,
+                "gpa_scale": scale,
+                "inferred_system_key": sys_key,
+                "evaluation": eval_out,
+            }
+        )
+
+    return {
+        "has_profile": True,
+        "destination_country_code": dest_cc,
+        "enrollments_evaluated": evaluated,
         "advisory_disclaimer": CREDENTIAL_ADVISORY_DISCLAIMER,
     }

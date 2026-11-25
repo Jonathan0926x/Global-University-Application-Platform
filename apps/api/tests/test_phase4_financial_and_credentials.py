@@ -65,6 +65,7 @@ def test_phase4_verified_scholarships_and_deterministic_eligibility(client):
         json={
             "citizenship_country": "HT",
             "applicant_type": "transfer",
+            "degree_level": "bachelors",
             "gpa_4": 3.75,
             "financial_need_level": "high",
             "household_income_usd": 24000,
@@ -74,16 +75,62 @@ def test_phase4_verified_scholarships_and_deterministic_eligibility(client):
     )
     assert ht_transfer.status_code == 200
     body = ht_transfer.json()
-    assert body["total_scholarships"] >= 15
+    assert body["total_scholarships"] >= 22
     by_title = {r["title"]: r for r in body["results"]}
 
     assert by_title["MIT Need-Blind Admissions & Full-Need Institutional Aid"]["eligibility_status"] == "eligible"
-    assert by_title["Jack Kent Cooke Undergraduate Transfer Scholarship"]["eligibility_status"] == "eligible"
-    assert by_title["OAS Academic Scholarship & Leo S. Rowe Pan American Fund (Americas / Caribbean)"]["eligibility_status"] == "eligible"
+    assert by_title["Yale Need-Blind Worldwide & Full-Need Financial Aid"]["eligibility_status"] == "eligible"
+    assert by_title["Princeton Financial Aid — No-Loan Full-Need Grant"]["eligibility_status"] == "eligible"
+    assert (
+        by_title["OAS Academic Scholarship Program (Upper-Division Transfer / Final 2 Years)"]["eligibility_status"]
+        == "eligible"
+    )
+    # Without US community college enrollment in context, JKC must be conditionally_eligible (missing US CC proof)
+    assert by_title["Jack Kent Cooke Undergraduate Transfer Scholarship"]["eligibility_status"] == "conditionally_eligible"
+    # Graduate-only Fulbright must NOT appear in undergraduate bachelors matching
+    assert "Fulbright Foreign Student Program (Graduate & Research)" not in by_title
 
-    # Must deterministically mark domestic/CA-only & first-year-only scholarships ineligible with clear reasons
+    # With US community college enrollment verified, Jack Kent Cooke evaluates to eligible
+    ht_cc_transfer = client.post(
+        "/api/v1/financial/scholarships/match",
+        json={
+            "citizenship_country": "HT",
+            "applicant_type": "transfer",
+            "degree_level": "bachelors",
+            "us_community_college_enrolled": True,
+            "gpa_4": 3.75,
+            "financial_need_level": "high",
+            "household_income_usd": 24000,
+            "destination_country": "US",
+            "include_ineligible": True,
+        },
+    )
+    assert ht_cc_transfer.status_code == 200
+    cc_by_title = {r["title"]: r for r in ht_cc_transfer.json()["results"]}
+    assert cc_by_title["Jack Kent Cooke Undergraduate Transfer Scholarship"]["eligibility_status"] == "eligible"
+
+    # Masters degree query surfaces Fulbright as eligible
+    ht_masters = client.post(
+        "/api/v1/financial/scholarships/match",
+        json={
+            "citizenship_country": "HT",
+            "applicant_type": "first_year",
+            "degree_level": "masters",
+            "gpa_4": 3.75,
+            "financial_need_level": "high",
+            "destination_country": "US",
+            "include_ineligible": True,
+        },
+    )
+    assert ht_masters.status_code == 200
+    masters_by_title = {r["title"]: r for r in ht_masters.json()["results"]}
+    assert masters_by_title["Fulbright Foreign Student Program (Graduate & Research)"]["eligibility_status"] == "eligible"
+
+    # Must deterministically mark domestic/CA-only & non-US awards ineligible with clear reasons
     assert by_title["UC Blue and Gold Opportunity Plan (UC Berkeley)"]["eligibility_status"] == "ineligible"
     assert len(by_title["UC Blue and Gold Opportunity Plan (UC Berkeley)"]["failed_reasons"]) >= 1
+    assert by_title["UC Blue and Gold Opportunity Plan (UCLA)"]["eligibility_status"] == "ineligible"
+    assert by_title["UC Blue and Gold Opportunity Plan (UC San Diego)"]["eligibility_status"] == "ineligible"
     assert by_title["Federal Pell Grant (US Statutory Need Aid)"]["eligibility_status"] == "ineligible"
     assert by_title["Lester B. Pearson International Scholarship"]["eligibility_status"] == "ineligible"
 
@@ -94,6 +141,7 @@ def test_phase4_verified_scholarships_and_deterministic_eligibility(client):
             "citizenship_country": "US",
             "residency_state": "CA",
             "applicant_type": "first_year",
+            "degree_level": "bachelors",
             "gpa_4": 3.80,
             "financial_need_level": "high",
             "household_income_usd": 55000,
@@ -104,6 +152,8 @@ def test_phase4_verified_scholarships_and_deterministic_eligibility(client):
     assert ca_fy.status_code == 200
     ca_by_title = {r["title"]: r for r in ca_fy.json()["results"]}
     assert ca_by_title["UC Blue and Gold Opportunity Plan (UC Berkeley)"]["eligibility_status"] == "eligible"
+    assert ca_by_title["UC Blue and Gold Opportunity Plan (UCLA)"]["eligibility_status"] == "eligible"
+    assert ca_by_title["UC Blue and Gold Opportunity Plan (UC San Diego)"]["eligibility_status"] == "eligible"
     assert ca_by_title["Federal Pell Grant (US Statutory Need Aid)"]["eligibility_status"] == "eligible"
     assert ca_by_title["UMich Go Blue Guarantee"]["eligibility_status"] == "ineligible"
 
@@ -132,9 +182,13 @@ def test_phase4_net_price_calculator_breakdown_and_offsets(client):
     assert mit_net.status_code == 200
     mit_body = mit_net.json()
     assert mit_body["total_coa_usd"] is not None and mit_body["total_coa_usd"] > 50000
-    assert mit_body["eligible_aid_max_usd"] >= 20000
+    assert mit_body["guaranteed_aid_max_usd"] == 0.0
+    assert mit_body["competitive_aid_max_usd"] >= 20000
+    assert mit_body["competitive_aid_max_usd"] <= mit_body["total_coa_usd"]
+    assert mit_body["eligible_aid_max_usd"] <= mit_body["total_coa_usd"]
     assert mit_body["estimated_net_price_min_usd"] <= mit_body["total_coa_usd"]
     assert any("MIT" in a["title"] for a in mit_body["aid_offsets"])
+    assert not any("Fulbright" in a["title"] for a in mit_body["aid_offsets"])
 
     # 2. International student at UC Berkeley -> non-CA international gets $0 UC Blue & Gold, sees international health warning
     ucb_intl = client.post(
@@ -252,3 +306,83 @@ def test_phase4_international_credential_evaluation_dual_view(client):
         json={"source_country_code": "NG", "grading_system_key": "ng_waec", "raw_grade": "D7", "destination_country_code": "US"},
     ).json()
     assert ng_fail["conversion"]["native_record"]["is_passing"] is False
+
+
+def test_phase4_profile_linked_credential_evaluation(client):
+    uid = uuid.uuid4().hex[:8]
+    # Fresh authenticated user with no StudentProfile yet returns empty profile signal cleanly
+    no_prof_headers = {"Authorization": f"Bearer mock_noprofile_{uid}@uniglobe.edu"}
+    no_prof = client.get("/api/v1/credentials/profile-evaluate?destination_country=US", headers=no_prof_headers)
+    assert no_prof.status_code == 200
+    assert no_prof.json()["has_profile"] is False
+    assert no_prof.json()["enrollments_evaluated"] == []
+
+    headers = {"Authorization": f"Bearer mock_p4_cred_{uid}@uniglobe.edu"}
+
+    prof_res = client.post(
+        "/api/v1/profile",
+        headers=headers,
+        json={
+            "first_name": "Nadine",
+            "last_name": "Pierre",
+            "country_code": "HT",
+            "country_of_residence": "US",
+            "applicant_type": "transfer",
+            "intended_major": "Computer Science",
+            "intended_degree_level": "bachelors",
+        },
+    )
+    assert prof_res.status_code == 201
+
+    enrollments_payload = [
+        {
+            "institution_name_manual": "Institution Saint-Louis de Gonzague",
+            "institution_country": "HT",
+            "enrollment_type": "high_school",
+            "enrollment_status": "graduated",
+            "cumulative_gpa": 15.5,
+            "gpa_scale": 20.0,
+        },
+        {
+            "institution_name_manual": "Université Paris-Saclay",
+            "institution_country": "FR",
+            "enrollment_type": "university_undergraduate",
+            "enrollment_status": "attended",
+            "cumulative_gpa": 14.5,
+            "gpa_scale": 20.0,
+        },
+        {
+            "institution_name_manual": "De Anza College",
+            "institution_country": "US",
+            "enrollment_type": "community_college",
+            "enrollment_status": "attending",
+            "cumulative_gpa": 3.85,
+            "gpa_scale": 4.0,
+        },
+    ]
+    for enr in enrollments_payload:
+        enr_res = client.post("/api/v1/profile/enrollments", headers=headers, json=enr)
+        assert enr_res.status_code == 201
+
+    eval_res = client.get("/api/v1/credentials/profile-evaluate?destination_country=US", headers=headers)
+    assert eval_res.status_code == 200
+    body = eval_res.json()
+    assert body["has_profile"] is True
+    assert body["destination_country_code"] == "US"
+    assert len(body["enrollments_evaluated"]) == 3
+    by_country = {item["institution_country"]: item for item in body["enrollments_evaluated"]}
+    assert by_country["HT"]["inferred_system_key"] == "ht_20"
+    assert by_country["FR"]["inferred_system_key"] == "fr_20"
+    assert by_country["FR"]["evaluation"]["conversion"]["native_record"]["classification"] == "Mention Bien"
+    assert by_country["US"]["inferred_system_key"] == "us_4"
+    assert "NOT an official" in body["advisory_disclaimer"]
+
+    # Profile's US community college enrollment also automatically unlocks JKC eligibility on /financial/scholarships/match
+    sch_res = client.post(
+        "/api/v1/financial/scholarships/match",
+        headers=headers,
+        json={"financial_need_level": "high", "household_income_usd": 22000, "destination_country": "US"},
+    )
+    assert sch_res.status_code == 200
+    sch_by_title = {r["title"]: r for r in sch_res.json()["results"]}
+    assert sch_by_title["Jack Kent Cooke Undergraduate Transfer Scholarship"]["eligibility_status"] == "eligible"

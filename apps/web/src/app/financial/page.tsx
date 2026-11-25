@@ -37,6 +37,7 @@ export default function FinancialIntelligencePage() {
   const [citizenship, setCitizenship] = useState("HT");
   const [residencyState, setResidencyState] = useState("");
   const [applicantType, setApplicantType] = useState<"first_year" | "transfer">("first_year");
+  const [degreeLevel, setDegreeLevel] = useState<"bachelors" | "masters" | "doctoral">("bachelors");
   const [gpa4, setGpa4] = useState("3.85");
   const [needLevel, setNeedLevel] = useState<"high" | "moderate" | "low">("high");
   const [householdIncome, setHouseholdIncome] = useState("35000");
@@ -68,6 +69,7 @@ export default function FinancialIntelligencePage() {
         citizenship_country: citizenship || undefined,
         residency_state: residencyState || undefined,
         applicant_type: applicantType,
+        degree_level: degreeLevel,
         gpa_4: Number.isNaN(parsedGpa) ? undefined : parsedGpa,
         financial_need_level: needLevel,
         household_income_usd: Number.isNaN(parsedInc) ? undefined : parsedInc,
@@ -80,7 +82,7 @@ export default function FinancialIntelligencePage() {
     } finally {
       setSchLoading(false);
     }
-  }, [citizenship, residencyState, applicantType, gpa4, needLevel, householdIncome, destinationCountry, showIneligible]);
+  }, [citizenship, residencyState, applicantType, degreeLevel, gpa4, needLevel, householdIncome, destinationCountry, showIneligible]);
 
   const runNetCalculator = useCallback(
     async (instIdOverride?: string) => {
@@ -321,15 +323,30 @@ export default function FinancialIntelligencePage() {
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             {activeTab === "scholarships" ? (
               <>
-                <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
-                  <input
-                    type="checkbox"
-                    checked={showIneligible}
-                    onChange={(e) => setShowIneligible(e.target.checked)}
-                    className="rounded border-zinc-300"
-                  />
-                  Show ineligible awards with rule failure reasons
-                </label>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
+                    <span>{t("fin.degree_level", "Degree Level")}:</span>
+                    <select
+                      id="fin-degree-level"
+                      value={degreeLevel}
+                      onChange={(e) => setDegreeLevel(e.target.value as "bachelors" | "masters" | "doctoral")}
+                      className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-900"
+                    >
+                      <option value="bachelors">{t("fin.degree_bachelors", "Bachelor's (Undergraduate)")}</option>
+                      <option value="masters">{t("fin.degree_masters", "Master's (Graduate)")}</option>
+                      <option value="doctoral">{t("fin.degree_doctoral", "Doctoral / PhD")}</option>
+                    </select>
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
+                    <input
+                      type="checkbox"
+                      checked={showIneligible}
+                      onChange={(e) => setShowIneligible(e.target.checked)}
+                      className="rounded border-zinc-300"
+                    />
+                    Show ineligible awards with rule failure reasons
+                  </label>
+                </div>
                 <button
                   type="button"
                   onClick={runScholarshipMatch}

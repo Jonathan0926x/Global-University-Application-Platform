@@ -278,9 +278,9 @@
   - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`
   - `apps/api/app/api/v1/financial.py`, `apps/api/app/api/v1/credentials.py`
   - `apps/web/src/app/financial/page.tsx`, `apps/web/src/app/credentials/page.tsx`
-* **Acceptance Criteria:** **16** verified US & global scholarships with deterministic `ScholarshipEligibilityRule` matching (`eligible`, `conditionally_eligible`, `ineligible` with rule-level provenance); itemized Direct/Indirect COA & Net Price Calculator distinguishing guaranteed statutory vs. competitive aid offsets and international health insurance advisories; Dual-View International Credential Evaluator (`11` grading systems incl. FR/HT 0–20, DE Bavarian inverted 1.0–6.0, UK A-Levels, IN % & CGPA, IB /45, NG WAEC, BR, AU + `12` recognition/gatekeeping corridors); `58` backend `pytest` + `12` frontend tests + `16/16` Next.js routes.
+* **Acceptance Criteria:** **27** total verified US & global scholarship programs in PostgreSQL (**26** evaluated under undergraduate `bachelors` plus graduate-only `Fulbright` filtered by `degree_level`), audited with deterministic `ScholarshipEligibilityRule` + `enrollment_context` US community college matching and conservative COA-bounded Net Price offsets (`guaranteed_aid` vs `competitive_aid`, distinguishing statutory/guaranteed policies from conditional need aid); Dual-View International Credential Evaluator (`11` grading scales incl. FR/HT 0–20, DE Bavarian inverted 1.0–6.0, UK A-Levels, IN % & CGPA, IB /45, NG WAEC, BR, AU + `12` recognition/gatekeeping corridors) connected directly to `StudentProfile` `EnrollmentRecord`s via `GET /api/v1/credentials/profile-evaluate`; **59** backend `pytest` + **12** frontend tests + **16/16** Next.js routes + live browser QA.
 * **Last Verified Date:** November 25, 2026
-* **Next Action:** Expand institution-specific scholarship coverage and integrate student-profile credential auto-evaluation workflows.
+* **Next Action:** Deploy outbound worker firewall (`infra/firewall/`) as a prerequisite before production launch, and proceed to Phase 5 pilot preparation (Clerk production JWT verification).
 
 ### 18. Security & Privacy Hardening
 * **Status:** ✅ **Tested** (Audit Retention Triggers, DNS Pinning & Outbound Firewall Configs)

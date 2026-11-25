@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Added & Audited — Phase 4 Scholarship Audit, Institutional Expansion & Profile-Linked Credentials
+- **Scholarship Rule & Net Price Audit (`phase4_seed.py`, `financial_engine.py`, `schemas/phase4.py`):**
+  - Audited previously seeded awards against cited sources: restricted `Fulbright Foreign Student Program (Graduate & Research)` to `masters`/`doctoral` (`degree_level`), excluding it from undergraduate Net Price calculations; enforced `requires_us_community_college` (`enrollment_context`) for `Jack Kent Cooke Undergraduate Transfer Scholarship`; marked MIT full-need aid as non-statutory (`is_guaranteed_statutory=False`, conservative income-aware scaling capped at Total COA); replaced bundled UCLA entry with guaranteed `UC Blue and Gold Opportunity Plan (UCLA)`; narrowed OAS strictly to upper-division transfer (`applicant_type="transfer"`); separated TUM Deutschlandstipendium living stipend (`covers_tuition=False`) from non-EU tuition disclosure; and fixed institution linkage names (`University College London`, `Ludwig-Maximilians-Universität München`, `The University of Melbourne`).
+  - Expanded verified institutional coverage across **27** total scholarship records in PostgreSQL (adding Yale, Princeton, UC San Diego, UBC, Cambridge Trust, Imperial College London, Heidelberg/Baden-Württemberg, and Université Paris-Saclay).
+- **Profile-Linked Credential Evaluation & Degree Filter (`/credentials`, `/financial`):**
+  - Added `GET /api/v1/credentials/profile-evaluate` (`evaluate_profile_credentials` in `credential_engine.py`) to automatically infer native grading scales and run Dual-View + gatekeeping evaluations across authenticated student `EnrollmentRecord`s, rendered on `/credentials` across all 10 languages including Arabic RTL (`ar-SA`).
+  - Exposed `degree_level` selector (`bachelors`, `masters`, `doctoral`) in `/financial` (`Scholarship Eligibility Matcher`).
+- **Verification:** **59 / 59** backend `pytest` (`test_phase4_financial_and_credentials.py`), **12 / 12** frontend unit tests, **16 / 16** Next.js build routes, and live browser QA (`0` console errors, `0` HTTP `>= 400`, Arabic RTL `dir="rtl"` zero horizontal overflow). **Prerequisite before production launch:** deploy outbound API worker firewall rules (`infra/firewall/`).
+
 ### Added — Outbound Worker Firewall & Phase 4 Foundation (Scholarships, Net Price & Credentials)
 - **Production API Worker Outbound Firewall (`infra/firewall/`):**
   - Added Linux `iptables`/`ip6tables` defense-in-depth egress rules (`egress-iptables.sh`) and Kubernetes `NetworkPolicy` (`k8s-api-worker-egress-networkpolicy.yaml`) plus hardened compose network segmentation (`docker-compose.prod.yml`) blocking RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback, CGNAT, link-local, IPv6 ULA/link-local/mapped ranges, and cloud metadata `169.254.169.254`.

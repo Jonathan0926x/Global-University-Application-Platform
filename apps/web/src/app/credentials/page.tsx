@@ -2,11 +2,13 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Award, CheckCircle2, Coins, ExternalLink, FileCheck2, Globe2, Info, ShieldAlert } from "lucide-react";
+import { Award, CheckCircle2, Coins, ExternalLink, FileCheck2, Globe2, Info, ShieldAlert, UserCheck } from "lucide-react";
 import {
   CredentialEvaluationResponse,
   GradingSystemOption,
+  ProfileCredentialEvaluationResponse,
   evaluateInternationalCredential,
+  evaluateProfileCredentials,
   fetchGradingSystems,
 } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
@@ -19,6 +21,8 @@ export default function CredentialsEvaluationPage() {
   const [destCountry, setDestCountry] = useState("US");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CredentialEvaluationResponse | null>(null);
+  const [profileEval, setProfileEval] = useState<ProfileCredentialEvaluationResponse | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedSystem = systems.find((s) => s.grading_system_key === systemKey);
@@ -68,6 +72,24 @@ export default function CredentialsEvaluationPage() {
       runEvaluation();
     }
   }, [systems, result, runEvaluation]);
+
+  useEffect(() => {
+    let active = true;
+    setProfileLoading(true);
+    evaluateProfileCredentials(destCountry)
+      .then((res) => {
+        if (active) setProfileEval(res);
+      })
+      .catch(() => {
+        if (active) setProfileEval(null);
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [destCountry]);
 
   return (
     <div dir={direction} lang={language.tag} className="min-h-screen bg-[#fafafc] text-zinc-900 pb-20">
@@ -338,6 +360,91 @@ export default function CredentialsEvaluationPage() {
             </div>
           </>
         )}
+
+        {/* Profile-Linked Enrollment Credential Evaluations */}
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-extrabold text-zinc-900 flex items-center gap-1.5">
+                <UserCheck className="h-4 w-4 text-indigo-600" aria-hidden="true" />
+                {t("cred.profile_section_title", "Evaluated Academic History From Your Student Profile")}
+              </h2>
+              <p className="text-xs text-zinc-600 mt-0.5">
+                {t(
+                  "cred.profile_section_subtitle",
+                  "Enrollments saved in your Universal Profile are evaluated automatically in Dual-View for the selected destination country."
+                )}
+              </p>
+            </div>
+            <Link
+              href="/profile"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-bold text-zinc-800 hover:bg-zinc-100 shrink-0"
+            >
+              {t("cred.profile_manage_link", "Manage Student Profile")}
+            </Link>
+          </div>
+
+          {profileLoading ? (
+            <div className="text-xs text-zinc-500">Loading profile enrollments...</div>
+          ) : profileEval && profileEval.enrollments_evaluated.length > 0 ? (
+            <div className="space-y-3">
+              {profileEval.enrollments_evaluated.map((item) => (
+                <div
+                  key={item.enrollment_id}
+                  className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-bold text-sm text-zinc-900">
+                      {item.institution_name} ({item.institution_country})
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full bg-zinc-200/80 px-2.5 py-0.5 text-[10px] font-bold uppercase text-zinc-800">
+                        {item.enrollment_type.replace(/_/g, " ")}
+                      </span>
+                      <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 font-mono text-[10px] font-bold text-indigo-900">
+                        {item.inferred_system_key}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                      <div className="text-[10px] font-bold uppercase text-zinc-500">Original Native Record</div>
+                      <div className="mt-1 font-bold text-zinc-900">
+                        <span dir="ltr">{item.evaluation.conversion.native_record.raw_input}</span> —{" "}
+                        {item.evaluation.conversion.native_record.classification}
+                      </div>
+                      <div className="text-[11px] text-zinc-600 mt-0.5">
+                        {item.evaluation.conversion.native_record.scale_name}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+                      <div className="text-[10px] font-bold uppercase text-indigo-800">
+                        Approximate Benchmark ({profileEval.destination_country_code})
+                      </div>
+                      <div dir="ltr" className="mt-1 font-bold text-indigo-950">
+                        {item.evaluation.conversion.informational_equivalency.us_4_0_point !== null &&
+                        item.evaluation.conversion.informational_equivalency.us_4_0_point !== undefined
+                          ? `${item.evaluation.conversion.informational_equivalency.us_4_0_point.toFixed(2)} / 4.0 (${item.evaluation.conversion.informational_equivalency.us_letter_equivalent})`
+                          : "Benchmark unavailable"}
+                      </div>
+                      <div className="text-[11px] text-indigo-900 mt-0.5">
+                        {item.evaluation.recognition_rules.length} recognition rule(s) matched for{" "}
+                        {item.institution_country} → {profileEval.destination_country_code}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 text-xs text-zinc-600">
+              {t(
+                "cred.profile_empty",
+                "No student profile enrollments found yet. Add secondary school or college GPA records in your profile for personalized automatic evaluation."
+              )}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
