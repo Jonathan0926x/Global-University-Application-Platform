@@ -33,6 +33,7 @@ def list_verified_scholarships(
     country: Optional[str] = Query(None),
     funding_type: Optional[str] = Query(None),
     covers_international: Optional[bool] = Query(None),
+    degree_level: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -60,11 +61,28 @@ def list_verified_scholarships(
         )
 
     rows = qry.order_by(ScholarshipProgram.is_guaranteed_statutory.desc(), ScholarshipProgram.title.asc()).limit(limit).all()
+    if degree_level:
+        dl = degree_level.strip().lower()
+        rows = [r for r in rows if dl in [str(x).lower() for x in (r.degree_levels or [])]]
     neutral_ctx = {
         "citizenships": [],
         "primary_citizenship": None,
+        "dual_citizenship": None,
+        "country_of_residence": None,
         "residency_state": None,
+        "residency_status": None,
         "applicant_type": None,
+        "degree_level": degree_level.strip().lower() if degree_level else None,
+        "date_of_birth": None,
+        "field_of_study": None,
+        "qualifications": [],
+        "exam_scores": {},
+        "language_proficiencies": {},
+        "has_us_community_college": False,
+        "has_enrollment_history": False,
+        "currently_enrolled": None,
+        "final_year_undergraduate": None,
+        "is_full_time": None,
         "gpa_4": None,
         "gpa_display": "Not Reported",
         "financial_need_level": None,

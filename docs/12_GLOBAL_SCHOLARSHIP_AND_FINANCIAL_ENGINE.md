@@ -224,3 +224,35 @@ graph TD
   - Scholarship Award Amounts: **120 days** (`approaching_window = 21 days`)
   - Scholarship Eligibility Rules: **180 days** (`approaching_window = 30 days`)
 - **Historical Retention:** Expired awards remain in PostgreSQL (`freshness_status = 'expired'`, `is_current = FALSE`) and are never deleted or recommended as active verified aid. Legacy rows lacking explicit expiry or reviewer metadata default honestly to `source_type = 'unknown'` / `freshness_status = 'requires_manual_review'` rather than fabricated dates or reviewers.
+
+---
+
+## 8. Step 2 Eligibility Precedence & Component Net-Price Accounting (`financial_engine.py`)
+
+### Supported Rule Dimensions (`_eval_rule`)
+Evaluates 18 rule types against verified `StudentProfile`, `CitizenshipRecord`, `EnrollmentRecord`, `StandardizedTest`, and explicit request inputs without cross-inferring citizenship from residence, residence from citizenship, degree level from age, or transfer status from institution name:
+`citizenship`, `excluded_citizenships`, `dual_citizenship`, `country_of_residence`, `residency_state`, `destination_country`, `degree_level`, `applicant_type`, `enrollment_context`, `required_qualifications`, `language_proficiency`, `required_exams` (absent score -> `insufficient_information`, never 0), `age_limit`, `field_of_study`, `geographic_region`, `minimum_gpa`, `financial_need_level`, and separately tracked `renewal` criteria (Year 2+ renewal does not fail initial eligibility), with any unknown/unsupported dimension defaulting to `requires_manual_review`.
+
+### Five Canonical Outcomes & Deterministic Precedence
+1. `ineligible` (highest precedence — one decisive failure overrides missing/conditional criteria)
+2. `requires_manual_review` (ambiguous, conflicting, or unsupported rule/freshness terms)
+3. `insufficient_information` (required student evidence missing or unreported)
+4. `conditionally_eligible` (known criteria satisfied; future condition remains)
+5. `eligible` (all mandatory criteria verified cleanly)
+
+### Component Allocation, Currency & Duration Rules (`calculate_net_price`)
+- **Permitted Expense Scoping:** Tuition-only awards reduce `tuition` (`mandatory_fees` only when `covers_fees=True`); living stipends reduce `room_board`, `books_supplies`, `transportation`, and `personal_expenses` (never tuition/fees); travel awards reduce `transportation` only. Unknown scope (`no covers_*` flags), missing dollar amounts, or non-matching currencies (`currency != target_currency`) move to `unallocated_potential_aid` (`$0` net discount; native currency amounts preserved intact without invented exchange rates).
+- **Non-Over-Crediting & Bounds:** Each award decrements remaining category balances so overlapping awards never double-count or produce negative category or total net prices (`>= 0`).
+- **Freshness & Duration Safety:** `expired`, `source_unavailable`, `conflicting_information`, and `requires_manual_review` awards never reduce guaranteed or verified Net Price (routed transparently into `review_required_aid`). Multi-year projections (`Years 2+`) repeat only `is_renewable=True` awards with documented `funding_duration_years > 1` or `max_funding_periods > 1`; one-time and unknown-duration awards apply to Year 1 only.
+
+### Illustrative Distinction Examples
+| Distinction | Example Behavior |
+|---|---|
+| **Eligible vs. Conditionally Eligible** | Haitan student with `3.85` GPA & `$25k` income passes all mandatory verified criteria (`eligible`), whereas a student who meets known rules but must submit final matriculation verification (`is_future_condition=True`) receives `conditionally_eligible`. |
+| **Insufficient Info vs. Ineligible** | Missing an SAT score produces `insufficient_information` (never graded as `0`), whereas a reported `1200` against a `1350` floor produces `ineligible`. |
+| **Verified Tuition Aid vs. Unallocated Potential Aid** | A `$30k` `current` USD tuition-only award offsets up to `$20k` published tuition (`$0` remaining tuition, housing untouched); a `4,000 EUR` grant or unknown-scope award sits in `unallocated_potential_aid` (`$0` USD reduction). |
+| **Original COA vs. Estimated Net Price** | Published direct + indirect COA (`$40,000`) minus component-verified applicable aid (`$20,000`) equals estimated Net Price (`$20,000`), displayed explicitly with a non-guarantee advisory. |
+
+### Known Limitations
+- Institutional `InstitutionCost` rows from federal IPEDS data combine housing and meals (`room_board`), so meal-only and housing-only caps share that published pool ceiling until institution-split housing/dining schedules are ingested.
+- Backend API-generated category labels, warning prose, and rule detail strings remain English when `ar-SA` is active, whereas all UI headings, form controls, status/freshness badges, tables, and funding sections are localized in Arabic RTL.

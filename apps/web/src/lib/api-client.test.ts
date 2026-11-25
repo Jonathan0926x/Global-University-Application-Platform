@@ -144,6 +144,12 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
   assert.equal(translate("nav.financial", "ar-SA"), "المنح والتكلفة الصافية");
   assert.equal(translate("nav.credentials", "ht-HT"), "Ekivalans Diplòm");
   assert.equal(translate("cred.title", "fr-FR"), "Intelligence des Diplômes Internationaux & Équivalences");
+  // Step 2 secondary labels & statuses localized cleanly in Arabic RTL (zero English leftovers)
+  assert.equal(translate("fin.stat_insufficient", "ar-SA"), "معلومات غير كافية");
+  assert.equal(translate("fin.stat_review", "ar-SA"), "يتطلب مراجعة يدوية");
+  assert.equal(translate("fin.net_coa", "ar-SA"), "إجمالي تكلفة الحضور");
+  assert.equal(translate("fin.net_est_price", "ar-SA"), "صافي التكلفة السنوية التقديرية (غير مضمونة)");
+  assert.equal(translate("fin.fresh_expired", "ar-SA"), "منتهي الصلاحية");
 });
 
 

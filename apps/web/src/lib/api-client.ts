@@ -1707,7 +1707,9 @@ export async function reviewEvidenceItem(
 export interface ScholarshipRuleEvaluation {
   dimension: string;
   human_label: string;
-  status: "pass" | "fail" | "missing_data" | string;
+  status: string;
+  outcome?: string;
+  category?: string;
   detail: string;
   is_mandatory: boolean;
 }
@@ -1725,6 +1727,10 @@ export interface ScholarshipEligibilityResult {
   covers_international: boolean;
   award_amount_min_usd?: number | null;
   award_amount_max_usd?: number | null;
+  award_fixed_usd?: number | null;
+  award_currency?: string;
+  native_amount_min?: number | null;
+  native_amount_max?: number | null;
   max_award_info?: string | null;
   eligibility_summary: string;
   covers_tuition: boolean;
@@ -1732,8 +1738,12 @@ export interface ScholarshipEligibilityResult {
   covers_housing: boolean;
   covers_meals: boolean;
   covers_health_insurance: boolean;
+  covers_travel?: boolean;
   provides_living_stipend: boolean;
   is_renewable: boolean;
+  funding_duration_years?: number | null;
+  max_funding_periods?: number | null;
+  renewal_conditions?: string | null;
   is_guaranteed_statutory: boolean;
   application_deadline_date?: string | null;
   is_deadline_rolling: boolean;
@@ -1742,11 +1752,27 @@ export interface ScholarshipEligibilityResult {
   eligible_citizenships: string[];
   eligible_residency_states: string[];
   eligible_destination_countries: string[];
-  eligibility_status: "eligible" | "conditionally_eligible" | "ineligible" | string;
+  degree_levels?: string[];
+  eligibility_status:
+    | "eligible"
+    | "conditionally_eligible"
+    | "insufficient_information"
+    | "requires_manual_review"
+    | "ineligible"
+    | string;
+  funding_bucket?: string;
   match_score: number;
   rule_evaluations: ScholarshipRuleEvaluation[];
+  renewal_evaluations?: ScholarshipRuleEvaluation[];
   missing_requirements: string[];
+  conditional_requirements?: string[];
+  manual_review_reasons?: string[];
   failed_reasons: string[];
+  funding_scope?: string[];
+  duration_renewal_summary?: string | null;
+  freshness_status?: string;
+  freshness_warnings?: string[];
+  verification_expires_at?: string | null;
   source_name: string;
   source_url: string;
   verified_at: string;
@@ -1757,7 +1783,10 @@ export interface ScholarshipMatchResponse {
   total_scholarships: number;
   eligible_count: number;
   conditionally_eligible_count: number;
+  insufficient_information_count?: number;
+  requires_manual_review_count?: number;
   ineligible_count: number;
+  aggregation_precedence?: string[];
   results: ScholarshipEligibilityResult[];
   disclaimer: string;
 }
@@ -1767,18 +1796,43 @@ export interface CostLineItem {
   label: string;
   category: string;
   amount_usd?: number | null;
+  currency?: string;
   is_published: boolean;
   notes?: string | null;
+}
+
+export interface CategoryAllocationRow {
+  category_key: string;
+  label: string;
+  cost_group: string;
+  original_cost_usd?: number | null;
+  applied_verified_min_usd: number;
+  applied_verified_max_usd: number;
+  applied_conditional_max_usd: number;
+  remaining_cost_min_usd?: number | null;
+  remaining_cost_max_usd?: number | null;
 }
 
 export interface AidOffsetItem {
   scholarship_id: string;
   title: string;
   provider_type: string;
+  award_type?: string;
   eligibility_status: string;
+  funding_bucket?: string;
+  freshness_status?: string;
   is_guaranteed_statutory: boolean;
+  award_currency?: string;
+  native_amount_min?: number | null;
+  native_amount_max?: number | null;
+  funding_scope?: string[];
+  allocated_categories?: Record<string, number>;
   estimated_min_usd: number;
   estimated_max_usd: number;
+  funding_duration_years?: number | null;
+  is_renewable?: boolean;
+  renewal_conditions?: string | null;
+  reason?: string | null;
   source_url: string;
 }
 
@@ -1789,10 +1843,12 @@ export interface NetPriceCalculationResponse {
   residency_classification: string;
   housing_preference: string;
   applicant_type: string;
+  degree_level?: string;
   academic_year?: string | null;
   currency: string;
   direct_billable_items: CostLineItem[];
   indirect_living_items: CostLineItem[];
+  category_breakdown?: CategoryAllocationRow[];
   gross_direct_cost_usd?: number | null;
   gross_indirect_cost_usd?: number | null;
   total_coa_usd?: number | null;
@@ -1811,6 +1867,11 @@ export interface NetPriceCalculationResponse {
   budget_gap_max_usd?: number | null;
   affordability_status: string;
   aid_offsets: AidOffsetItem[];
+  verified_applicable_aid?: AidOffsetItem[];
+  conditional_aid?: AidOffsetItem[];
+  insufficient_info_aid?: AidOffsetItem[];
+  review_required_aid?: AidOffsetItem[];
+  unallocated_potential_aid?: AidOffsetItem[];
   data_confidence: string;
   warnings: string[];
   sources: Array<{ name?: string | null; url?: string | null }>;
@@ -1904,6 +1965,8 @@ export interface ProfileCredentialEvaluationResponse {
 
 export async function matchScholarships(payload: {
   citizenship_country?: string;
+  country_of_residence?: string;
+  dual_citizenship?: boolean;
   residency_state?: string;
   applicant_type?: string;
   degree_level?: string;
@@ -1928,7 +1991,9 @@ export async function calculateNetPrice(payload: {
   residency_classification: string;
   housing_preference: string;
   applicant_type: string;
+  degree_level?: string;
   citizenship_country?: string;
+  country_of_residence?: string;
   residency_state?: string;
   gpa_4?: number;
   financial_need_level?: string;

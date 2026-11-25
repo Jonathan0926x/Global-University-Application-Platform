@@ -7,7 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class ScholarshipRuleEvaluationSchema(BaseModel):
     dimension: str
     human_label: str
-    status: str  # pass | fail | missing_data
+    status: str  # eligible | conditionally_eligible | ineligible | insufficient_information | requires_manual_review (plus legacy pass/fail alias in category note)
+    outcome: str = "eligible"
+    category: str = "eligibility"  # eligibility | renewal
     detail: str
     is_mandatory: bool = True
 
@@ -42,11 +44,20 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     eligible_citizenships: List[str] = []
     eligible_residency_states: List[str] = []
     eligible_destination_countries: List[str] = []
-    eligibility_status: str  # eligible | conditionally_eligible | ineligible
+    degree_levels: List[str] = []
+    eligibility_status: str  # eligible | conditionally_eligible | ineligible | insufficient_information | requires_manual_review
+    funding_bucket: str = "review_required"  # verified_applicable | conditional | potential_insufficient_info | review_required | ineligible
     match_score: int
     rule_evaluations: List[ScholarshipRuleEvaluationSchema] = []
+    renewal_evaluations: List[ScholarshipRuleEvaluationSchema] = []
     missing_requirements: List[str] = []
+    conditional_requirements: List[str] = []
+    manual_review_reasons: List[str] = []
     failed_reasons: List[str] = []
+    student_evidence_used: Dict[str, Any] = {}
+    funding_scope: List[str] = []
+    duration_renewal_summary: Optional[str] = None
+    freshness_warnings: List[str] = []
     source_name: str
     source_url: str
     verified_at: datetime
@@ -73,15 +84,26 @@ class ScholarshipEligibilityResultSchema(BaseModel):
 
 class ScholarshipMatchRequest(BaseModel):
     citizenship_country: Optional[str] = None
+    citizenships: Optional[List[str]] = None
+    dual_citizenship: Optional[bool] = None
+    country_of_residence: Optional[str] = None
     residency_state: Optional[str] = None
     applicant_type: Optional[str] = None  # first_year | transfer | both
-    degree_level: str = "bachelors"  # bachelors | masters | doctoral
+    degree_level: Optional[str] = "bachelors"  # bachelors | masters | doctoral | research | exchange
+    date_of_birth: Optional[date] = None
+    field_of_study: Optional[str] = None
+    qualifications: Optional[List[str]] = None
+    exam_scores: Optional[Dict[str, Any]] = None
+    language_proficiencies: Optional[Dict[str, Any]] = None
     gpa_4: Optional[float] = Field(default=None, ge=0.0, le=4.0)
     financial_need_level: Optional[str] = None  # high | moderate | low
     household_income_usd: Optional[float] = Field(default=None, ge=0.0)
     destination_country: Optional[str] = None
     institution_id: Optional[UUID] = None
     us_community_college_enrolled: Optional[bool] = None
+    currently_enrolled: Optional[bool] = None
+    final_year_undergraduate: Optional[bool] = None
+    is_full_time: Optional[bool] = None
     include_ineligible: bool = True
 
 
@@ -90,7 +112,16 @@ class ScholarshipMatchResponse(BaseModel):
     total_scholarships: int
     eligible_count: int
     conditionally_eligible_count: int
+    insufficient_information_count: int = 0
+    requires_manual_review_count: int = 0
     ineligible_count: int
+    aggregation_precedence: List[str] = [
+        "ineligible",
+        "requires_manual_review",
+        "insufficient_information",
+        "conditionally_eligible",
+        "eligible",
+    ]
     results: List[ScholarshipEligibilityResultSchema]
     disclaimer: str
 
@@ -100,18 +131,43 @@ class CostLineItemSchema(BaseModel):
     label: str
     category: str  # direct_billable | indirect_living
     amount_usd: Optional[float] = None
+    currency: str = "USD"
     is_published: bool = True
     notes: Optional[str] = None
+
+
+class CategoryAllocationRowSchema(BaseModel):
+    category_key: str
+    label: str
+    cost_group: str  # direct_billable | indirect_living
+    original_cost_usd: Optional[float] = None
+    applied_verified_min_usd: float = 0.0
+    applied_verified_max_usd: float = 0.0
+    applied_conditional_max_usd: float = 0.0
+    remaining_cost_min_usd: Optional[float] = None
+    remaining_cost_max_usd: Optional[float] = None
 
 
 class AidOffsetItemSchema(BaseModel):
     scholarship_id: UUID
     title: str
     provider_type: str
+    award_type: str = "fixed_amount"
     eligibility_status: str
+    funding_bucket: str = "verified_applicable"  # verified_applicable | conditional | potential | review_required
+    freshness_status: str = "requires_manual_review"
     is_guaranteed_statutory: bool
-    estimated_min_usd: float
-    estimated_max_usd: float
+    award_currency: str = "USD"
+    native_amount_min: Optional[float] = None
+    native_amount_max: Optional[float] = None
+    funding_scope: List[str] = []
+    allocated_categories: Dict[str, float] = {}
+    estimated_min_usd: float = 0.0
+    estimated_max_usd: float = 0.0
+    funding_duration_years: Optional[float] = None
+    is_renewable: bool = False
+    renewal_conditions: Optional[str] = None
+    reason: Optional[str] = None
     source_url: str
 
 
@@ -120,8 +176,13 @@ class NetPriceCalculateRequest(BaseModel):
     residency_classification: str = "international"  # in_state | out_of_state | international
     housing_preference: str = "on_campus"  # on_campus | off_campus | with_family
     applicant_type: str = "first_year"  # first_year | transfer
+    degree_level: Optional[str] = "bachelors"  # bachelors | masters | doctoral
     citizenship_country: Optional[str] = None
+    country_of_residence: Optional[str] = None
+    dual_citizenship: Optional[bool] = None
     residency_state: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    field_of_study: Optional[str] = None
     gpa_4: Optional[float] = Field(default=None, ge=0.0, le=4.0)
     financial_need_level: Optional[str] = None  # high | moderate | low
     household_income_usd: Optional[float] = Field(default=None, ge=0.0)
@@ -137,10 +198,12 @@ class NetPriceCalculationResponse(BaseModel):
     residency_classification: str
     housing_preference: str
     applicant_type: str
+    degree_level: str = "bachelors"
     academic_year: Optional[str] = None
     currency: str = "USD"
     direct_billable_items: List[CostLineItemSchema] = []
     indirect_living_items: List[CostLineItemSchema] = []
+    category_breakdown: List[CategoryAllocationRowSchema] = []
     gross_direct_cost_usd: Optional[float] = None
     gross_indirect_cost_usd: Optional[float] = None
     total_coa_usd: Optional[float] = None
@@ -159,6 +222,11 @@ class NetPriceCalculationResponse(BaseModel):
     budget_gap_max_usd: Optional[float] = None
     affordability_status: str  # within_budget | reachable_with_competitive_aid | exceeds_budget | missing_cost_data
     aid_offsets: List[AidOffsetItemSchema] = []
+    verified_applicable_aid: List[AidOffsetItemSchema] = []
+    conditional_aid: List[AidOffsetItemSchema] = []
+    insufficient_info_aid: List[AidOffsetItemSchema] = []
+    review_required_aid: List[AidOffsetItemSchema] = []
+    unallocated_potential_aid: List[AidOffsetItemSchema] = []
     data_confidence: str
     warnings: List[str] = []
     sources: List[Dict[str, Optional[str]]] = []

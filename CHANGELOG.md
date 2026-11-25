@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Fixed & Hardened — Step 2: Scholarship Eligibility Engine & Net Price Accounting Accuracy
+- **Comprehensive Deterministic Eligibility Rule Evaluators (`financial_engine.py`, `schemas/phase4.py`, `api/v1/financial.py`):**
+  - Extended `_eval_rule` across **18** rule dimensions (`excluded_citizenships`, `dual_citizenship`, `country_of_residence`, `degree_level`, `enrollment_context` incl. `currently_enrolled`/`final_year_undergraduate`/`full_time`/`community_college`/`first_year`/`transfer`/`graduate`, `required_qualifications`, `language_proficiency`, `required_exams`, `age_limit`, `field_of_study`, `geographic_region`, and separated `renewal` criteria, alongside `citizenship`, `residency_state`, `destination_country`, `applicant_type`, `minimum_gpa`, `financial_need_level`).
+  - Enforced strict evidence boundaries: never infers citizenship from residence, residence from citizenship, degree level from age, transfer status from institution name, or absent exam scores as zero; flags unsupported or conflicting rule definitions rather than silently ignoring them.
+  - Added **5** explicit evaluation outcomes with deterministic precedence (`ineligible` > `requires_manual_review` > `insufficient_information` > `conditionally_eligible` > `eligible`) and structured explanations (`rule_evaluations`, `renewal_evaluations`, `failed_reasons`, `missing_requirements`, `conditional_requirements`, `manual_review_reasons`, `student_evidence_used`).
+- **End-to-End Degree-Level & Component-Aware Net Price Accounting (`calculate_net_price`):**
+  - Fixed `degree_level` propagation through `NetPriceCalculateRequest` and `match_scholarships_deterministic`, filtering `InstitutionCost` and scholarship eligibility by degree level before allocation.
+  - Enforced component-level ceilings so tuition-only awards reduce tuition/fees only (never housing/living costs), living stipends & travel allowances reduce living/transportation costs only (never tuition), and category & total net prices can never over-credit or go negative.
+  - Separated funding honestly into `verified_applicable_aid`, `conditional_aid`, `insufficient_info_aid`, `review_required_aid`, and `unallocated_potential_aid`, preventing `expired`, `source_unavailable`, `conflicting_information`, `requires_manual_review`, unknown-scope, missing-amount, and non-matching currency awards from reducing guaranteed or verified Net Price, and restricting multi-year projections to documented `is_renewable` + `funding_duration_years`/`max_funding_periods` terms.
+- **Full Multilingual & Arabic RTL Financial Dashboard (`/financial`, `phase4-translations.ts`):**
+  - Localized remaining English labels, form controls, 6 status summary cards, Freshness badges, category-allocation table headers, and segregated funding buckets across all 10 UniGlobe languages including `ar-SA` RTL (`dir="rtl"`, zero horizontal overflow).
+- **Verification:** **67 / 67** backend `pytest` (including **test_phase4_eligibility_financial_accuracy.py**), **12 / 12** frontend `api-client.test.ts` unit tests, **16 / 16** Next.js build routes, and live browser QA across `/financial` & `/credentials` (`0` console errors, `0` HTTP `>= 400`).
+
 ### Added — Step 1: Phase 4 Schema Migration, Data Provenance & Freshness Governance (`f1c9e4a2b870`)
 - **Reversible Provenance & Structure Migration (`f1c9e4a2b870` on `e4a7c2d901b5`):**
   - Extended `scholarship_programs` with `sponsoring_institution`, `source_type`, `source_version`, `academic_year`, `award_fixed_usd`, `native_amount_min`, `native_amount_max`, `covers_travel`, `funding_duration_years`, `max_funding_periods`, `renewal_conditions`, `verification_method`, `verified_by`, `verification_expires_at`, `freshness_status`, `requires_manual_review`, `claim_provenance`, and `conflict_notes`.

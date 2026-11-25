@@ -24,17 +24,21 @@ import {
 } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
 
-function fmtUsd(val?: number | null): string {
-  if (val === null || val === undefined) return "Not published";
-  return `$${Math.round(val).toLocaleString("en-US")}`;
+function fmtMoney(val?: number | null, currency = "USD"): string {
+  if (val === null || val === undefined) return "—";
+  if (currency === "USD") {
+    return `$${Math.round(val).toLocaleString("en-US")}`;
+  }
+  return `${Math.round(val).toLocaleString("en-US")} ${currency}`;
 }
 
 export default function FinancialIntelligencePage() {
   const { t, direction, language } = useI18n();
   const [activeTab, setActiveTab] = useState<"scholarships" | "net_price">("scholarships");
 
-  // Shared student inputs
+  // Shared student inputs (kept distinct: citizenship !== residence)
   const [citizenship, setCitizenship] = useState("HT");
+  const [residenceCountry, setResidenceCountry] = useState("HT");
   const [residencyState, setResidencyState] = useState("");
   const [applicantType, setApplicantType] = useState<"first_year" | "transfer">("first_year");
   const [degreeLevel, setDegreeLevel] = useState<"bachelors" | "masters" | "doctoral">("bachelors");
@@ -59,6 +63,40 @@ export default function FinancialIntelligencePage() {
   const [netResult, setNetResult] = useState<NetPriceCalculationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const statusLabel = (st: string): string => {
+    const map: Record<string, string> = {
+      eligible: t("fin.stat_eligible", "Eligible"),
+      conditionally_eligible: t("fin.stat_conditional", "Conditionally Eligible"),
+      insufficient_information: t("fin.stat_insufficient", "Insufficient Info"),
+      requires_manual_review: t("fin.stat_review", "Manual Review"),
+      ineligible: t("fin.stat_ineligible", "Ineligible"),
+    };
+    return map[st] || st.replace(/_/g, " ");
+  };
+
+  const freshnessLabel = (st?: string): string => {
+    const key = st || "requires_manual_review";
+    const fallbacks: Record<string, string> = {
+      current: "Current",
+      approaching_expiration: "Approaching Expiration",
+      expired: "Expired",
+      source_unavailable: "Source Unavailable",
+      conflicting_information: "Conflicting Data",
+      requires_manual_review: "Requires Manual Review",
+    };
+    return t(`fin.fresh_${key}`, fallbacks[key] || key);
+  };
+
+  const affordabilityLabel = (st: string): string => {
+    const fallbacks: Record<string, string> = {
+      within_budget: "Within Budget",
+      reachable_with_competitive_aid: "Reachable With Competitive Aid",
+      exceeds_budget: "Exceeds Budget",
+      missing_cost_data: "Missing Cost Data",
+    };
+    return t(`fin.afford_${st}`, fallbacks[st] || st.replace(/_/g, " "));
+  };
+
   const runScholarshipMatch = useCallback(async () => {
     setSchLoading(true);
     setError(null);
@@ -67,6 +105,7 @@ export default function FinancialIntelligencePage() {
       const parsedInc = parseFloat(householdIncome);
       const res = await matchScholarships({
         citizenship_country: citizenship || undefined,
+        country_of_residence: residenceCountry || undefined,
         residency_state: residencyState || undefined,
         applicant_type: applicantType,
         degree_level: degreeLevel,
@@ -82,7 +121,18 @@ export default function FinancialIntelligencePage() {
     } finally {
       setSchLoading(false);
     }
-  }, [citizenship, residencyState, applicantType, degreeLevel, gpa4, needLevel, householdIncome, destinationCountry, showIneligible]);
+  }, [
+    citizenship,
+    residenceCountry,
+    residencyState,
+    applicantType,
+    degreeLevel,
+    gpa4,
+    needLevel,
+    householdIncome,
+    destinationCountry,
+    showIneligible,
+  ]);
 
   const runNetCalculator = useCallback(
     async (instIdOverride?: string) => {
@@ -99,7 +149,9 @@ export default function FinancialIntelligencePage() {
           residency_classification: residencyClass,
           housing_preference: housingPref,
           applicant_type: applicantType,
+          degree_level: degreeLevel,
           citizenship_country: citizenship || undefined,
+          country_of_residence: residenceCountry || undefined,
           residency_state: residencyState || undefined,
           gpa_4: Number.isNaN(parsedGpa) ? undefined : parsedGpa,
           financial_need_level: needLevel,
@@ -115,7 +167,21 @@ export default function FinancialIntelligencePage() {
         setNetLoading(false);
       }
     },
-    [selectedInstId, residencyClass, housingPref, applicantType, citizenship, residencyState, gpa4, needLevel, householdIncome, annualBudget, includeCompetitive]
+    [
+      selectedInstId,
+      residencyClass,
+      housingPref,
+      applicantType,
+      degreeLevel,
+      citizenship,
+      residenceCountry,
+      residencyState,
+      gpa4,
+      needLevel,
+      householdIncome,
+      annualBudget,
+      includeCompetitive,
+    ]
   );
 
   useEffect(() => {
@@ -138,6 +204,14 @@ export default function FinancialIntelligencePage() {
     }
   }, [selectedInstId, activeTab, netResult, runNetCalculator]);
 
+  const unverifiedOrPotentialList = netResult
+    ? [
+        ...(netResult.review_required_aid || []),
+        ...(netResult.insufficient_info_aid || []),
+        ...(netResult.unallocated_potential_aid || []),
+      ]
+    : [];
+
   return (
     <div dir={direction} lang={language.tag} className="min-h-screen bg-[#fafafc] text-zinc-900 pb-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
@@ -145,7 +219,7 @@ export default function FinancialIntelligencePage() {
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-bold text-emerald-800">
               <Coins className="h-3.5 w-3.5" aria-hidden="true" />
-              Phase 4 Financial Intelligence
+              {t("fin.badge", "Phase 4 Financial Intelligence")}
             </div>
             <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900">
               {t("fin.title", "Global Scholarships & Net Price Intelligence")}
@@ -153,7 +227,7 @@ export default function FinancialIntelligencePage() {
             <p className="mt-1 text-sm text-zinc-600 max-w-3xl">
               {t(
                 "fin.subtitle",
-                "Deterministic scholarship rule matching and transparent Total Cost of Attendance vs. Net Out-of-Pocket estimates from published institutional and government data."
+                "Deterministic scholarship rule matching and transparent component-allocated Cost of Attendance vs. Net Price estimates from published sources."
               )}
             </p>
           </div>
@@ -202,10 +276,10 @@ export default function FinancialIntelligencePage() {
 
         {/* Profile / Eligibility Inputs Card */}
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 items-end">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 items-end">
             <div>
               <label htmlFor="fin-citizenship" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Citizenship
+                {t("fin.label_citizenship", "Citizenship")}
               </label>
               <select
                 id="fin-citizenship"
@@ -213,21 +287,43 @@ export default function FinancialIntelligencePage() {
                 onChange={(e) => setCitizenship(e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
               >
-                <option value="HT">Haiti (HT)</option>
-                <option value="US">United States (US)</option>
-                <option value="FR">France (FR)</option>
-                <option value="IN">India (IN)</option>
-                <option value="NG">Nigeria (NG)</option>
-                <option value="BR">Brazil (BR)</option>
-                <option value="CA">Canada (CA)</option>
-                <option value="GB">UK (GB)</option>
-                <option value="DE">Germany (DE)</option>
-                <option value="MX">Mexico (MX)</option>
+                <option value="HT">HT</option>
+                <option value="US">US</option>
+                <option value="FR">FR</option>
+                <option value="IN">IN</option>
+                <option value="NG">NG</option>
+                <option value="BR">BR</option>
+                <option value="CA">CA</option>
+                <option value="GB">GB</option>
+                <option value="DE">DE</option>
+                <option value="MX">MX</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="fin-residence" className="block text-[11px] font-bold text-zinc-700 mb-1">
+                {t("fin.label_residence", "Residence Country")}
+              </label>
+              <select
+                id="fin-residence"
+                value={residenceCountry}
+                onChange={(e) => setResidenceCountry(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
+              >
+                <option value="HT">HT</option>
+                <option value="US">US</option>
+                <option value="FR">FR</option>
+                <option value="IN">IN</option>
+                <option value="NG">NG</option>
+                <option value="BR">BR</option>
+                <option value="CA">CA</option>
+                <option value="GB">GB</option>
+                <option value="DE">DE</option>
+                <option value="MX">MX</option>
               </select>
             </div>
             <div>
               <label htmlFor="fin-state" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                US State (optional)
+                {t("fin.label_state", "US State (optional)")}
               </label>
               <input
                 id="fin-state"
@@ -242,7 +338,7 @@ export default function FinancialIntelligencePage() {
             </div>
             <div>
               <label htmlFor="fin-pathway" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Pathway
+                {t("fin.label_pathway", "Pathway")}
               </label>
               <select
                 id="fin-pathway"
@@ -250,13 +346,13 @@ export default function FinancialIntelligencePage() {
                 onChange={(e) => setApplicantType(e.target.value as "first_year" | "transfer")}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
               >
-                <option value="first_year">First-Year</option>
-                <option value="transfer">Transfer</option>
+                <option value="first_year">{t("fin.pathway_first_year", "First-Year")}</option>
+                <option value="transfer">{t("fin.pathway_transfer", "Transfer")}</option>
               </select>
             </div>
             <div>
               <label htmlFor="fin-gpa" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                GPA (4.0 eq.)
+                {t("fin.label_gpa", "GPA (4.0 eq.)")}
               </label>
               <input
                 id="fin-gpa"
@@ -272,7 +368,7 @@ export default function FinancialIntelligencePage() {
             </div>
             <div>
               <label htmlFor="fin-need" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Financial Need
+                {t("fin.label_need", "Financial Need")}
               </label>
               <select
                 id="fin-need"
@@ -280,14 +376,14 @@ export default function FinancialIntelligencePage() {
                 onChange={(e) => setNeedLevel(e.target.value as "high" | "moderate" | "low")}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
               >
-                <option value="high">High Need</option>
-                <option value="moderate">Moderate Need</option>
-                <option value="low">Low / No Need</option>
+                <option value="high">{t("fin.need_high", "High Need")}</option>
+                <option value="moderate">{t("fin.need_moderate", "Moderate Need")}</option>
+                <option value="low">{t("fin.need_low", "Low / No Need")}</option>
               </select>
             </div>
             <div>
               <label htmlFor="fin-income" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Family Income (USD)
+                {t("fin.label_income", "Family Income (USD)")}
               </label>
               <input
                 id="fin-income"
@@ -300,7 +396,7 @@ export default function FinancialIntelligencePage() {
             </div>
             <div>
               <label htmlFor="fin-dest" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Destination Filter
+                {t("fin.label_dest", "Destination Filter")}
               </label>
               <select
                 id="fin-dest"
@@ -308,14 +404,14 @@ export default function FinancialIntelligencePage() {
                 onChange={(e) => setDestinationCountry(e.target.value)}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
               >
-                <option value="">All Destinations</option>
-                <option value="US">United States (US)</option>
-                <option value="CA">Canada (CA)</option>
-                <option value="GB">United Kingdom (GB)</option>
-                <option value="DE">Germany (DE)</option>
-                <option value="FR">France (FR)</option>
-                <option value="AU">Australia (AU)</option>
-                <option value="JP">Japan (JP)</option>
+                <option value="">{t("fin.all_dest", "All Destinations")}</option>
+                <option value="US">US</option>
+                <option value="CA">CA</option>
+                <option value="GB">GB</option>
+                <option value="DE">DE</option>
+                <option value="FR">FR</option>
+                <option value="AU">AU</option>
+                <option value="JP">JP</option>
               </select>
             </div>
           </div>
@@ -344,7 +440,7 @@ export default function FinancialIntelligencePage() {
                       onChange={(e) => setShowIneligible(e.target.checked)}
                       className="rounded border-zinc-300"
                     />
-                    Show ineligible awards with rule failure reasons
+                    {t("fin.show_ineligible", "Show ineligible awards with rule failure reasons")}
                   </label>
                 </div>
                 <button
@@ -353,14 +449,14 @@ export default function FinancialIntelligencePage() {
                   disabled={schLoading}
                   className="rounded-xl bg-zinc-900 px-4 py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-60"
                 >
-                  {schLoading ? "Evaluating..." : "Run Deterministic Eligibility Match"}
+                  {schLoading ? t("fin.evaluating", "Evaluating...") : t("fin.run_match", "Run Deterministic Eligibility Match")}
                 </button>
               </>
             ) : (
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end border-t border-zinc-100 pt-3">
+              <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end border-t border-zinc-100 pt-3">
                 <div className="lg:col-span-2">
                   <label htmlFor="net-inst" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                    Target University
+                    {t("fin.net_target_inst", "Target University")}
                   </label>
                   <select
                     id="net-inst"
@@ -376,8 +472,23 @@ export default function FinancialIntelligencePage() {
                   </select>
                 </div>
                 <div>
+                  <label htmlFor="net-degree-level" className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    {t("fin.degree_level", "Degree Level")}
+                  </label>
+                  <select
+                    id="net-degree-level"
+                    value={degreeLevel}
+                    onChange={(e) => setDegreeLevel(e.target.value as "bachelors" | "masters" | "doctoral")}
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
+                  >
+                    <option value="bachelors">{t("fin.degree_bachelors", "Bachelor's (Undergraduate)")}</option>
+                    <option value="masters">{t("fin.degree_masters", "Master's (Graduate)")}</option>
+                    <option value="doctoral">{t("fin.degree_doctoral", "Doctoral / PhD")}</option>
+                  </select>
+                </div>
+                <div>
                   <label htmlFor="net-res" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                    Tuition Classification
+                    {t("fin.net_tuition_class", "Tuition Classification")}
                   </label>
                   <select
                     id="net-res"
@@ -385,14 +496,14 @@ export default function FinancialIntelligencePage() {
                     onChange={(e) => setResidencyClass(e.target.value as "in_state" | "out_of_state" | "international")}
                     className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
                   >
-                    <option value="international">International Student</option>
-                    <option value="in_state">In-State Resident</option>
-                    <option value="out_of_state">Out-of-State Domestic</option>
+                    <option value="international">{t("fin.net_res_intl", "International Student")}</option>
+                    <option value="in_state">{t("fin.net_res_in", "In-State Resident")}</option>
+                    <option value="out_of_state">{t("fin.net_res_out", "Out-of-State Domestic")}</option>
                   </select>
                 </div>
                 <div>
                   <label htmlFor="net-budget" className="block text-[11px] font-bold text-zinc-700 mb-1">
-                    Annual Budget (USD)
+                    {t("fin.net_budget", "Annual Budget (USD)")}
                   </label>
                   <input
                     id="net-budget"
@@ -409,19 +520,19 @@ export default function FinancialIntelligencePage() {
                   disabled={netLoading}
                   className="rounded-xl bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-60"
                 >
-                  {netLoading ? "Calculating..." : "Calculate Net Price"}
+                  {netLoading ? t("fin.calculating", "Calculating...") : t("fin.net_calculate_btn", "Calculate Net Price")}
                 </button>
-                <div className="lg:col-span-5 flex flex-wrap items-center gap-4 text-xs text-zinc-700">
+                <div className="lg:col-span-6 flex flex-wrap items-center gap-4 text-xs text-zinc-700">
                   <label className="inline-flex items-center gap-1.5">
-                    Housing:
+                    {t("fin.net_housing", "Housing")}:
                     <select
                       value={housingPref}
                       onChange={(e) => setHousingPref(e.target.value as "on_campus" | "off_campus" | "with_family")}
                       className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs"
                     >
-                      <option value="on_campus">On Campus</option>
-                      <option value="off_campus">Off Campus</option>
-                      <option value="with_family">With Family ($0 housing)</option>
+                      <option value="on_campus">{t("fin.net_housing_campus", "On Campus")}</option>
+                      <option value="off_campus">{t("fin.net_housing_off", "Off Campus")}</option>
+                      <option value="with_family">{t("fin.net_housing_family", "With Family ($0 housing)")}</option>
                     </select>
                   </label>
                   <label className="inline-flex items-center gap-1.5">
@@ -430,7 +541,7 @@ export default function FinancialIntelligencePage() {
                       checked={includeCompetitive}
                       onChange={(e) => setIncludeCompetitive(e.target.checked)}
                     />
-                    Include eligible competitive awards alongside guaranteed/statutory aid
+                    {t("fin.net_include_comp", "Include verified competitive awards alongside statutory aid")}
                   </label>
                 </div>
               </div>
@@ -441,21 +552,29 @@ export default function FinancialIntelligencePage() {
         {/* TAB 1: SCHOLARSHIP MATCHER */}
         {activeTab === "scholarships" && schResult && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                <div className="text-[11px] font-bold uppercase text-zinc-500">Verified Programs</div>
+                <div className="text-[11px] font-bold uppercase text-zinc-500">{t("fin.stat_verified", "Verified Programs")}</div>
                 <div className="mt-1 text-2xl font-extrabold">{schResult.total_scholarships}</div>
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-                <div className="text-[11px] font-bold uppercase text-emerald-800">Eligible</div>
+                <div className="text-[11px] font-bold uppercase text-emerald-800">{t("fin.stat_eligible", "Eligible")}</div>
                 <div className="mt-1 text-2xl font-extrabold text-emerald-900">{schResult.eligible_count}</div>
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-                <div className="text-[11px] font-bold uppercase text-amber-800">Conditionally Eligible</div>
+                <div className="text-[11px] font-bold uppercase text-amber-800">{t("fin.stat_conditional", "Conditionally Eligible")}</div>
                 <div className="mt-1 text-2xl font-extrabold text-amber-900">{schResult.conditionally_eligible_count}</div>
               </div>
+              <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-4">
+                <div className="text-[11px] font-bold uppercase text-sky-800">{t("fin.stat_insufficient", "Insufficient Info")}</div>
+                <div className="mt-1 text-2xl font-extrabold text-sky-900">{schResult.insufficient_information_count ?? 0}</div>
+              </div>
+              <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-4">
+                <div className="text-[11px] font-bold uppercase text-purple-800">{t("fin.stat_review", "Manual Review")}</div>
+                <div className="mt-1 text-2xl font-extrabold text-purple-900">{schResult.requires_manual_review_count ?? 0}</div>
+              </div>
               <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                <div className="text-[11px] font-bold uppercase text-zinc-500">Ineligible (Excluded)</div>
+                <div className="text-[11px] font-bold uppercase text-zinc-500">{t("fin.stat_ineligible", "Ineligible")}</div>
                 <div className="mt-1 text-2xl font-extrabold text-zinc-700">{schResult.ineligible_count}</div>
               </div>
             </div>
@@ -472,33 +591,54 @@ export default function FinancialIntelligencePage() {
                               ? "bg-emerald-100 text-emerald-900"
                               : s.eligibility_status === "conditionally_eligible"
                                 ? "bg-amber-100 text-amber-900"
-                                : "bg-red-100 text-red-900"
+                                : s.eligibility_status === "insufficient_information"
+                                  ? "bg-sky-100 text-sky-900"
+                                  : s.eligibility_status === "requires_manual_review"
+                                    ? "bg-purple-100 text-purple-900"
+                                    : "bg-red-100 text-red-900"
                           }`}
                         >
-                          {s.eligibility_status.replace(/_/g, " ")}
+                          {statusLabel(s.eligibility_status)}
                         </span>
                         <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-700">
                           {s.country_code} • {s.provider_type} • {s.funding_type.replace(/_/g, " ")}
                         </span>
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
+                          {t("fin.freshness_label", "Freshness")}: {freshnessLabel(s.freshness_status)}
+                        </span>
                         {s.covers_international && (
                           <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
-                            International Eligible
+                            {t("fin.badge_intl", "International Eligible")}
                           </span>
                         )}
                         {s.is_guaranteed_statutory && (
                           <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            Guaranteed / Statutory Policy
+                            {t("fin.badge_statutory", "Statutory / Published Policy")}
                           </span>
                         )}
                       </div>
                       <h2 className="mt-1.5 text-base font-extrabold text-zinc-900">{s.title}</h2>
                       <p className="text-xs text-zinc-600 mt-1">{s.eligibility_summary}</p>
+                      {(s.funding_scope?.length || s.duration_renewal_summary) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-600">
+                          {s.funding_scope && s.funding_scope.length > 0 && (
+                            <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-[10px]">
+                              {s.funding_scope.join(", ")}
+                            </span>
+                          )}
+                          {s.duration_renewal_summary && (
+                            <span>
+                              {t("fin.badge_duration", "Duration & Renewal")}: {s.duration_renewal_summary}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="shrink-0 text-start md:text-end space-y-1">
                       <div dir="ltr" className="text-sm font-extrabold text-zinc-900">
                         {s.award_amount_min_usd !== null && s.award_amount_max_usd !== null
-                          ? `${fmtUsd(s.award_amount_min_usd)} – ${fmtUsd(s.award_amount_max_usd)}`
+                          ? `${fmtMoney(s.award_amount_min_usd, s.award_currency)} – ${fmtMoney(s.award_amount_max_usd, s.award_currency)}`
                           : s.max_award_info}
                       </div>
                       <a
@@ -515,13 +655,17 @@ export default function FinancialIntelligencePage() {
                   {/* Deterministic Rule Provenance */}
                   {s.rule_evaluations.length > 0 && (
                     <div className="rounded-xl bg-zinc-50 border border-zinc-200/80 p-3 space-y-1.5">
-                      <div className="text-[11px] font-bold uppercase text-zinc-500">Deterministic Rule Breakdown</div>
+                      <div className="text-[11px] font-bold uppercase text-zinc-500">
+                        {t("fin.rule_breakdown", "Deterministic Rule Breakdown")}
+                      </div>
                       {s.rule_evaluations.map((r, idx) => (
                         <div key={idx} className="flex items-start gap-2 text-xs">
-                          {r.status === "pass" ? (
+                          {r.status === "eligible" || r.status === "pass" ? (
                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                          ) : r.status === "fail" ? (
+                          ) : r.status === "ineligible" || r.status === "fail" ? (
                             <XCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
+                          ) : r.status === "requires_manual_review" ? (
+                            <ShieldAlert className="h-3.5 w-3.5 text-purple-600 shrink-0 mt-0.5" />
                           ) : (
                             <HelpCircle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
                           )}
@@ -544,39 +688,44 @@ export default function FinancialIntelligencePage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                <div className="text-[11px] font-bold uppercase text-zinc-500">Gross Total COA</div>
+                <div className="text-[11px] font-bold uppercase text-zinc-500">{t("fin.net_coa", "Gross Total COA")}</div>
                 <div dir="ltr" className="mt-1 text-2xl font-extrabold text-zinc-900">
-                  {fmtUsd(netResult.total_coa_usd)}
+                  {fmtMoney(netResult.total_coa_usd, netResult.currency)}
                 </div>
                 <div className="text-[11px] text-zinc-500">
-                  Direct: {fmtUsd(netResult.gross_direct_cost_usd)} • Indirect: {fmtUsd(netResult.gross_indirect_cost_usd)}
+                  {t("fin.net_direct_short", "Direct")}: {fmtMoney(netResult.gross_direct_cost_usd, netResult.currency)} •{" "}
+                  {t("fin.net_indirect_short", "Indirect")}: {fmtMoney(netResult.gross_indirect_cost_usd, netResult.currency)}
                 </div>
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-                <div className="text-[11px] font-bold uppercase text-emerald-800">Eligible Aid Offset</div>
+                <div className="text-[11px] font-bold uppercase text-emerald-800">{t("fin.net_aid_applied", "Verified Applicable Aid")}</div>
                 <div dir="ltr" className="mt-1 text-2xl font-extrabold text-emerald-900">
-                  {fmtUsd(netResult.eligible_aid_min_usd)} – {fmtUsd(netResult.eligible_aid_max_usd)}
+                  {fmtMoney(netResult.eligible_aid_min_usd, netResult.currency)} – {fmtMoney(netResult.eligible_aid_max_usd, netResult.currency)}
                 </div>
                 <div className="text-[11px] text-emerald-800/80">
-                  Guaranteed: {fmtUsd(netResult.guaranteed_aid_max_usd)} • Competitive: {fmtUsd(netResult.competitive_aid_max_usd)}
+                  {t("fin.net_guar_short", "Guaranteed")}: {fmtMoney(netResult.guaranteed_aid_max_usd, netResult.currency)} •{" "}
+                  {t("fin.net_comp_short", "Competitive")}: {fmtMoney(netResult.competitive_aid_max_usd, netResult.currency)}
                 </div>
               </div>
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4">
-                <div className="text-[11px] font-bold uppercase text-indigo-900">Est. Annual Net Price</div>
+                <div className="text-[11px] font-bold uppercase text-indigo-900">{t("fin.net_est_price", "Est. Annual Net Price (Not Guaranteed)")}</div>
                 <div dir="ltr" className="mt-1 text-2xl font-extrabold text-indigo-950">
-                  {fmtUsd(netResult.estimated_net_price_min_usd)} – {fmtUsd(netResult.estimated_net_price_max_usd)}
+                  {fmtMoney(netResult.estimated_net_price_min_usd, netResult.currency)} –{" "}
+                  {fmtMoney(netResult.estimated_net_price_max_usd, netResult.currency)}
                 </div>
                 <div dir="ltr" className="text-[11px] text-indigo-800">
-                  Multi-yr ({applicantType === "transfer" ? "2yr" : "4yr"}): {fmtUsd(netResult.multi_year_net_min_usd)} –{" "}
-                  {fmtUsd(netResult.multi_year_net_max_usd)}
+                  {t("fin.net_multi_short", "Multi-yr Est.")} ({applicantType === "transfer" ? "2yr" : "4yr"}):{" "}
+                  {fmtMoney(netResult.multi_year_net_min_usd, netResult.currency)} – {fmtMoney(netResult.multi_year_net_max_usd, netResult.currency)}
                 </div>
               </div>
               <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                <div className="text-[11px] font-bold uppercase text-zinc-500">Affordability Verdict</div>
+                <div className="text-[11px] font-bold uppercase text-zinc-500">{t("fin.net_verdict", "Affordability Verdict")}</div>
                 <div className="mt-1 text-base font-extrabold uppercase text-zinc-900">
-                  {netResult.affordability_status.replace(/_/g, " ")}
+                  {affordabilityLabel(netResult.affordability_status)}
                 </div>
-                <div className="text-[11px] text-zinc-500">Confidence: {netResult.data_confidence}</div>
+                <div className="text-[11px] text-zinc-500">
+                  {t("fin.net_conf_short", "Confidence")}: {netResult.data_confidence}
+                </div>
               </div>
             </div>
 
@@ -591,32 +740,50 @@ export default function FinancialIntelligencePage() {
               </div>
             )}
 
+            {/* Component-level Category Breakdown Table */}
+            {netResult.category_breakdown && netResult.category_breakdown.length > 0 && (
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3 overflow-x-auto">
+                <h2 className="text-sm font-extrabold text-zinc-900">{t("fin.net_cat_table", "Category-Level Cost & Award Allocation")}</h2>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-start text-[11px] font-bold uppercase text-zinc-500">
+                      <th className="py-2 pe-4 text-start">{t("fin.net_col_cat", "Cost Category")}</th>
+                      <th className="py-2 px-3 text-end">{t("fin.net_col_orig", "Published Cost")}</th>
+                      <th className="py-2 px-3 text-end">{t("fin.net_col_aid", "Applied Aid")}</th>
+                      <th className="py-2 ps-3 text-end">{t("fin.net_col_rem", "Remaining Net Cost")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {netResult.category_breakdown.map((row) => (
+                      <tr key={row.category_key}>
+                        <td className="py-2 pe-4 font-semibold text-zinc-900">{row.label}</td>
+                        <td dir="ltr" className="py-2 px-3 text-end font-mono text-zinc-700">
+                          {fmtMoney(row.original_cost_usd, netResult.currency)}
+                        </td>
+                        <td dir="ltr" className="py-2 px-3 text-end font-mono text-emerald-700">
+                          {row.applied_verified_max_usd > 0
+                            ? `-${fmtMoney(row.applied_verified_min_usd, netResult.currency)}..-${fmtMoney(row.applied_verified_max_usd, netResult.currency)}`
+                            : "—"}
+                        </td>
+                        <td dir="ltr" className="py-2 ps-3 text-end font-mono font-bold text-zinc-900">
+                          {row.remaining_cost_min_usd !== null && row.remaining_cost_min_usd !== undefined
+                            ? `${fmtMoney(row.remaining_cost_min_usd, netResult.currency)} – ${fmtMoney(row.remaining_cost_max_usd, netResult.currency)}`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-                <h2 className="text-sm font-extrabold text-zinc-900">Direct &amp; Indirect Cost Schedule</h2>
-                <div className="divide-y divide-zinc-100 text-xs">
-                  {[...netResult.direct_billable_items, ...netResult.indirect_living_items].map((item) => (
-                    <div key={item.key} className="py-2 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-semibold text-zinc-900">{item.label}</div>
-                        <div className="text-[11px] text-zinc-500">
-                          {item.category.replace(/_/g, " ")} {item.notes ? `• ${item.notes}` : ""}
-                        </div>
-                      </div>
-                      <span dir="ltr" className="font-mono font-bold text-zinc-900 shrink-0">
-                        {fmtUsd(item.amount_usd)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-                <h2 className="text-sm font-extrabold text-zinc-900">Matched Eligible Aid &amp; Scholarships</h2>
+                <h2 className="text-sm font-extrabold text-zinc-900">{t("fin.net_verified_sec", "Verified & Applicable Funding")}</h2>
                 {netResult.aid_offsets.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-zinc-300 p-4 text-xs text-zinc-600 flex items-start gap-2">
                     <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    No eligible institutional or portable scholarships matched the selected residency/citizenship &amp; need criteria.
+                    {t("fin.net_none_verified", "No verified and current institutional/statutory awards reduced net price under current criteria.")}
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -625,12 +792,49 @@ export default function FinancialIntelligencePage() {
                         <div>
                           <div className="font-bold text-zinc-900">{a.title}</div>
                           <div className="text-[11px] text-zinc-500">
-                            {a.is_guaranteed_statutory ? "Guaranteed / Statutory" : "Competitive Merit/Need"} • {a.provider_type}
+                            {a.is_guaranteed_statutory ? t("fin.badge_statutory", "Statutory / Published Policy") : t("fin.net_comp_short", "Competitive")} • {a.provider_type}
                           </div>
                         </div>
                         <div dir="ltr" className="font-mono font-bold text-emerald-800 shrink-0">
-                          -{fmtUsd(a.estimated_min_usd)} to -{fmtUsd(a.estimated_max_usd)}
+                          -{fmtMoney(a.estimated_min_usd, netResult.currency)} .. -{fmtMoney(a.estimated_max_usd, netResult.currency)}
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {netResult.conditional_aid && netResult.conditional_aid.length > 0 && (
+                  <div className="pt-2 space-y-2">
+                    <h3 className="text-xs font-extrabold uppercase text-amber-800">{t("fin.net_cond_sec", "Conditional Funding")}</h3>
+                    {netResult.conditional_aid.map((c) => (
+                      <div key={c.scholarship_id} className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 text-xs">
+                        <div className="font-bold text-zinc-900">{c.title}</div>
+                        <div className="text-[11px] text-amber-900">{c.reason}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+                <h2 className="text-sm font-extrabold text-zinc-900">
+                  {t("fin.net_review_sec", "Requires Verification / Unallocated Potential Funding")}
+                </h2>
+                {unverifiedOrPotentialList.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-300 p-4 text-xs text-zinc-600">
+                    {t("fin.net_none_review", "None flagged for review or missing information.")}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {unverifiedOrPotentialList.map((u, idx) => (
+                      <div key={`${u.scholarship_id}-${idx}`} className="rounded-xl border border-purple-200 bg-purple-50/30 p-3 text-xs space-y-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-bold text-zinc-900">{u.title}</span>
+                          <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-900">
+                            {freshnessLabel(u.freshness_status)}
+                          </span>
+                        </div>
+                        {u.reason && <div className="text-[11px] text-zinc-600">{u.reason}</div>}
                       </div>
                     ))}
                   </div>
