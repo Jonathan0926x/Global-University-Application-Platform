@@ -96,7 +96,35 @@ def resolve_institution_routing(
             continue
 
         if r.verification_status == "verified":
-            verified_routes.append(r)
+            expires_at = r.verification_expires_at
+            if expires_at is not None and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at is not None and expires_at <= datetime.now(timezone.utc):
+                excluded_unverified.append(
+                    {
+                        "platform_name": r.platform_name,
+                        "reason": "Route verification has expired and requires reverification.",
+                        "verification_status": "expired",
+                    }
+                )
+            elif r.pathway_verified is not True:
+                excluded_unverified.append(
+                    {
+                        "platform_name": r.platform_name,
+                        "reason": "Applicant pathway has not been verified.",
+                        "verification_status": "pathway_unverified",
+                    }
+                )
+            elif r.last_health_check_status in ("unreachable", "error", "redirected"):
+                excluded_unverified.append(
+                    {
+                        "platform_name": r.platform_name,
+                        "reason": "The latest link-health check requires review before this route can be recommended.",
+                        "verification_status": "health_check_review_required",
+                    }
+                )
+            else:
+                verified_routes.append(r)
         elif r.verification_status == "needs_verification":
             needs_verification_routes.append(r)
         else:

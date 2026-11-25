@@ -657,7 +657,23 @@ def test_route_health_expiration_pathway_redirect_and_reverification_triggers(cl
             confidence_level="medium",
             is_active=True,
         )
-        db.add_all([rt_verified, rt_manual])
+        rt_pathway_unverified = ApplicationRoute(
+            institution_id=inst_id,
+            platform_name="Unverified Transfer Pathway QA Portal",
+            platform_type="direct_portal",
+            country_code="US",
+            applicant_type="transfer",
+            official_url="https://transfer.healthgovqa.edu/apply",
+            source_name="NCES IPEDS HD2023",
+            verification_status="verified",
+            verification_method="ipeds_domain_match",
+            confidence_level="high",
+            verified_at=datetime.now(timezone.utc),
+            verification_expires_at=datetime.now(timezone.utc) + timedelta(days=90),
+            pathway_verified=False,
+            is_active=True,
+        )
+        db.add_all([rt_verified, rt_manual, rt_pathway_unverified])
         db.commit()
         verified_id = str(rt_verified.id)
         manual_id = str(rt_manual.id)
@@ -665,6 +681,29 @@ def test_route_health_expiration_pathway_redirect_and_reverification_triggers(cl
         db.close()
 
     try:
+        # Expired verification is excluded from student recommendations even
+        # before an administrator runs the scheduled expiry sweep.
+        expired_resolution = client.get(
+            f"/api/v1/routing/institutions/{inst_id}?applicant_type=first_year"
+        )
+        assert expired_resolution.status_code == 200
+        expired_body = expired_resolution.json()
+        assert expired_body["verified_routes"] == []
+        assert any(
+            item["verification_status"] == "expired"
+            for item in expired_body["excluded_unverified"]
+        )
+
+        pathway_resolution = client.get(
+            f"/api/v1/routing/institutions/{inst_id}?applicant_type=transfer"
+        )
+        assert pathway_resolution.status_code == 200
+        assert pathway_resolution.json()["verified_routes"] == []
+        assert any(
+            item["verification_status"] == "pathway_unverified"
+            for item in pathway_resolution.json()["excluded_unverified"]
+        )
+
         # 1. RBAC blocks students from health/expire/pathway endpoints
         assert client.post("/api/v1/admin/routing/expire-stale", headers=student_headers).status_code == 403
         assert client.post("/api/v1/admin/routing/health-check", headers=student_headers).status_code == 403
@@ -769,6 +808,15 @@ def test_route_health_expiration_pathway_redirect_and_reverification_triggers(cl
         assert re_ver.status_code == 200
         assert re_ver.json()["verification_expires_at"] is not None
         assert re_ver.json()["verification_method"] == "manual_verifier"
+        health_blocked_resolution = client.get(
+            f"/api/v1/routing/institutions/{inst_id}?applicant_type=first_year"
+        )
+        assert health_blocked_resolution.status_code == 200
+        assert health_blocked_resolution.json()["verified_routes"] == []
+        assert any(
+            item["verification_status"] == "health_check_review_required"
+            for item in health_blocked_resolution.json()["excluded_unverified"]
+        )
 
         # 5. Manual review queue surfaces both pending needs_verification AND manually reviewed routes
         mq = client.get("/api/v1/admin/routing/queue?verification_status=manual_review&limit=500", headers=verifier_headers)
@@ -787,7 +835,7 @@ def test_route_health_expiration_pathway_redirect_and_reverification_triggers(cl
                 new_website="https://www.newhealthgovqa.edu/",
                 field_name="official_website",
             )
-            assert trig["flagged"] == 1
+            assert trig["flagged"] == 2
             rt_after = db.query(ApplicationRoute).filter(ApplicationRoute.id == uuid.UUID(verified_id)).first()
             assert rt_after.verification_status == "needs_verification"
             assert rt_after.audits[0].action == "institution_website_changed"
@@ -809,3 +857,55 @@ def test_route_health_expiration_pathway_redirect_and_reverification_triggers(cl
             db.commit()
         finally:
             db.close()
+
+
+def test_default_route_probe_blocks_private_dns_and_never_follows_redirects(monkeypatch):
+    from app.services import routing_health
+
+    calls = []
+
+    class Response:
+        status_code = 302
+        headers = {"location": "http://127.0.0.1/latest/meta-data"}
+        url = "https://portal.example.edu/apply"
+        history = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            assert kwargs["follow_redirects"] is False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def head(self, url):
+            calls.append(url)
+            return Response()
+
+        def get(self, url):
+            calls.append(url)
+            return Response()
+
+    monkeypatch.setattr(
+        routing_health.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("8.8.8.8", 443))],
+    )
+    monkeypatch.setattr(routing_health.httpx, "Client", Client)
+    result = routing_health._default_http_probe("https://portal.example.edu/apply")
+    assert result["http_code"] == 302
+    assert result["final_url"] == "http://127.0.0.1/latest/meta-data"
+    assert result["redirect_chain_length"] == 1
+    assert calls == ["https://portal.example.edu/apply"]
+
+    calls.clear()
+    monkeypatch.setattr(
+        routing_health.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [(None, None, None, None, ("127.0.0.1", 443))],
+    )
+    result = routing_health._default_http_probe("https://portal.example.edu/apply")
+    assert result["ok"] is False
+    assert calls == []

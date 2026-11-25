@@ -10,8 +10,10 @@ Provides:
 """
 
 from datetime import datetime, timedelta, timezone
+from ipaddress import ip_address
+import socket
 from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from uuid import UUID
 
 import httpx
@@ -99,17 +101,39 @@ def _default_http_probe(url: str, timeout: float = 6.0) -> Dict[str, Any]:
             "error": chk["reason"] or "Invalid URL",
         }
 
+    try:
+        parsed = urlparse(url)
+        if parsed.username or parsed.password:
+            raise ValueError("URLs containing embedded credentials are disallowed.")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        addresses = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
+        resolved_ips = {ip_address(item[4][0]) for item in addresses}
+        if not resolved_ips or any(not address.is_global for address in resolved_ips):
+            raise ValueError("Host resolves to a non-public IP address.")
+    except (OSError, ValueError) as exc:
+        return {
+            "ok": False,
+            "http_code": None,
+            "final_url": None,
+            "redirect_chain_length": 0,
+            "error": f"Unsafe or unresolvable host: {exc}",
+        }
+
     headers = {
         "User-Agent": "UniGlobe-LinkHealthBot/1.0 (+https://uniglobe.edu/ops)",
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     }
     try:
-        with httpx.Client(follow_redirects=True, timeout=timeout, headers=headers) as client:
+        # Never follow redirects automatically. Every redirect destination is external
+        # input and must be reviewed before the health checker makes another request.
+        with httpx.Client(follow_redirects=False, timeout=timeout, headers=headers) as client:
             resp = client.head(url)
             if resp.status_code in (403, 405, 501):
                 resp = client.get(url)
-            final_url = str(resp.url) if resp.url else url
-            chain_len = len(resp.history)
+            location = resp.headers.get("location")
+            is_redirect = resp.status_code in (301, 302, 303, 307, 308) and bool(location)
+            final_url = urljoin(str(resp.url or url), location) if is_redirect else str(resp.url or url)
+            chain_len = 1 if is_redirect else 0
             return {
                 "ok": True,
                 "http_code": resp.status_code,
