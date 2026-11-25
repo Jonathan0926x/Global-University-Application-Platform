@@ -582,6 +582,7 @@ def validate_scholarship_catalog(
         if conflicts:
             conflicting_records.append({"id": str(p.id), "title": p.title, "conflicts": conflicts})
 
+    coverage_metrics = _compute_coverage_from_programs(programs, ref_now)
     return {
         "total_checked": len(programs),
         "invalid_urls": invalid_urls,
@@ -589,7 +590,77 @@ def validate_scholarship_catalog(
         "missing_provenance": missing_provenance,
         "expired_records": expired_records,
         "conflicting_records": conflicting_records,
+        **coverage_metrics,
     }
+
+
+def _has_verified_funding_coverage(p: ScholarshipProgram, ref_now: datetime) -> bool:
+    """
+    Returns True only when an active scholarship has verified, current (non-expired,
+    non-manual-review) eligibility and award-amount claims with a concrete published
+    numeric amount in a known currency.
+    """
+    if not p.is_current or not p.is_verified or p.requires_manual_review:
+        return False
+    currency = (p.award_currency or "").strip().upper()
+    if not currency or currency == "UNK":
+        return False
+    has_concrete_amount = any(
+        val is not None
+        for val in (
+            p.award_amount_min_usd,
+            p.award_amount_max_usd,
+            p.award_fixed_usd,
+            p.native_amount_min,
+            p.native_amount_max,
+        )
+    )
+    if not has_concrete_amount:
+        return False
+    breakdown = evaluate_scholarship_claim_breakdown(p, now=ref_now)
+    if not breakdown["existence_current"] or breakdown["record_expired"]:
+        return False
+    claims = breakdown["claims"]
+    return (
+        claims.get("eligibility_rules") in ("current", "approaching_expiration")
+        and claims.get("award_amounts") in ("current", "approaching_expiration")
+    )
+
+
+def _compute_coverage_from_programs(
+    programs: List[ScholarshipProgram],
+    ref_now: datetime,
+) -> Dict[str, Any]:
+    active_programs = [p for p in programs if p.is_current]
+    total_active = len(active_programs)
+    verified_funding = sum(
+        1 for p in active_programs if _has_verified_funding_coverage(p, ref_now)
+    )
+    ratio = round(verified_funding / total_active, 4) if total_active > 0 else 0.0
+    return {
+        "total_active_programs": total_active,
+        "verified_funding_programs": verified_funding,
+        "verified_funding_coverage": ratio,
+    }
+
+
+def compute_verified_funding_coverage(
+    db: Session,
+    *,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Computes verified funding coverage across all active scholarship programs:
+    count of active programs with current verified award-amount & eligibility claims
+    divided by total active scholarship programs.
+    """
+    ref_now = _utcnow(now)
+    active_programs = (
+        db.query(ScholarshipProgram)
+        .filter(ScholarshipProgram.is_current.is_(True))
+        .all()
+    )
+    return _compute_coverage_from_programs(active_programs, ref_now)
 
 
 def validate_credential_catalog(

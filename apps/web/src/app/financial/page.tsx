@@ -322,6 +322,16 @@ export default function FinancialIntelligencePage() {
                 <option value="CL">CL</option>
                 <option value="AR">AR</option>
                 <option value="PE">PE</option>
+                <option value="CN">CN</option>
+                <option value="KR">KR</option>
+                <option value="SG">SG</option>
+                <option value="MY">MY</option>
+                <option value="ID">ID</option>
+                <option value="PK">PK</option>
+                <option value="BD">BD</option>
+                <option value="VN">VN</option>
+                <option value="PH">PH</option>
+                <option value="JP">JP</option>
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
                 <option value="DE">DE</option>
@@ -361,6 +371,16 @@ export default function FinancialIntelligencePage() {
                 <option value="CL">CL</option>
                 <option value="AR">AR</option>
                 <option value="PE">PE</option>
+                <option value="CN">CN</option>
+                <option value="KR">KR</option>
+                <option value="SG">SG</option>
+                <option value="MY">MY</option>
+                <option value="ID">ID</option>
+                <option value="PK">PK</option>
+                <option value="BD">BD</option>
+                <option value="VN">VN</option>
+                <option value="PH">PH</option>
+                <option value="JP">JP</option>
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
                 <option value="DE">DE</option>
@@ -470,6 +490,15 @@ export default function FinancialIntelligencePage() {
                 <option value="CL">CL</option>
                 <option value="AR">AR</option>
                 <option value="PE">PE</option>
+                <option value="CN">CN</option>
+                <option value="KR">KR</option>
+                <option value="SG">SG</option>
+                <option value="MY">MY</option>
+                <option value="ID">ID</option>
+                <option value="PK">PK</option>
+                <option value="BD">BD</option>
+                <option value="VN">VN</option>
+                <option value="PH">PH</option>
                 <option value="ES">ES</option>
               </select>
             </div>
@@ -637,6 +666,26 @@ export default function FinancialIntelligencePage() {
                 <div className="mt-1 text-2xl font-extrabold text-zinc-700">{schResult.ineligible_count}</div>
               </div>
             </div>
+
+            {schResult.verified_funding_coverage !== undefined && (
+              <div
+                id="fin-verified-coverage-bar"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-2.5 text-xs text-indigo-950"
+              >
+                <div className="font-bold">
+                  {t("fin.verified_funding_coverage", "Verified Funding Coverage")}:{" "}
+                  <span dir="ltr" className="font-mono text-indigo-800">
+                    {(schResult.verified_funding_coverage * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="text-indigo-800">
+                  <span dir="ltr" className="font-mono font-semibold">
+                    {schResult.verified_funding_programs ?? 0}/{schResult.total_active_programs ?? schResult.total_scholarships}
+                  </span>{" "}
+                  {t("fin.verified_funding_detail", "programs with current verified amount & eligibility claims")}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               {schResult.results.map((s) => (

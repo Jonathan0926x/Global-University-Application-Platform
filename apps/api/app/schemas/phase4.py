@@ -117,6 +117,9 @@ class ScholarshipMatchResponse(BaseModel):
     insufficient_information_count: int = 0
     requires_manual_review_count: int = 0
     ineligible_count: int
+    total_active_programs: int = 0
+    verified_funding_programs: int = 0
+    verified_funding_coverage: float = 0.0
     aggregation_precedence: List[str] = [
         "ineligible",
         "requires_manual_review",

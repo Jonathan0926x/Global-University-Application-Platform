@@ -25,6 +25,10 @@ from app.ingestion.phase4_batch2_seed import (
     BATCH2_LATIN_AMERICA_SCHOLARSHIPS,
     seed_phase4_batch2_latin_america,
 )
+from app.ingestion.phase4_batch3_seed import (
+    BATCH3_ASIA_PACIFIC_SCHOLARSHIPS,
+    seed_phase4_batch3_asia_pacific,
+)
 from app.models.country import Country
 from app.models.institution import Institution
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
@@ -403,7 +407,7 @@ def test_14a_batch2_count_guard_and_provenance_completeness():
 
         # Verify total catalog count: 27 legacy + 11 Batch 1 + 10 Batch 2 = 48
         total = db.query(ScholarshipProgram).count()
-        assert total == 48, f"Expected 48 total programs (27 legacy + 11 Batch 1 + 10 Batch 2), got {total}"
+        assert total >= 48, f"Expected at least 48 total programs (27 legacy + 11 Batch 1 + 10 Batch 2), got {total}"
 
         titles = [item["title"] for item in BATCH2_LATIN_AMERICA_SCHOLARSHIPS]
         batch2_rows = db.query(ScholarshipProgram).filter(ScholarshipProgram.title.in_(titles)).all()
@@ -792,3 +796,429 @@ def test_14d_e_batch2_native_currencies_net_price_and_closed_cycles():
             assert applied["estimated_max_usd"] > 0
     finally:
         db.close()
+
+
+def test_15a_batch3_count_guard_and_provenance_completeness():
+    assert 6 <= len(BATCH3_ASIA_PACIFIC_SCHOLARSHIPS) <= 12
+
+    db = SessionLocal()
+    try:
+        seed_phase4_batch3_asia_pacific(db)
+        second = seed_phase4_batch3_asia_pacific(db)
+        assert second["batch3_created"] == 0
+        assert second["batch3_rules_created"] == 0
+
+        for code in ("CN", "IN", "KR", "SG", "MY", "ID", "PK", "BD", "VN", "PH"):
+            assert db.query(Country).filter(Country.code == code).first() is not None
+
+        total = db.query(ScholarshipProgram).count()
+        assert total == 59, f"Expected 59 total programs (48 prior + 11 Batch 3), got {total}"
+
+        titles = [item["title"] for item in BATCH3_ASIA_PACIFIC_SCHOLARSHIPS]
+        batch3_rows = db.query(ScholarshipProgram).filter(ScholarshipProgram.title.in_(titles)).all()
+        assert len(batch3_rows) == 11
+
+        currencies_seen = {sch.award_currency for sch in batch3_rows}
+        assert currencies_seen == {"CNY", "INR", "KRW", "SGD", "MYR", "IDR", "PKR", "BDT", "VND", "PHP"}
+
+        for sch in batch3_rows:
+            assert sch.source_url.startswith("https://")
+            assert sch.sponsoring_institution
+            assert sch.source_type in ("government_portal", "official_institutional", "official_agency")
+            assert sch.verification_method == "manual_primary_source_fetch"
+            assert sch.verified_by is None, "Never fabricate reviewer identity"
+            assert sch.academic_year
+            assert sch.award_currency and len(sch.award_currency.strip()) == 3
+            assert isinstance(sch.claim_provenance, dict)
+            missing_keys = REQUIRED_15_CLAIM_KEYS - set(sch.claim_provenance.keys())
+            assert not missing_keys, f"{sch.title} missing provenance keys: {missing_keys}"
+            if sch.award_currency != "USD":
+                assert sch.award_amount_min_usd is None
+                assert sch.award_amount_max_usd is None
+
+        audit = validate_scholarship_catalog(db)
+        assert audit["invalid_urls"] == []
+        assert audit["duplicates"] == []
+        assert audit["conflicting_records"] == []
+        assert audit["expired_records"] == []
+    finally:
+        db.close()
+
+
+def test_15b_batch3_verified_funding_coverage_metric():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch3_asia_pacific(db)
+        audit = validate_scholarship_catalog(db)
+        assert audit["total_active_programs"] == 59
+        assert 0 < audit["verified_funding_programs"] < 59
+        assert 0.0 < audit["verified_funding_coverage"] < 1.0
+
+        match_res = match_scholarships_deterministic(
+            db,
+            None,
+            {
+                "citizenships": ["VN"],
+                "country_of_residence": "VN",
+                "destination_country": "VN",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+            },
+            include_ineligible=False,
+        )
+        assert match_res["total_active_programs"] == audit["total_active_programs"]
+        assert match_res["verified_funding_programs"] == audit["verified_funding_programs"]
+        assert match_res["verified_funding_coverage"] == audit["verified_funding_coverage"]
+
+        # Temporarily flag an active funded Batch 3 program for manual review and confirm coverage drops cleanly
+        cas = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "CAS-ANSO Scholarship (2027 Call — USTC / UCAS / CAS)"
+        ).one()
+        cas.requires_manual_review = True
+        db.flush()
+        lowered = validate_scholarship_catalog(db)
+        assert lowered["verified_funding_programs"] == audit["verified_funding_programs"] - 1
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_15c_batch3_china_india_korea_singapore_rules():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch3_asia_pacific(db)
+
+        # 1. CAS-ANSO (CN, CNY, open cycle)
+        cas = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "CAS-ANSO Scholarship (2027 Call — USTC / UCAS / CAS)"
+        ).one()
+        cas_vn = evaluate_single_scholarship(
+            cas,
+            {
+                "citizenships": ["VN"],
+                "destination_country": "CN",
+                "degree_level": "doctoral",
+                "date_of_birth": "1998-06-15",
+            },
+        )
+        assert cas_vn["eligibility_status"] == "conditionally_eligible"
+        assert cas_vn["award_currency"] == "CNY"
+        assert cas_vn["application_cycle_status"] == "open"
+        assert evaluate_single_scholarship(
+            cas,
+            {
+                "citizenships": ["CN"],
+                "destination_country": "CN",
+                "degree_level": "doctoral",
+                "date_of_birth": "1998-06-15",
+            },
+        )["eligibility_status"] == "ineligible"
+
+        # 2. USTC UG Fellowship requires CSCA + HSK 5 (not Gaokao) and age < 25
+        ustc = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "USTC Fellowship for Undergraduate Programs (CSC / USTC Full & Partial)"
+        ).one()
+        ustc_ok = evaluate_single_scholarship(
+            ustc,
+            {
+                "citizenships": ["PK"],
+                "destination_country": "CN",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-05-01",
+                "exam_scores": {"CSCA": 88},
+                "language_proficiencies": {"zh": {"format": "hsk", "test_type": "HSK", "score": 5}},
+            },
+        )
+        assert ustc_ok["eligibility_status"] == "eligible"
+        assert ustc_ok["award_currency"] == "CNY"
+        assert ustc_ok["native_amount_min"] is None
+        assert ustc_ok["application_cycle_status"] == "open"
+
+        assert evaluate_single_scholarship(
+            ustc,
+            {
+                "citizenships": ["PK"],
+                "destination_country": "CN",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-05-01",
+                "language_proficiencies": {"zh": {"format": "hsk", "test_type": "HSK", "score": 5}},
+            },
+        )["eligibility_status"] == "insufficient_information"
+
+        assert evaluate_single_scholarship(
+            ustc,
+            {
+                "citizenships": ["PK"],
+                "destination_country": "CN",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-05-01",
+                "exam_scores": {"CSCA": 88},
+                "language_proficiencies": {"zh": {"format": "hsk", "test_type": "HSK", "score": 4}},
+            },
+        )["eligibility_status"] == "ineligible"
+
+        # 3. DST INSPIRE-SHE (IN, INR, Basic Sciences vs Engineering/CS exclusion)
+        inspire = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "DST INSPIRE Scholarship for Higher Education (SHE)"
+        ).one()
+        assert evaluate_single_scholarship(
+            inspire,
+            {
+                "citizenships": ["IN"],
+                "destination_country": "IN",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-04-10",
+                "field_of_study": "Physics",
+            },
+        )["eligibility_status"] == "conditionally_eligible"
+        assert evaluate_single_scholarship(
+            inspire,
+            {
+                "citizenships": ["IN"],
+                "destination_country": "IN",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-04-10",
+                "field_of_study": "Computer Science",
+            },
+        )["eligibility_status"] == "ineligible"
+
+        # 4. 2027 GKS-U (KR, KRW, closed cycle, dual-KR exclusion)
+        gks = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Global Korea Scholarship — Undergraduate Degrees (2027 GKS-U, NIIED)"
+        ).one()
+        gks_ok = evaluate_single_scholarship(
+            gks,
+            {
+                "citizenships": ["ID"],
+                "dual_citizenship": False,
+                "destination_country": "KR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-02-01",
+                "gpa_4": 3.5,
+            },
+        )
+        assert gks_ok["eligibility_status"] == "conditionally_eligible"
+        assert gks_ok["award_currency"] == "KRW"
+        assert gks_ok["application_cycle_status"] == "closed"
+        assert gks_ok["claim_freshness"]["deadlines"] == "expired"
+
+        assert evaluate_single_scholarship(
+            gks,
+            {
+                "citizenships": ["ID"],
+                "destination_country": "KR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-02-01",
+                "gpa_4": 3.5,
+            },
+        )["eligibility_status"] == "insufficient_information"
+
+        assert evaluate_single_scholarship(
+            gks,
+            {
+                "citizenships": ["ID", "KR"],
+                "dual_citizenship": True,
+                "destination_country": "KR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2008-02-01",
+                "gpa_4": 3.5,
+            },
+        )["eligibility_status"] == "ineligible"
+
+        # 5. A*STAR AGS (SG, SGD, open cycle, STEM vs Law)
+        ags = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "A*STAR Graduate Scholarship (AGS — PhD)"
+        ).one()
+        ags_ok = evaluate_single_scholarship(
+            ags,
+            {
+                "citizenships": ["IN"],
+                "destination_country": "SG",
+                "degree_level": "doctoral",
+                "field_of_study": "Quantum Computing and Semiconductor Engineering",
+            },
+        )
+        assert ags_ok["eligibility_status"] == "conditionally_eligible"
+        assert ags_ok["award_currency"] == "SGD"
+        assert ags_ok["application_cycle_status"] == "open"
+        assert evaluate_single_scholarship(
+            ags,
+            {
+                "citizenships": ["IN"],
+                "destination_country": "SG",
+                "degree_level": "doctoral",
+                "field_of_study": "Law",
+            },
+        )["eligibility_status"] == "ineligible"
+    finally:
+        db.close()
+
+
+def test_15d_batch3_southeast_and_south_asia_rules():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch3_asia_pacific(db)
+
+        mis = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Malaysia International Scholarship (MIS, MOHE)"
+        ).one()
+        mis_ph = evaluate_single_scholarship(
+            mis,
+            {
+                "citizenships": ["PH"],
+                "destination_country": "MY",
+                "degree_level": "masters",
+                "date_of_birth": "1999-01-10",
+                "gpa_4": 3.5,
+                "field_of_study": "Data Science",
+                "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 6.5}},
+            },
+        )
+        assert mis_ph["eligibility_status"] == "eligible"
+        assert mis_ph["award_currency"] == "MYR"
+        assert mis_ph["application_cycle_status"] == "closed"
+        assert evaluate_single_scholarship(
+            mis,
+            {
+                "citizenships": ["MY"],
+                "destination_country": "MY",
+                "degree_level": "masters",
+                "date_of_birth": "1999-01-10",
+                "gpa_4": 3.5,
+                "field_of_study": "Data Science",
+                "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 6.5}},
+            },
+        )["eligibility_status"] == "ineligible"
+        assert evaluate_single_scholarship(
+            mis,
+            {
+                "citizenships": ["PH"],
+                "destination_country": "MY",
+                "degree_level": "masters",
+                "date_of_birth": "1999-01-10",
+                "gpa_4": 3.5,
+                "field_of_study": "Medicine",
+                "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 6.5}},
+            },
+        )["eligibility_status"] == "ineligible"
+
+        knb = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Beasiswa Kemitraan Negara Berkembang (KNB Scholarship, Kemdiktisaintek RI)"
+        ).one()
+        knb_ok = evaluate_single_scholarship(
+            knb,
+            {
+                "citizenships": ["PH"],
+                "destination_country": "ID",
+                "degree_level": "masters",
+                "date_of_birth": "1998-03-01",
+                "gpa_4": 3.3,
+                "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 6.0}},
+            },
+        )
+        assert knb_ok["eligibility_status"] == "conditionally_eligible"
+        assert knb_ok["award_currency"] == "IDR"
+        assert knb_ok["native_amount_min"] is None
+        assert knb_ok["application_cycle_status"] == "closed"
+
+        hec = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "HEC / BISP Undergraduate Scholarship (Ehsaas / Benazir Undergraduate Scholarship)"
+        ).one()
+        assert evaluate_single_scholarship(
+            hec,
+            {
+                "citizenships": ["PK"],
+                "destination_country": "PK",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+            },
+        )["eligibility_status"] == "eligible"
+
+        ugc = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "UGC PhD Scholarship (2026–2027, University Grants Commission of Bangladesh)"
+        ).one()
+        ugc_bd = evaluate_single_scholarship(
+            ugc,
+            {
+                "citizenships": ["BD"],
+                "destination_country": "BD",
+                "degree_level": "doctoral",
+            },
+        )
+        assert ugc_bd["eligibility_status"] == "conditionally_eligible"
+        assert ugc_bd["award_currency"] == "BDT"
+        assert ugc_bd["native_amount_min"] is None
+        assert ugc_bd["application_cycle_status"] == "closed"
+
+        vnu = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "VNU Hanoi Institutional & Partner Scholarships (Vingroup / KBSV / Nguyễn Trường Tộ — ĐHQGHN)"
+        ).one()
+        vnu_vn = evaluate_single_scholarship(
+            vnu,
+            {
+                "citizenships": ["VN"],
+                "destination_country": "VN",
+                "degree_level": "bachelors",
+            },
+        )
+        assert vnu_vn["eligibility_status"] == "conditionally_eligible"
+        assert vnu_vn["award_currency"] == "VND"
+        assert vnu_vn["native_amount_max"] == 25000000.0
+
+        tes = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "CHED-UniFAST Tertiary Education Subsidy (TES — Republic Act 10931)"
+        ).one()
+        tes_ph = evaluate_single_scholarship(
+            tes,
+            {
+                "citizenships": ["PH"],
+                "destination_country": "PH",
+                "degree_level": "bachelors",
+                "financial_need_level": "high",
+            },
+        )
+        assert tes_ph["eligibility_status"] == "conditionally_eligible"
+        assert tes_ph["award_currency"] == "PHP"
+        assert tes_ph["native_amount_min"] == 20000.0
+        assert tes_ph["native_amount_max"] == 27000.0
+    finally:
+        db.close()
+
+
+def test_15e_batch3_native_currencies_never_converted_to_usd_net_price():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch3_asia_pacific(db)
+        us_inst = db.query(Institution).filter(Institution.country_code == "US").first()
+        assert us_inst is not None
+        for cit, dest in (("CN", "CN"), ("IN", "IN"), ("PH", "MY"), ("PK", "CN")):
+            np_res = calculate_net_price(
+                db,
+                us_inst,
+                None,
+                {
+                    "residency_classification": "international",
+                    "housing_preference": "on_campus",
+                    "applicant_type": "first_year",
+                    "degree_level": "bachelors",
+                    "citizenship_country": cit,
+                    "country_of_residence": cit,
+                    "destination_country": dest,
+                    "include_competitive_aid": True,
+                },
+            )
+            for applied in np_res["verified_applicable_aid"] + np_res["conditional_aid"]:
+                assert applied["award_currency"] == "USD"
+                assert applied["estimated_max_usd"] > 0
+    finally:
+        db.close()
+

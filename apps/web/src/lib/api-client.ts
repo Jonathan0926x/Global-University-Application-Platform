@@ -1790,6 +1790,9 @@ export interface ScholarshipMatchResponse {
   insufficient_information_count?: number;
   requires_manual_review_count?: number;
   ineligible_count: number;
+  total_active_programs?: number;
+  verified_funding_programs?: number;
+  verified_funding_coverage?: number;
   aggregation_precedence?: string[];
   results: ScholarshipEligibilityResult[];
   disclaimer: string;

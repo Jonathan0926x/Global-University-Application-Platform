@@ -175,6 +175,8 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
     "fin.cycle_closed",
     "fin.cycle_open",
     "fin.sponsor_label",
+    "fin.verified_funding_coverage",
+    "fin.verified_funding_detail",
   ] as const;
   for (const locale of ALL_10_LOCALES) {
     for (const key of BATCH2_REQUIRED_KEYS) {

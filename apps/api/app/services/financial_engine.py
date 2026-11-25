@@ -27,6 +27,7 @@ from app.models.institution import Institution, InstitutionCost
 from app.models.profile import CitizenshipRecord, StudentProfile
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
 from app.services.freshness_governance import (
+    compute_verified_funding_coverage,
     evaluate_scholarship_claim_breakdown,
     evaluate_scholarship_freshness,
 )
@@ -109,7 +110,19 @@ def ensure_phase4_seeded(db: Session) -> None:
         .limit(1)
         .first()
     )
-    if has_rule is None or has_yale is None or has_batch1 is None or has_batch2 is None:
+    has_batch3 = (
+        db.query(ScholarshipProgram.id)
+        .filter(ScholarshipProgram.title == "CAS-ANSO Scholarship (2027 Call — USTC / UCAS / CAS)")
+        .limit(1)
+        .first()
+    )
+    if (
+        has_rule is None
+        or has_yale is None
+        or has_batch1 is None
+        or has_batch2 is None
+        or has_batch3 is None
+    ):
         seed_phase4_financial_and_credentials(db)
 
 
@@ -976,6 +989,8 @@ def match_scholarships_deterministic(
 
     filtered = evaluated if include_ineligible else [r for r in evaluated if r["eligibility_status"] != "ineligible"]
 
+    coverage_metrics = compute_verified_funding_coverage(db)
+
     return {
         "evaluated_profile": ctx,
         "total_scholarships": len(evaluated),
@@ -984,6 +999,7 @@ def match_scholarships_deterministic(
         "insufficient_information_count": counts["insufficient_information"],
         "requires_manual_review_count": counts["requires_manual_review"],
         "ineligible_count": counts["ineligible"],
+        **coverage_metrics,
         "aggregation_precedence": list(AGGREGATION_PRECEDENCE),
         "results": filtered,
         "disclaimer": FINANCIAL_DISCLAIMER,

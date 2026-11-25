@@ -468,4 +468,28 @@ export const PHASE4_TRANSLATIONS: Record<string, Record<string, string>> = {
   "fin.cycle_rolling": entry("Rolling", "Continuo", "Continu", "Kontini", "مستمر", "滚动申请", "निरंतर", "Contínuo", "随時受付", "Laufend"),
   "fin.cycle_cyclical_check_official": entry("Annual Cycle (Verify Dates)", "Ciclo Anual", "Cycle Annuel", "Sik Anyèl", "دورة سنوية (تحقق من الموعد)", "年度周期（以官网为准）", "वार्षिक चक्र", "Ciclo Anual", "年次募集（要確認）", "Jährlicher Zyklus"),
   "fin.cycle_unspecified": entry("Check Official Site", "Consultar Sitio Oficial", "Voir Site Officiel", "Verifye Sit Ofisyèl", "راجع الموقع الرسمي", "请查阅官网", "आधिकारिक साइट देखें", "Consultar Site Oficial", "公式サイト要確認", "Offizielle Website prüfen"),
+  "fin.verified_funding_coverage": entry(
+    "Verified Funding Coverage",
+    "Cobertura de Financiamiento Verificado",
+    "Couverture des Financements Vérifiés",
+    "Kouvèti Finansman Verifye",
+    "تغطية التمويل الموثق",
+    "经核验资助覆盖率",
+    "सत्यापित वित्तपोषण कवरेज",
+    "Cobertura de Financiamento Verificado",
+    "検証済み奨学金カバレッジ",
+    "Geprüfte Förderabdeckung"
+  ),
+  "fin.verified_funding_detail": entry(
+    "programs with current verified amount & eligibility claims",
+    "programas con montos y elegibilidad verificados vigentes",
+    "programmes avec montants et éligibilité vérifiés et à jour",
+    "pwogram ki gen montan ak kalifikasyon verifye ajou",
+    "برنامجًا بمبالغ وشروط أهلية موثقة وسارية",
+    "项具有当前有效核验金额与资格条件的项目",
+    "वर्तमान सत्यापित राशि और पात्रता वाले कार्यक्रम",
+    "programas com valores e elegibilidade verificados vigentes",
+    "件の有効な金額・資格条件が検証済みのプログラム",
+    "Programme mit aktuell geprüften Förderbeträgen & Kriterien"
+  ),
 };
