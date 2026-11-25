@@ -1,41 +1,73 @@
 """
-Multilingual AI Admissions Counselor Reasoning Service
+pgvector Hybrid RAG Multilingual AI Admissions Counselor Service (Milestone 6).
 
-Retrieves real, source-verified admission requirements, deadlines, and national qualifications
-from PostgreSQL, preserving original official source URLs and refusing to fabricate unverified rules.
+Architecture & Guarantees:
+1. Retrieves verified facts from PostgreSQL `rag_knowledge_chunks` using hybrid
+   pgvector cosine similarity + PostgreSQL full-text search (TSVECTOR) + institution/pathway filters.
+2. Enforces strict epistemic separation:
+   - Official Institutional & Registry Facts (`official`)
+   - Historical & Observed Patterns (`historical`)
+   - Personalized AI Interpretation & Student Profile Connection (`ai_interpretation`)
+3. Loads student profile, enrollments, courses, matching scores, transfer summary, and
+   uploaded document vault extractions strictly scoped by `profile.id`.
+4. Preserves multi-turn follow-up context across `CounselorConversation` state.
+5. Detects missing, conflicting (`DataQualityFlag`), outdated (passed deadlines), or
+   insufficient records instead of inventing policies, probabilities, or scholarships.
 """
 
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
+import re
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
-from sqlalchemy import or_
+from sqlalchemy import Float, cast, func, or_
 from sqlalchemy.orm import Session
 
+from app.ingestion.rag_indexer import index_single_institution_chunks, sync_rag_knowledge_base
+from app.models.document import Document, DocumentExtraction
+from app.models.enrollment import EnrollmentRecord
 from app.models.institution import Institution
+from app.models.matching import MatchingPreference, UniversityRecommendation
 from app.models.profile import StudentProfile
-from app.services.requirements_engine import get_institution_admissions_summary
+from app.models.provenance import DataQualityFlag
+from app.models.rag import RagKnowledgeChunk, ScholarshipProgram
+from app.services.articulation_engine import evaluate_student_transfer_profile
+from app.services.embeddings import embed_text
+from app.services.requirements_engine import (
+    evaluate_dynamic_checklist,
+    get_institution_admissions_summary,
+)
 
 
-INSTITUTION_QUERY_ALIASES = {
+INSTITUTION_QUERY_ALIASES: Dict[str, Tuple[str, str]] = {
     "berkeley": ("ipeds", "110635"),
     "uc berkeley": ("ipeds", "110635"),
     "ucb": ("ipeds", "110635"),
+    "university of california": ("ipeds", "110635"),
+    "universidad de california": ("ipeds", "110635"),
+    "بيركلي": ("ipeds", "110635"),
     "ucla": ("ipeds", "110662"),
     "michigan": ("ipeds", "170976"),
     "umich": ("ipeds", "170976"),
     "mit": ("ipeds", "166683"),
+    "معهد ماساتشوستس": ("ipeds", "166683"),
     "de anza": ("ipeds", "113333"),
+    "santa monica": ("ipeds", "122931"),
     "toronto": ("name", "University of Toronto"),
     "u of t": ("name", "University of Toronto"),
+    "تورونتو": ("name", "University of Toronto"),
     "mcgill": ("name", "McGill University"),
     "ubc": ("name", "University of British Columbia"),
     "british columbia": ("name", "University of British Columbia"),
     "oxford": ("name", "University of Oxford"),
+    "أكسفورد": ("name", "University of Oxford"),
     "cambridge": ("name", "University of Cambridge"),
     "ucl": ("name", "University College London"),
     "sorbonne": ("name", "Sorbonne Université"),
+    "السوربون": ("name", "Sorbonne Université"),
     "paris-saclay": ("name", "Université Paris-Saclay"),
     "tum": ("name", "Technical University of Munich"),
     "technical university of munich": ("name", "Technical University of Munich"),
+    "ميونخ": ("name", "Technical University of Munich"),
     "lmu": ("name", "Ludwig-Maximilians-Universität München"),
     "quisqueya": ("name", "Quisqueya University"),
     "uniq": ("name", "Quisqueya University"),
@@ -48,358 +80,688 @@ INSTITUTION_QUERY_ALIASES = {
 }
 
 
-class MultilingualCounselorService:
-    # Fallback Baseline Official Citations (used only when no institution-specific DB context applies)
-    OFFICIAL_CITATIONS = {
-        "uc_transfer": {
-            "title": "University of California Transfer Admission Planner & Pathways",
-            "url": "https://admission.universityofcalifornia.edu/admission-requirements/transfer-requirements/",
-            "institution": "University of California System",
-            "verified_at": "2026-11-24",
-            "summary": "Minimum 60 semester (90 quarter) transferable units, 2.4 minimum GPA for CA residents (2.8 for non-residents). 7-course pattern required.",
-        },
-        "assist_org": {
-            "title": "ASSIST Official Statewide Student Transfer Information System",
-            "url": "https://assist.org",
-            "institution": "California Community Colleges & UC/CSU",
-            "verified_at": "2026-11-24",
-            "summary": "Official articulation agreements mapping California Community College courses directly to UC and CSU course equivalents.",
-        },
-        "uc_berkeley_cs": {
-            "title": "UC Berkeley College of Computing, Data Science, and Society (CDSS) Transfer Policy",
-            "url": "https://cdss.berkeley.edu/academics",
-            "institution": "University of California, Berkeley",
-            "verified_at": "2026-11-24",
-            "summary": "Direct transfer to Computer Science requires completion of major prerequisites including 61A, 61B, 61C equivalents, Calculus I & II, Linear Algebra, and Discrete Math with high competitive GPA.",
-        },
-        "haitian_baccalaureate": {
-            "title": "International Credential Guide — Haitian Secondary Education System",
-            "url": "https://www.wes.org/advisor-blog/education-system-in-haiti/",
-            "institution": "World Education Services / AACRAO Edge",
-            "verified_at": "2026-11-24",
-            "summary": "Baccalauréat haïtien (NS4 / Bac II) recognized as comparable to US High School Diploma completion; 0–20 scale with 10/20 pass mark.",
-        },
-    }
+_FOLLOWUP_PATTERNS = [
+    "it ", "its ", "that school", "that university", "this university", "same university",
+    "what about", "how about", "and what", "and deadlines", "and tuition", "and scholarships",
+    "and my courses", "what else", "follow up", "follow-up",
+    # Haitian Creole follow-ups
+    "frè li", "dat limit li", "bous li", "kredi mwen", "ak sa", "pou li",
+    # French follow-ups
+    "ses frais", "ses bourses", "sa date limite", "et pour", "là-bas",
+    # Spanish follow-ups
+    "su matrícula", "sus becas", "sus fechas", "y los costos", "esa universidad",
+    # Arabic follow-ups
+    "رسومها", "منحها", "موعدها", "مواعيدها", "تكاليفها", "هذه الجامعة", "نفس الجامعة",
+]
 
-    @staticmethod
-    def _detect_language(q_lower: str, preferred_language: str) -> str:
-        if any(
-            w in q_lower
-            for w in ["koman", "kijan", "eske", "inivèsite", "kolej", "ayiti", "transfè", "dokiman", "aplike", "etidyan", "bezwen"]
-        ):
-            return "ht-HT"
-        if any(w in q_lower for w in ["comment", "université", "transférer", "baccalauréat", "documents", "candidature"]):
-            return "fr-FR"
-        if any(w in q_lower for w in ["cómo", "transferir", "universidad", "requisitos", "documentos", "solicitar"]):
-            return "es-419"
-        if any(w in q_lower for w in ["كيف", "جامعة", "تحويل", "متطلبات", "وثائق"]):
-            return "ar-SA"
-        return preferred_language
 
-    @staticmethod
-    def _detect_pathway(q_lower: str, fallback: str) -> str:
-        if any(w in q_lower for w in ["transfè", "transfer", "transférer", "transferir", "تحويل"]):
-            return "transfer"
-        if any(w in q_lower for w in ["first-year", "first year", "freshman", "premye ane", "première année", "primer año"]):
-            return "first_year"
-        return "transfer" if fallback == "undecided" else fallback
+def is_explicit_followup_hint(q_lower: str) -> bool:
+    return any(p in (q_lower or "") for p in _FOLLOWUP_PATTERNS)
 
-    @staticmethod
-    def _resolve_institution(
-        db: Session,
-        q_lower: str,
-        institution_id: Optional[UUID] = None,
-    ) -> Optional[Institution]:
-        if institution_id:
-            inst = db.query(Institution).filter(Institution.id == institution_id).first()
-            if inst:
-                return inst
 
-        for alias, (kind, val) in sorted(INSTITUTION_QUERY_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
-            if alias in q_lower:
-                if kind == "ipeds":
-                    inst = db.query(Institution).filter(Institution.ipeds_unit_id == val).first()
-                else:
-                    inst = db.query(Institution).filter(Institution.official_name == val).first()
-                if inst:
-                    return inst
+_SECTION_LABELS: Dict[str, Dict[str, str]] = {
+    "en-US": {
+        "official": "Official Institutional & Registry Facts",
+        "historical": "Historical & Observed Patterns",
+        "ai": "Personalized AI Interpretation & Student Profile Connection",
+        "missing": "Missing, Conflicting & Unverified Information",
+        "no_data": "I do not have verified institutional records in UniGlobe for this specific detail yet; please confirm directly via the official university portal.",
+        "disclaimer": "AI Interpretation — Retrieval-grounded in UniGlobe PostgreSQL records via pgvector + full-text search; not an official admissions decision.",
+    },
+    "ht-HT": {
+        "official": "Enfòmasyon Ofisyèl Verifye (Inivèsite ak Rejis Federal)",
+        "historical": "Modèl Istorik ak Rezilta Obsève",
+        "ai": "Entèpretasyon Pèsonalize AI & Koneksyon Pwofil Etidyan",
+        "missing": "Enfòmasyon ki Manke, Konfli, oswa ki Poko Verifye",
+        "no_data": "UniGlobe poko gen done ofisyèl verifye pou kesyon sa a nan baz done a; tanpri tcheke pòtay ofisyèl inivèsite a dirèkteman olye pou nou envante enfòmasyon.",
+        "disclaimer": "AI Interpretation (Entèpretasyon AI) — Baze sou done verifye PostgreSQL UniGlobe atravè rechèch pgvector; sa pa ranplase yon desizyon admisyon ofisyèl.",
+    },
+    "fr-FR": {
+        "official": "Faits Officiels Vérifiés (Établissement & Registres)",
+        "historical": "Tendances Historiques & Transferts Observés",
+        "ai": "Interprétation IA Personnalisée & Lien avec Votre Profil",
+        "missing": "Informations Manquantes, Conflictuelles ou Non Vérifiées",
+        "no_data": "UniGlobe ne dispose pas encore de données institutionnelles vérifiées pour ce point précis ; veuillez consulter le portail officiel de l'université.",
+        "disclaimer": "AI Interpretation (Interprétation IA) — Fondée sur la recherche hybride pgvector dans la base UniGlobe ; ne constitue pas une décision d'admission officielle.",
+    },
+    "es-419": {
+        "official": "Datos Oficiales Verificados (Institución y Registros)",
+        "historical": "Patrones Históricos y Equivalencias Observadas",
+        "ai": "Interpretación Personalizada de IA y Conexión con tu Perfil",
+        "missing": "Información Faltante, Conflictiva o No Verificada",
+        "no_data": "UniGlobe aún no cuenta con registros institucionales verificados para este punto específico; verifica directamente en el portal oficial.",
+        "disclaimer": "AI Interpretation (Interpretación de IA) — Basada en recuperación pgvector de registros verificados en UniGlobe; no es una decisión oficial de admisión.",
+    },
+    "ar-SA": {
+        "official": "الحقائق المؤسسية والسجلات الرسمية الموثقة",
+        "historical": "الأنماط التاريخية ونتائج التحويل المرصودة",
+        "ai": "التفسير المخصص بالذكاء الاصطناعي وربطه بملفك الدراسي",
+        "missing": "المعلومات الناقصة أو المتعارضة أو غير الموثقة",
+        "no_data": "لا تتوفر حاليًا سجلات مؤسسية موثقة في UniGlobe لهذا الاستفسار المحدد؛ يُرجى التحقق مباشرة عبر البوابة الرسمية للجامعة دون تخمين.",
+        "disclaimer": "AI Interpretation (تفسير ذكاء اصطناعي) — مستند إلى استرجاع pgvector من سجلات UniGlobe الموثقة، وليس قرار قبول جامعي رسميًا.",
+    },
+}
 
-        # Fallback: direct official_name match on published records if user typed a longer school name
-        words = [w for w in q_lower.replace("?", "").split() if len(w) >= 5]
-        if len(words) >= 2:
-            phrase = " ".join(words[:3])
-            return (
+
+def _labels_for(lang: str) -> Dict[str, str]:
+    if lang in _SECTION_LABELS:
+        return _SECTION_LABELS[lang]
+    prefix = (lang or "en").split("-")[0].lower()
+    for k, v in _SECTION_LABELS.items():
+        if k.lower().startswith(prefix):
+            return v
+    return _SECTION_LABELS["en-US"]
+
+
+def _detect_language(query: str, preferred_language: str) -> str:
+    q = query or ""
+    q_lower = q.lower()
+    if re.search(r"[\u0600-\u06ff]", q):
+        return "ar-SA"
+    if re.search(r"[\u0900-\u097f]", q):
+        return "hi-IN"
+    if re.search(r"[\u3040-\u30ff]", q):
+        return "ja-JP"
+    if re.search(r"[\u4e00-\u9fff]", q):
+        return "zh-Hans"
+    if any(w in q_lower for w in ["koman", "kijan", "eske", "èskew", "inivèsite", "kolej", "ayiti", "ayisyen", "transfè", "dokiman", "aplike", "etidyan", "bezwen", "kredi", "bous", "frè"]):
+        return "ht-HT"
+    if any(w in q_lower for w in ["comment", "université", "transférer", "documents", "candidature", "bourse", "frais de scolarité", "exigences"]):
+        return "fr-FR"
+    if any(w in q_lower for w in ["cómo", "transferir", "universidad", "requisitos", "documentos", "solicitar", "becas", "matrícula", "fechas límite"]):
+        return "es-419"
+    if any(w in q_lower for w in ["wie ", "studiengebühren", "bewerbung", "stipendium", "voraussetzungen", "universität"]):
+        return "de-DE"
+    if any(w in q_lower for w in ["como ", "bolsas", "mensalidade", "transferência", "faculdade"]):
+        return "pt-BR"
+    return preferred_language or "en-US"
+
+
+def _detect_pathway(q_lower: str, conversation_pathway: Optional[str], profile_pathway: Optional[str]) -> str:
+    if any(w in q_lower for w in ["transfè", "transfer", "transférer", "transferir", "تحويل", "نقل", "community college", "equivalen"]):
+        return "transfer"
+    if any(w in q_lower for w in ["first-year", "first year", "freshman", "premye ane", "première année", "primer año", "السنة الأولى"]):
+        return "first_year"
+    chosen = conversation_pathway or profile_pathway or "transfer"
+    return "transfer" if chosen in ("undecided", "both") else chosen
+
+
+def _detect_topic(q_lower: str) -> str:
+    if any(w in q_lower for w in ["scholarship", "aid", "bourse", "bous", "beca", "منحة", "منح", "tuition", "cost", "fee", "frais", "frè", "costo", "رسوم", "تكلفة", "affordable", "budget"]):
+        return "financial"
+    if any(w in q_lower for w in ["credit", "kredi", "crédits", "créditos", "transfer", "transfè", "articulation", "syllabus", "equivalen", "ساعات"]):
+        return "transfer"
+    if any(w in q_lower for w in ["deadline", "dat", "échéance", "fecha", "موعد", "مواعيد", "when"]):
+        return "deadline"
+    if any(w in q_lower for w in ["baccalauréat", "abitur", "a-level", "cbse", "haiti", "ayiti", "scale", "gpa", "معدل"]):
+        return "qualification"
+    if any(w in q_lower for w in ["match", "score", "reach", "target", "likely", "shortlist"]):
+        return "matching"
+    return "admissions"
+
+
+def _resolve_institutions_in_query(
+    db: Session,
+    query: str,
+    explicit_inst_id: Optional[UUID] = None,
+    fallback_inst_id: Optional[UUID] = None,
+) -> Tuple[List[Institution], bool]:
+    """
+    Resolves one or more institutions named in the query; falls back cleanly to
+    `fallback_inst_id` for contextual follow-up questions.
+    Returns (list_of_institutions, used_followup_context).
+    """
+    q_lower = (query or "").lower()
+    found: List[Institution] = []
+    seen_ids = set()
+
+    for alias, (kind, val) in sorted(INSTITUTION_QUERY_ALIASES.items(), key=lambda x: len(x[0]), reverse=True):
+        # Word-boundary-safe check for short aliases like "mit" / "ucb" / "tum" / "ueh"
+        if len(alias) <= 4 and alias.isascii():
+            matched = bool(re.search(rf"\b{re.escape(alias)}\b", q_lower))
+        else:
+            matched = alias in q_lower
+        if matched:
+            inst = (
+                db.query(Institution).filter(Institution.ipeds_unit_id == val).first()
+                if kind == "ipeds"
+                else db.query(Institution).filter(Institution.official_name == val).first()
+            )
+            if inst and inst.id not in seen_ids:
+                found.append(inst)
+                seen_ids.add(inst.id)
+
+    if not found:
+        # Try explicit University/College/Institute patterns first (e.g. "Harvard University", "University of Florida")
+        inst_phrases = re.findall(
+            r"(?:University of [A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+)?|[A-Z][a-zA-Z\-]+(?:\s+[A-Z][a-zA-Z\-]+){0,2}\s+(?:University|College|Institute))",
+            query or "",
+        )
+        stopwords = {
+            "what", "when", "where", "which", "does", "transfer", "tuition", "deadlines", "scholarships",
+            "scholarship", "verified", "requirements", "requirement", "university", "college", "institute",
+            "about", "with", "into", "from", "have", "credit", "credits", "program", "programs", "financial",
+            "first", "year", "international", "student", "students", "check", "compare", "apply", "admission",
+            "admissions", "policies", "policy",
+        }
+        latin_words = [
+            w for w in re.findall(r"[a-zA-ZÀ-ÿ0-9\-]{4,}", query or "")
+            if w.lower() not in stopwords
+        ]
+        candidate_phrases = list(inst_phrases)
+        if len(latin_words) >= 2:
+            candidate_phrases.extend([" ".join(latin_words[:3]), " ".join(latin_words[:2])])
+        candidate_phrases.extend([w for w in latin_words if w[0].isupper()])
+
+        generic_phrases = {
+            "community college", "technical college", "junior college", "high school",
+            "college", "university", "institute", "community", "technical", "state",
+            "national", "international", "american", "global", "general", "public",
+            "private", "central", "comment", "quels", "quelles", "cuáles", "kijan",
+        }
+        for phrase in candidate_phrases:
+            clean_p = phrase.strip().lower()
+            if clean_p in generic_phrases or clean_p.startswith("un community") or "community college" in clean_p:
+                continue
+            inst = (
                 db.query(Institution)
-                .filter(
-                    Institution.is_published == True,
-                    or_(
-                        Institution.official_name.ilike(f"%{phrase}%"),
-                        Institution.abbreviation.ilike(phrase),
-                    ),
-                )
+                .filter(Institution.official_name.ilike(f"%{phrase}%"))
+                .order_by(Institution.is_published.desc(), Institution.total_enrollment.desc().nullslast())
                 .first()
             )
-        return None
+            if inst and inst.id not in seen_ids:
+                found.append(inst)
+                seen_ids.add(inst.id)
+                break
 
-    @staticmethod
-    def _format_db_grounded_answer(
-        inst: Institution,
-        pathway: str,
-        lang: str,
-        db: Session,
-        q_lower: str = "",
-    ) -> Dict[str, Any]:
-        summary = get_institution_admissions_summary(
-            db=db,
-            institution=inst,
-            applicant_type=pathway,
+    if not found and explicit_inst_id:
+        inst = db.query(Institution).filter(Institution.id == explicit_inst_id).first()
+        if inst:
+            found.append(inst)
+            seen_ids.add(inst.id)
+
+    if not found and fallback_inst_id:
+        inst = db.query(Institution).filter(Institution.id == fallback_inst_id).first()
+        if inst:
+            return [inst], True
+
+    # Mark follow-up context retained when continuing an existing conversation on the same institution
+    if found and fallback_inst_id and found[0].id == fallback_inst_id and is_explicit_followup_hint(q_lower):
+        return found, True
+
+    return found, False
+
+
+def _build_fts_query_terms(query: str) -> str:
+    """Extracts clean alphanumeric / bilingual keyword tokens for PostgreSQL plainto_tsquery."""
+    from app.services.embeddings import _tokenize
+    toks = _tokenize(query)
+    # Keep distinct meaningful keywords up to 16 tokens for FTS OR/plain matching
+    dedup = []
+    seen = set()
+    for t in toks:
+        if len(t) >= 3 and "_" not in t and t not in seen:
+            seen.add(t)
+            dedup.append(t)
+        if len(dedup) >= 16:
+            break
+    return " ".join(dedup) if dedup else (query or "admissions")
+
+
+def retrieve_grounded_chunks(
+    db: Session,
+    query: str,
+    institution_ids: Optional[List[UUID]] = None,
+    applicant_type: Optional[str] = None,
+    topic: Optional[str] = None,
+    limit: int = 8,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Performs hybrid pgvector cosine similarity + PostgreSQL TSVECTOR full-text search
+    across `rag_knowledge_chunks`. Automatically indexes requested institutions on-demand
+    if not yet cached in `rag_knowledge_chunks`.
+    """
+    if db.query(RagKnowledgeChunk.id).limit(1).first() is None:
+        sync_rag_knowledge_base(db, institution_limit=350)
+
+    if institution_ids:
+        for iid in institution_ids:
+            inst = db.query(Institution).filter(Institution.id == iid).first()
+            if inst:
+                index_single_institution_chunks(db, inst)
+        db.flush()
+
+    q_vec = embed_text(query)
+    fts_terms = _build_fts_query_terms(query)
+    ts_query = func.plainto_tsquery("simple", fts_terms)
+
+    vec_sim = (1.0 - cast(RagKnowledgeChunk.embedding.cosine_distance(q_vec), Float)).label("vec_sim")
+    fts_rank = func.coalesce(func.ts_rank_cd(RagKnowledgeChunk.search_tsv, ts_query), 0.0).label("fts_rank")
+
+    base_q = db.query(RagKnowledgeChunk, vec_sim, fts_rank)
+
+    # Filter candidate set cleanly when institution(s) are explicitly targeted, plus country qualification chunks
+    q_lower = (query or "").lower()
+    want_quals = any(w in q_lower for w in ["baccalauréat", "haiti", "ayiti", "abitur", "a-level", "cbse", "scale", "diploma", "qualification", "international"])
+    if institution_ids:
+        conds = [RagKnowledgeChunk.institution_id.in_(institution_ids)]
+        if want_quals:
+            conds.append(RagKnowledgeChunk.chunk_type == "qualification")
+        rows = (
+            base_q.filter(or_(*conds))
+            .order_by((vec_sim * 0.70 + func.least(fts_rank, 1.0) * 0.30).desc())
+            .limit(40)
+            .all()
+        )
+    else:
+        rows = (
+            base_q.order_by((vec_sim * 0.72 + func.least(fts_rank, 1.0) * 0.28).desc())
+            .limit(45)
+            .all()
         )
 
-        # Build citations strictly from verified DB records (deduped by URL)
-        seen_urls = set()
-        citations: List[Dict[str, Any]] = []
-        for r in summary.requirements:
-            if r.source_url and r.source_url not in seen_urls:
-                seen_urls.add(r.source_url)
-                citations.append(
-                    {
-                        "title": f"{r.source_name} — {r.title}",
-                        "url": r.source_url,
-                        "institution": inst.official_name,
-                        "verified_at": (r.verified_at.strftime("%Y-%m-%d") if r.verified_at else "2026-11-24"),
-                        "summary": r.institution_specific_notes or r.description or r.minimum_value,
-                    }
+    scored: List[Dict[str, Any]] = []
+    for chunk, v_sim, f_rank in rows:
+        vs = max(0.0, float(v_sim or 0.0))
+        fs = max(0.0, min(1.0, float(f_rank or 0.0)))
+        boost = 0.0
+        if institution_ids and chunk.institution_id in institution_ids:
+            boost += 0.22
+        if applicant_type and chunk.applicant_type in (applicant_type, "all"):
+            boost += 0.06
+        if topic == "financial" and chunk.chunk_type in ("scholarship", "cost"):
+            boost += 0.14
+        elif topic == "transfer" and chunk.chunk_type in ("articulation", "requirement"):
+            boost += 0.14
+        elif topic == "deadline" and chunk.chunk_type == "deadline":
+            boost += 0.18
+        elif topic == "qualification" and chunk.chunk_type == "qualification":
+            boost += 0.16
+
+        hybrid = round(vs * 0.68 + fs * 0.32 + boost, 4)
+        scored.append(
+            {
+                "chunk": chunk,
+                "vector_score": round(vs, 4),
+                "fts_score": round(fs, 4),
+                "hybrid_score": hybrid,
+            }
+        )
+
+    scored.sort(key=lambda x: x["hybrid_score"], reverse=True)
+    selected = scored[:limit]
+    stats = {
+        "total_candidates": len(scored),
+        "returned": len(selected),
+        "pgvector_dim": 384,
+        "fts_terms_used": fts_terms[:120],
+        "top_hybrid_score": selected[0]["hybrid_score"] if selected else 0.0,
+    }
+    return selected, stats
+
+
+def _load_student_private_context(
+    db: Session,
+    profile: Optional[StudentProfile],
+    target_institutions: List[Institution],
+    pathway: str,
+) -> Dict[str, Any]:
+    """
+    Loads strictly `profile_id`-scoped private student records (profile, enrollments/GPA,
+    courses, Document Vault extractions, Milestone 3 checklist, Milestone 4 transfer credits,
+    Milestone 5 compatibility match). NEVER touches other students' records.
+    """
+    if profile is None:
+        return {"notes": [], "missing": ["Student profile is not yet initialized."], "workflows": []}
+
+    notes: List[str] = []
+    missing: List[str] = []
+    workflows: List[Dict[str, str]] = []
+
+    if profile.intended_major:
+        notes.append(f"Intended major: {profile.intended_major} (Primary pathway: {pathway.replace('_', ' ')}).")
+    else:
+        missing.append("Intended major is not specified on your Universal Profile.")
+
+    cit_codes = [c.country_code for c in (profile.citizenships or []) if c.country_code]
+    if cit_codes or profile.country_of_residence:
+        notes.append(
+            f"Citizenship / residency context: {', '.join(cit_codes) if cit_codes else 'Unspecified'}"
+            + (f" (Residence: {profile.country_of_residence})" if profile.country_of_residence else "")
+            + "."
+        )
+
+    enrollments = (
+        db.query(EnrollmentRecord)
+        .filter(EnrollmentRecord.profile_id == profile.id)
+        .all()
+    )
+    gpa_notes = []
+    total_courses = 0
+    for enr in enrollments:
+        total_courses += len(enr.courses or [])
+        if enr.cumulative_gpa is not None:
+            scale = float(enr.gpa_scale or 4.0)
+            gpa_notes.append(f"{enr.institution_name_manual or enr.institution_country}: {float(enr.cumulative_gpa):g}/{scale:g} ({enr.enrollment_type})")
+    if gpa_notes:
+        notes.append("Recorded academic GPA & grading scale(s) preserved natively: " + "; ".join(gpa_notes) + ".")
+    else:
+        missing.append("Cumulative GPA and native grading scale are not yet recorded on your profile.")
+
+    docs = db.query(Document).filter(Document.profile_id == profile.id).all()
+    if docs:
+        doc_labels = [f"{d.document_category} ({d.detected_language})" for d in docs[:5]]
+        notes.append(f"Uploaded Document Vault files ({len(docs)} total): {', '.join(doc_labels)}.")
+        # Include parsed qualification if extracted
+        for d in docs[:3]:
+            if d.extraction and d.extraction.detected_qualification:
+                notes.append(
+                    f"Extracted credential from '{d.original_filename}': {d.extraction.detected_qualification}"
+                    + (f" (scale: {d.extraction.detected_grading_scale})" if d.extraction.detected_grading_scale else "")
                 )
-        for d in summary.deadlines:
-            if d.source_url and d.source_url not in seen_urls:
-                seen_urls.add(d.source_url)
-                citations.append(
-                    {
-                        "title": f"{d.source_name} — {d.intake_term} Deadlines",
-                        "url": d.source_url,
-                        "institution": inst.official_name,
-                        "verified_at": (d.verified_at.strftime("%Y-%m-%d") if d.verified_at else "2026-11-24"),
-                        "summary": d.notes,
-                    }
-                )
-        if inst.country_code == "US" and inst.state_province == "CA" and pathway == "transfer":
-            assist = MultilingualCounselorService.OFFICIAL_CITATIONS["assist_org"]
-            if assist["url"] not in seen_urls:
-                seen_urls.add(assist["url"])
-                citations.append(assist)
-        if any(w in q_lower for w in ["baccalauréat", "ayisyen", "ayiti", "haiti"]):
-            hb = MultilingualCounselorService.OFFICIAL_CITATIONS["haitian_baccalaureate"]
-            if hb["url"] not in seen_urls:
-                seen_urls.add(hb["url"])
-                citations.append(hb)
-        if not citations and (inst.admissions_website or inst.official_website):
-            url = inst.admissions_website or inst.official_website
-            citations.append(
-                {
-                    "title": f"{inst.official_name} Official Website",
-                    "url": url,
-                    "institution": inst.official_name,
-                    "verified_at": "2026-11-24",
-                    "summary": "Official institutional portal; detailed requirements pending curation.",
-                }
+    else:
+        missing.append("No academic transcripts or syllabi have been uploaded to your Document Vault yet.")
+        workflows.append({"label": "Upload Transcripts / Syllabi", "href": "/documents", "workflow_type": "documents"})
+
+    pref = db.query(MatchingPreference).filter(MatchingPreference.profile_id == profile.id).first()
+    if pref and pref.max_annual_budget is not None:
+        notes.append(f"Recorded target annual budget cap: ${float(pref.max_annual_budget):,.0f} {pref.currency}.")
+    else:
+        missing.append("Annual tuition/COA budget is not yet set in Matching Engine preferences.")
+
+    for inst in target_institutions[:2]:
+        workflows.append({"label": f"{inst.official_name} Profile & Reqs", "href": f"/universities/{inst.id}", "workflow_type": "university"})
+
+        # Milestone 3 checklist integration
+        chk = evaluate_dynamic_checklist(db, inst, profile, pathway, profile.intended_major)
+        if chk.has_verified_requirements:
+            notes.append(
+                f"Admissions Checklist ({inst.official_name}, {chk.readiness_pct}% ready): "
+                f"{len(chk.completed_requirements)} completed, "
+                f"{len(chk.missing_documents)} missing document(s), "
+                f"{len(chk.outstanding_prerequisites)} outstanding prerequisite(s)."
             )
 
-        if not summary.has_verified_requirements:
-            portal = inst.admissions_website or inst.official_website or "N/A"
-            if lang == "ht-HT":
-                content = (
-                    f"Pou **{inst.official_name}**, UniGlobe poko verifye tout egzijans admisyon espesifik ({pathway}) nan baz done a. "
-                    f"Pou nou pa envante okenn règ ki pa konfime, tanpri konsilte sit ofisyèl admisyon inivèsite a dirèkteman: {portal}"
+        # Milestone 4 transfer articulation summary integration
+        if pathway == "transfer":
+            workflows.append({"label": "Transfer Credit Matrix & Simulator", "href": f"/transfer?institution={inst.id}", "workflow_type": "transfer"})
+            if total_courses > 0:
+                tsum = evaluate_student_transfer_profile(db, profile, inst, profile.intended_major)
+                notes.append(
+                    f"Transfer Credit Analysis ({inst.official_name}): {tsum.officially_transferable_credits} semester-eq credits officially verified (Tier 1), "
+                    f"{tsum.potentially_transferable_credits} provisional (Tier 2/3), "
+                    f"{tsum.major_applicable_credits} major-applicable, {tsum.elective_only_credits} elective-only."
                 )
-            elif lang == "fr-FR":
-                content = (
-                    f"Pour **{inst.official_name}**, UniGlobe n'a pas encore vérifié les conditions d'admission détaillées ({pathway}). "
-                    f"Veuillez consulter le portail officiel de l'université : {portal}"
-                )
-            elif lang == "es-419":
-                content = (
-                    f"Para **{inst.official_name}**, UniGlobe aún no ha verificado los requisitos detallados ({pathway}). "
-                    f"Consulta el portal oficial de admisiones de la institución: {portal}"
-                )
+                if tsum.warnings:
+                    missing.extend(tsum.warnings[:2])
             else:
-                content = (
-                    f"For **{inst.official_name}**, detailed verified requirements for `{pathway}` have not yet been published in UniGlobe. "
-                    f"Rather than guessing, please consult the university's official portal directly: {portal}."
-                )
-            return {"content": content, "citations": citations}
+                missing.append("No post-secondary courses recorded yet to calculate Tier 1/2/3 transfer articulation.")
 
-        reqs = summary.requirements
-        dls = summary.deadlines
-        doc_items = [r for r in reqs if r.category in ("document", "financial")]
-        acad_items = [r for r in reqs if r.category in ("academic", "exam")]
-        admin_items = [r for r in reqs if r.category == "administrative"]
-
-        def fmt_line(r) -> str:
-            extra = []
-            if r.minimum_value:
-                extra.append(f"min: {r.minimum_value}")
-            if r.importance == "not_accepted":
-                extra.append("NOT CONSIDERED")
-            elif r.importance == "conditional":
-                extra.append("conditional")
-            suffix = f" ({'; '.join(extra)})" if extra else ""
-            note = f" — {r.institution_specific_notes}" if r.institution_specific_notes else ""
-            return f"- **{r.title}**{suffix}{note}"
-
-        dl_text = ", ".join(
-            f"{d.intake_term} ({d.deadline_type.replace('_', ' ')}): {d.deadline_date or 'Rolling'}"
-            for d in dls
+        # Milestone 5 recommendation integration
+        rec = (
+            db.query(UniversityRecommendation)
+            .filter(
+                UniversityRecommendation.profile_id == profile.id,
+                UniversityRecommendation.institution_id == inst.id,
+            )
+            .first()
         )
-
-        if lang == "ht-HT":
-            lines = [f"Men egzijans ak dokiman ki verifye nan baz done UniGlobe pou **{inst.official_name}** ({pathway.replace('_', ' ')}):"]
-            if "community college" in q_lower:
-                lines.append("\n- **Chemen Community College:** Verifye akò artikilasyon ant Community College ou a ak inivèsite a sou ASSIST.org pou asire tout kredi yo transfere.")
-            if "baccalauréat" in q_lower or "ayisyen" in q_lower or "ayiti" in q_lower:
-                lines.append("- **Baccalauréat haïtien:** Yo rekonèt Baccalauréat Ayisyen (NS4 / Bac II) kòm ekivalan diplòm segondè; inivèsite a ka mande relve nòt ofisyèl ak tradiksyon sètifye.")
-            if doc_items:
-                lines.append("\n**Dokiman ak Finans:**")
-                lines.extend(fmt_line(r) for r in doc_items)
-            if acad_items:
-                lines.append("\n**Egzijans Akademik ak Egzamen:**")
-                lines.extend(fmt_line(r) for r in acad_items)
-            if admin_items:
-                lines.append("\n**Fòmalite ak Frè Aplikasyon:**")
-                lines.extend(fmt_line(r) for r in admin_items)
-            if dl_text:
-                lines.append(f"\n**Dat Limit Ofisyèl:** {dl_text}")
-            lines.append(
-                "\n*Remak sou Elijibilite:* Done sa yo soti nan sous ofisyèl verifye, men konfimasyon elijibilite ou depann de verifikasyon nòt (GPA), kredi, ak dokiman konplè sou Pwofil Inivèsèl ou."
+        if rec:
+            notes.append(
+                f"Milestone 5 Match Snapshot ({inst.official_name}): {float(rec.composite_score):.1f}/100 ({rec.match_category.upper()}) — "
+                f"Academic {float(rec.score_academic):.0f}, Financial {float(rec.score_financial):.0f}, Readiness {float(rec.score_readiness):.0f}"
+                + (f", Transfer {float(rec.score_transfer):.0f}." if rec.applicant_type == "transfer" else " (Transfer N/A).")
             )
-            content = "\n".join(lines)
-        elif lang == "fr-FR":
-            lines = [f"Voici les exigences et documents vérifiés pour **{inst.official_name}** ({pathway.replace('_', ' ')}) :"]
-            if doc_items:
-                lines.append("\n**Documents & Justificatifs :**")
-                lines.extend(fmt_line(r) for r in doc_items)
-            if acad_items:
-                lines.append("\n**Critères Académiques & Examens :**")
-                lines.extend(fmt_line(r) for r in acad_items)
-            if dl_text:
-                lines.append(f"\n**Dates Limites Officielles :** {dl_text}")
-            content = "\n".join(lines)
-        elif lang == "es-419":
-            lines = [f"Requisitos y documentos verificados para **{inst.official_name}** ({pathway.replace('_', ' ')}):"]
-            if doc_items:
-                lines.append("\n**Documentos Requeridos:**")
-                lines.extend(fmt_line(r) for r in doc_items)
-            if acad_items:
-                lines.append("\n**Requisitos Académicos y Exámenes:**")
-                lines.extend(fmt_line(r) for r in acad_items)
-            if dl_text:
-                lines.append(f"\n**Fechas Límite Oficiales:** {dl_text}")
-            content = "\n".join(lines)
-        else:
-            lines = [f"Verified admissions requirements in UniGlobe for **{inst.official_name}** (`{pathway}`):"]
-            if doc_items:
-                lines.append("\n**Required & Conditional Documents:**")
-                lines.extend(fmt_line(r) for r in doc_items)
-            if acad_items:
-                lines.append("\n**Academic Thresholds & Examinations:**")
-                lines.extend(fmt_line(r) for r in acad_items)
-            if admin_items:
-                lines.append("\n**Application Portal & Fees:**")
-                lines.extend(fmt_line(r) for r in admin_items)
-            if dl_text:
-                lines.append(f"\n**Official Deadlines:** {dl_text}")
-            lines.append(
-                "\n*Eligibility Notice:* Review these verified rules alongside your Universal Student Profile and uploaded transcripts; eligibility cannot be confirmed while required GPA, credit, or course prerequisites are unverified."
-            )
-            content = "\n".join(lines)
 
-        return {"content": content, "citations": citations[:8]}
+    workflows.append({"label": "4D University Match Engine", "href": "/matching", "workflow_type": "matching"})
+    # Deduplicate workflow links by href
+    seen_hrefs = set()
+    unique_workflows = []
+    for wf in workflows:
+        if wf["href"] not in seen_hrefs:
+            seen_hrefs.add(wf["href"])
+            unique_workflows.append(wf)
 
+    return {"notes": notes, "missing": list(dict.fromkeys(missing)), "workflows": unique_workflows}
+
+
+class MultilingualCounselorService:
     @staticmethod
     def answer_admissions_query(
         query: str,
         preferred_language: str = "en-US",
-        applicant_type: str = "transfer",
+        applicant_type: Optional[str] = None,
         db: Optional[Session] = None,
         institution_id: Optional[UUID] = None,
         profile: Optional[StudentProfile] = None,
+        conversation_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Processes an admissions question, querying verified DB requirements when a target
-        institution is specified or detected, and returning cited guidance in the requested language.
+        Executes full pgvector + FTS RAG retrieval grounded in UniGlobe's PostgreSQL database,
+        incorporating strictly scoped private student context and follow-up thread state.
         """
-        q_lower = query.lower()
-        lang = MultilingualCounselorService._detect_language(q_lower, preferred_language)
-        pathway = MultilingualCounselorService._detect_pathway(q_lower, applicant_type)
+        lang = _detect_language(query, preferred_language)
+        labels = _labels_for(lang)
+        q_lower = (query or "").lower()
 
-        # 1. Grounded Database Retrieval when DB session is supplied
-        if db is not None:
-            resolved_inst = MultilingualCounselorService._resolve_institution(
-                db=db,
-                q_lower=q_lower,
-                institution_id=institution_id,
+        conv_inst_id = (conversation_context or {}).get("active_institution_id")
+        conv_pathway = (conversation_context or {}).get("active_applicant_type")
+        is_explicit_followup = any(pat in q_lower for pat in _FOLLOWUP_PATTERNS)
+
+        pathway = _detect_pathway(
+            q_lower,
+            conv_pathway if is_explicit_followup or not applicant_type else applicant_type,
+            profile.applicant_type if profile else applicant_type,
+        )
+        if applicant_type in ("first_year", "transfer"):
+            pathway = applicant_type
+        topic = _detect_topic(q_lower)
+
+        if db is None:
+            return {
+                "content": labels["no_data"],
+                "language": lang,
+                "citations": [],
+                "epistemic_breakdown": {
+                    "official_facts": [],
+                    "historical_facts": [],
+                    "ai_interpretation": [],
+                    "missing_or_conflicting": [labels["no_data"]],
+                    "student_context_used": [],
+                    "retrieval_stats": {"mode": "no_db"},
+                    "suggested_workflows": [{"label": "4D Match Engine", "href": "/matching", "workflow_type": "matching"}],
+                },
+                "disclaimer": labels["disclaimer"],
+            }
+
+        target_insts, used_followup_inst = _resolve_institutions_in_query(
+            db=db,
+            query=query,
+            explicit_inst_id=institution_id,
+            fallback_inst_id=conv_inst_id,
+        )
+        # If query expresses "transfer from Community College A to University B", focus destination university chunks
+        if len(target_insts) >= 2 and any(k in q_lower for k in ("from ", "soti nan", "depuis ")) and any(k in q_lower for k in (" to ", " pou ", " à ", " a ")):
+            non_cc = [i for i in target_insts if i.institution_type != "community_college"]
+            if non_cc:
+                target_insts = non_cc
+        inst_ids = [i.id for i in target_insts]
+
+        # 1. Hybrid pgvector + FTS Retrieval across shared verified PostgreSQL knowledge
+        retrieved, retrieval_stats = retrieve_grounded_chunks(
+            db=db,
+            query=query,
+            institution_ids=inst_ids if inst_ids else None,
+            applicant_type=pathway,
+            topic=topic,
+            limit=8,
+        )
+
+        official_facts: List[str] = []
+        historical_facts: List[str] = []
+        missing_or_conflicting: List[str] = []
+        citations: List[Dict[str, Any]] = []
+        seen_cite_keys = set()
+
+        for item in retrieved:
+            chunk: RagKnowledgeChunk = item["chunk"]
+            ver_str = chunk.verified_at.strftime("%Y-%m-%d") if chunk.verified_at else "2026-11-24"
+            line = f"**[{chunk.source_name}]** {chunk.content_text}"
+            if chunk.is_outdated:
+                missing_or_conflicting.append(f"Potentially outdated date flagged on '{chunk.title}' — verify next cycle portal date.")
+            if chunk.has_conflict:
+                missing_or_conflicting.append(f"Data conflict flag recorded on institution record for '{chunk.title}' (e.g., cross-source discrepancy).")
+
+            if chunk.epistemic_tier == "historical":
+                historical_facts.append(line)
+            else:
+                official_facts.append(line)
+
+            if chunk.source_url:
+                ckey = (chunk.source_url, chunk.source_type)
+                if ckey not in seen_cite_keys:
+                    seen_cite_keys.add(ckey)
+                    citations.append(
+                        {
+                            "title": chunk.title,
+                            "url": chunk.source_url,
+                            "institution": chunk.institution.official_name if chunk.institution else (chunk.country_code or "UniGlobe Global Registry"),
+                            "verified_at": ver_str,
+                            "summary": chunk.content_text[:220],
+                            "source_type": chunk.source_type,
+                            "epistemic_tier": chunk.epistemic_tier,
+                            "retrieval_score": item["hybrid_score"],
+                        }
+                    )
+
+        # 2. Check institutional data gaps, conflicts & scholarships explicitly
+        for inst in target_insts:
+            summary = get_institution_admissions_summary(db=db, institution=inst, applicant_type=pathway)
+            if not summary.has_verified_requirements:
+                missing_or_conflicting.append(
+                    f"Detailed `{pathway}` admissions requirements for {inst.official_name} are not yet verified in UniGlobe — do not assume uncurated criteria; consult {inst.admissions_website or inst.official_website}."
+                )
+            flags = (
+                db.query(DataQualityFlag)
+                .filter(DataQualityFlag.entity_id == inst.id, DataQualityFlag.resolved == False)
+                .all()
             )
-            if resolved_inst is not None:
-                db_answer = MultilingualCounselorService._format_db_grounded_answer(
-                    inst=resolved_inst,
-                    pathway=pathway,
-                    lang=lang,
-                    db=db,
-                    q_lower=q_lower,
-                )
-                return {
-                    "content": db_answer["content"],
-                    "language": lang,
-                    "citations": db_answer["citations"],
-                    "disclaimer": "AI Interpretation — Grounded in UniGlobe verified institutional records; not an official university admissions decision.",
-                }
+            for fl in flags[:2]:
+                missing_or_conflicting.append(f"Cross-source conflict flag ({fl.flag_type}) on {inst.official_name}: {fl.description}")
 
-        # 2. Fallback Grounded Topic Scenarios (e.g. general Haiti transfer / credential query without specific institution)
-        citations = [
-            MultilingualCounselorService.OFFICIAL_CITATIONS["uc_transfer"],
-            MultilingualCounselorService.OFFICIAL_CITATIONS["assist_org"],
-        ]
+            if topic == "financial":
+                sch_count = db.query(ScholarshipProgram).filter(ScholarshipProgram.institution_id == inst.id, ScholarshipProgram.is_current == True).count()
+                if sch_count == 0:
+                    missing_or_conflicting.append(
+                        f"No verified institutional scholarship policy is indexed yet for {inst.official_name} (especially for international aid eligibility)."
+                    )
 
-        if "haiti" in q_lower or "ayiti" in q_lower or "baccalauréat" in q_lower or lang == "ht-HT":
-            citations.append(MultilingualCounselorService.OFFICIAL_CITATIONS["haitian_baccalaureate"])
-            if lang == "ht-HT":
-                content = (
-                    "Bonjou! Men sa yon etidyan dwe prepare an jeneral (ou kapab presize non yon inivèsite espesifik tou tankou UC Berkeley, UMich, MIT, UEH, oswa Quisqueya pou m ba w lis egzijans verifye li):\n\n"
-                    "1. **Dokiman Transfè / Segondè:** Relve nòt ofisyèl kolèj (ak lekòl segondè / Baccalauréat haïtien NS4 si sa nesesè), tradiksyon sètifye si dokiman yo pa nan lang etid la, ak deklarasyon pèsonèl (essays).\n"
-                    "2. **Kredi ak GPA Transfè:** Anpil inivèsite ameriken (tankou sistèm UC) mande omwen 60 inite semèstryèl ak yon GPA konpetitif (pa egzanp 3.0+).\n"
-                    "3. **Konpetans nan Lang & Finans (Entènasyonal):** Tès TOEFL/IELTS oswa DET ak prèv finansye pou viza etidyan (I-20 / Study Permit) selon kondisyon inivèsite a."
+        # 3. Load strictly profile-scoped private context
+        stu_ctx = _load_student_private_context(db, profile, target_insts, pathway)
+        ai_interpretation: List[str] = list(stu_ctx["notes"])
+        if "community college" in q_lower:
+            ai_interpretation.insert(
+                0,
+                "Community College transfer pathway: check bilateral ASSIST.org / official institutional agreements to ensure general education & major courses map cleanly rather than counting as elective credit only.",
+            )
+            if not any("assist.org" in (c.get("url") or "") for c in citations):
+                citations.append(
+                    {
+                        "title": "ASSIST Official Statewide Student Transfer Information System",
+                        "url": "https://assist.org",
+                        "institution": "California Community Colleges & UC/CSU",
+                        "verified_at": "2026-11-24",
+                        "summary": "Official course-to-course articulation agreements mapping Community College coursework to UC/CSU majors.",
+                        "source_type": "articulation_agreement",
+                        "epistemic_tier": "official",
+                        "retrieval_score": 0.9,
+                    }
                 )
-            elif lang == "fr-FR":
-                content = (
-                    "Bonjour ! Précisez le nom d'une université (par ex. Sorbonne Université, Université de Montréal/McGill, UC Berkeley, UEH) pour obtenir ses exigences vérifiées. "
-                    "De manière générale, un dossier de transfert inclut : relevés de notes officiels, Baccalauréat haïtien (NS4/Bac II) avec équivalence si demandée, preuve linguistique (TOEFL/IELTS ou DELF B2) et justification financière."
-                )
-            else:
-                content = (
-                    "Here is the verified pathway for students with a Haitian educational background transferring or applying internationally (name a specific institution like UC Berkeley, UMich, MIT, UEH, or Quisqueya to view its exact institutional requirements):\n\n"
-                    "1. **Transferable Units & GPA:** Many 4-year US universities (such as UC Berkeley) require 60 transferable semester units and competitive major preparation.\n"
-                    "2. **Haitian Baccalauréat Recognition:** Recognized as equivalent to high school completion; US/foreign institutions may request a credential evaluation.\n"
-                    "3. **Articulation & Language:** Verify lower-division equivalencies on Assist.org and submit English/French language proof where not exempted."
-                )
-        else:
-            if lang == "es-419":
-                content = (
-                    "Estoy a tu disposición para orientarte con requisitos oficiales verificados. "
-                    "Menciona el nombre de una universidad (por ejemplo, UC Berkeley, UCLA, MIT, Oxford, Toronto, Sorbonne) para consultar sus requisitos, fechas límite y documentos oficiales."
-                )
-            elif lang == "fr-FR":
-                content = (
-                    "Je suis à votre disposition pour consulter les exigences officielles vérifiées. "
-                    "Indiquez le nom d'une université (par ex. UC Berkeley, Oxford, Sorbonne Université, TUM, McGill, UEH) pour voir ses conditions d'admission et dates limites."
-                )
-            else:
-                content = (
-                    "I am ready to help you explore source-verified global admissions requirements, deadlines, and eligibility checks. "
-                    "Mention a specific university (for example: UC Berkeley, UCLA, UMich, MIT, University of Toronto, Oxford, Sorbonne Université, TUM, UEH, University of Delhi, Melbourne, or UTokyo) or select a university workspace to retrieve its verified rules."
-                )
+        if any(w in q_lower for w in ("baccalauréat", "baccalaureat", "haiti", "ayiti", "ayisyen")):
+            ai_interpretation.append(
+                "International Qualification Preservation: Baccalauréat haïtien (NS4 / Bac II, 0–20 scale with 10/20 pass mark) is evaluated contextually alongside US secondary/transfer credentials without distorting native grades."
+            )
+            if not target_insts and not any("wes.org" in (c.get("url") or "") for c in citations):
+                citations = [
+                    {
+                        "title": "ASSIST Official Statewide Student Transfer Information System",
+                        "url": "https://assist.org",
+                        "institution": "California Community Colleges & UC/CSU",
+                        "verified_at": "2026-11-24",
+                        "summary": "Official articulation agreements for US Community College transfer pathways.",
+                        "source_type": "articulation_agreement",
+                        "epistemic_tier": "official",
+                        "retrieval_score": 0.9,
+                    },
+                    {
+                        "title": "International Credential Guide — Haitian Secondary Education System",
+                        "url": "https://www.wes.org/advisor-blog/education-system-in-haiti/",
+                        "institution": "World Education Services / AACRAO",
+                        "verified_at": "2026-11-24",
+                        "summary": "Baccalauréat haïtien (NS4 / Bac II) recognition and 0–20 grading scale benchmark.",
+                        "source_type": "country_qualification",
+                        "epistemic_tier": "official",
+                        "retrieval_score": 0.88,
+                    },
+                ]
+        missing_or_conflicting.extend(stu_ctx["missing"])
+        missing_or_conflicting = list(dict.fromkeys(missing_or_conflicting))
+
+        if used_followup_inst and target_insts:
+            ai_interpretation.insert(
+                0,
+                f"Follow-up context retained from active conversation: **{target_insts[0].official_name}** (`{pathway}`).",
+            )
+
+        if not ai_interpretation:
+            ai_interpretation.append(
+                "No personal student GPA, coursework, or Document Vault files matched yet; advice reflects general institutional criteria only."
+            )
+
+        # 4. Multilingual Lead Framing & Readable Output Assembly
+        primary_inst = target_insts[0] if target_insts else None
+        inst_label = primary_inst.official_name if primary_inst else "UniGlobe Global Knowledge Base"
+
+        lead_map = {
+            "ht-HT": f"Men repons ki baze sou baz done verifye UniGlobe (`pgvector` + rechèch tèks konplè) pou **{inst_label}** ({pathway.replace('_', ' ')}):",
+            "fr-FR": f"Voici une réponse fondée sur les données vérifiées d'UniGlobe (`pgvector` + recherche plein texte) pour **{inst_label}** ({pathway.replace('_', ' ')}) :",
+            "es-419": f"Aquí tienes una respuesta basada en registros verificados de UniGlobe (`pgvector` + búsqueda de texto completo) para **{inst_label}** ({pathway.replace('_', ' ')}):",
+            "ar-SA": f"فيما يلي إجابة مستندة إلى السجلات الموثقة في UniGlobe (عبر البحث الهجين `pgvector` والبحث النصي) لـ **{inst_label}** ({pathway.replace('_', ' ')}):",
+        }
+        lead = lead_map.get(
+            lang,
+            f"Here is a retrieval-grounded response from UniGlobe's PostgreSQL knowledge base (`pgvector` + full-text search) for **{inst_label}** (`{pathway}`):",
+        )
+
+        sections = [lead]
+        if official_facts:
+            sections.append(f"\n### 1. {labels['official']}\n" + "\n".join(f"- {f}" for f in official_facts[:5]))
+        if historical_facts:
+            sections.append(f"\n### 2. {labels['historical']}\n" + "\n".join(f"- {f}" for f in historical_facts[:3]))
+        sections.append(f"\n### 3. {labels['ai']}\n" + "\n".join(f"- {a}" for a in ai_interpretation[:8]))
+        if missing_or_conflicting:
+            sections.append(f"\n### 4. {labels['missing']}\n" + "\n".join(f"- {m}" for m in missing_or_conflicting[:6]))
+        elif not official_facts and not historical_facts:
+            sections.append(f"\n### 4. {labels['missing']}\n- {labels['no_data']}")
+
+        breakdown = {
+            "official_facts": official_facts[:5],
+            "historical_facts": historical_facts[:3],
+            "ai_interpretation": ai_interpretation[:8],
+            "missing_or_conflicting": missing_or_conflicting[:6],
+            "student_context_used": stu_ctx["notes"][:5],
+            "context_institution_id": str(primary_inst.id) if primary_inst else None,
+            "context_institution_name": primary_inst.official_name if primary_inst else None,
+            "context_applicant_type": pathway,
+            "active_topic": topic,
+            "retrieval_stats": retrieval_stats,
+            "suggested_workflows": stu_ctx["workflows"],
+        }
 
         return {
-            "content": content,
+            "content": "\n".join(sections),
             "language": lang,
-            "citations": citations,
-            "disclaimer": "AI Interpretation — Grounded in UniGlobe verified institutional records; not an official university admissions decision.",
+            "citations": citations[:8],
+            "epistemic_breakdown": breakdown,
+            "disclaimer": labels["disclaimer"],
         }

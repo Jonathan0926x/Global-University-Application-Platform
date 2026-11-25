@@ -216,3 +216,12 @@ flowchart LR
 1. **Zero External Model Training:** Uploaded student transcripts, essays, and personal identification documents are **never** utilized to train third-party foundation models.
 2. **Encrypted Temporary Processing:** Documents processed for OCR and extraction reside in encrypted temporary storage and are removed or transferred to user-controlled vaults immediately post-processing.
 3. **Session Purging:** Students can wipe chat histories and document analysis logs with a single click, fulfilling GDPR Right to Erasure mandates.
+
+---
+
+## Implementation Status (Phase 3, Milestone 6 — Live & Verified)
+
+- **Vector & Hybrid Search Storage:** `apps/api/app/models/rag.py` (`RagKnowledgeChunk` with `Vector(384)` HNSW cosine index + PostgreSQL `TSVECTOR` GIN index; `ScholarshipProgram` verified aid table) migrated via `eddfbde391c1_milestone_6_pgvector_rag_counselor.py`.
+- **Zero-Cost Multilingual Embeddings:** `apps/api/app/services/embeddings.py` generates deterministic 384-dim concept-bridged embeddings across Latin scripts (English, French, Spanish, Haitian Creole, Portuguese, German), Arabic Unicode, Devanagari, and CJK without external paid APIs.
+- **Knowledge Indexing & Private Context Isolation:** `apps/api/app/ingestion/rag_indexer.py` indexes shared institutional knowledge (`1,689+` chunks), while `_load_student_private_context` in `apps/api/app/services/counselor.py` dynamically loads student profiles, native GPA scales, uploaded Document Vault extractions, Milestone 3 checklists, Milestone 4 transfer audits, and Milestone 5 scores strictly scoped to `profile_id`.
+- **Frontend & Workflow Routing:** `apps/web/src/app/counselor/page.tsx` maintains multi-turn `conversation_id` memory (`Conversation Memory` sidebar), source-typed epistemic citations, missing/conflict warnings, Arabic RTL support, and deep links with `/matching`, `/transfer`, `/universities/[id]`, and `/documents`.

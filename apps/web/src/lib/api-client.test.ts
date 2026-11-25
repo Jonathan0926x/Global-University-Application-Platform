@@ -112,6 +112,14 @@ test("Milestone 5 matching navigation and disclaimer keys translate cleanly acro
   assert.ok(translate("matching.run_button", "es-MX") === "Ejecutar Análisis");
 });
 
+test("Milestone 6 RAG counselor keys translate across Haitian Creole, French, Spanish, Arabic RTL, and English", () => {
+  assert.ok(translate("counselor.title", "ht-HT").includes("Konseye Admisyon"));
+  assert.ok(translate("counselor.title", "ar-SA").includes("مستشار القبول"));
+  assert.ok(translate("counselor.subtitle", "fr-FR").includes("pgvector"));
+  assert.equal(translate("counselor.send", "es-419"), "Enviar");
+  assert.equal(translate("counselor.new_chat", "ar-SA"), "محادثة جديدة");
+});
+
 
 
 

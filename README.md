@@ -79,7 +79,7 @@ flowchart TD
 ## 🛠️ Technology Architecture
 
 > [!NOTE]
-> **Active Engineering Build (Phase 3, Milestone 5 Live):** UniGlobe runs Next.js 15 App Router, FastAPI + SQLAlchemy 2.0, PostgreSQL 16 + `pgvector` (`6,699` global/US institutions, `94` verified requirements, `3-Tier` transfer articulation, and the `4-Dimensional` explainable university matching engine at `/matching`). Follow [Development Roadmap](docs/15_DEVELOPMENT_ROADMAP.md) and [`PROJECT_PROGRESS.md`](PROJECT_PROGRESS.md) for current milestone status.
+> **Active Engineering Build (Phase 3, Milestone 6 Live):** UniGlobe runs Next.js 15 App Router, FastAPI + SQLAlchemy 2.0, PostgreSQL 16 + `pgvector` (`6,699` global/US institutions, `94` verified requirements, `3-Tier` transfer articulation, the `4-Dimensional` matching engine at `/matching`, and the hybrid `pgvector` + FTS RAG Multilingual AI Counselor at `/counselor`). Follow [Development Roadmap](docs/15_DEVELOPMENT_ROADMAP.md) and [`PROJECT_PROGRESS.md`](PROJECT_PROGRESS.md) for current milestone status.
 
 ```
 +-----------------------------------------------------------------------------------+

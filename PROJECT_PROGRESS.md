@@ -42,8 +42,8 @@
 | **Application Management** | ✅ **Tested** (Checklist Engine Live) | P1 | Phase 3 M3 | Nov 24, 2026 | Full Stack |
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
-| **AI College Counselor** | ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
-| **Scholarship & Net Price** | ⭕ **Not Started** | P1 | Phase 4 | Phase 4 (M5) | Backend / Full Stack |
+| **AI College Counselor** | ✅ **Tested** (Milestone 6 Live: Hybrid pgvector RAG) | P0 | Phase 3 M6 | Nov 24, 2026 | AI / Backend |
+| **Scholarship & Net Price** | 🚀 **Implemented (Verified Aid Seeds)** / Expanding | P1 | Phase 3 M6 / Phase 4 | Phase 4 (M5) | Backend / Full Stack |
 | **Security & Privacy Testing**| ⏳ **In Progress** | P0 | Phase 1–5 | Continuous | Security / QA |
 | **Beta Release (Pilot)** | ⭕ **Not Started** | P0 | Phase 5 | Phase 5 (M6) | Entire Team |
 
@@ -245,16 +245,20 @@
 * **Next Action:** Connect RAG counselor context (Milestone 6) and verified application portal routing (Milestone 7).
 
 ### 16. AI College Counselor
-* **Status:** ✅ **Tested** (E2E Audited)
-* **Priority:** P1
-* **Dependencies:** Technical Specifications (docs 07, 11)
+* **Status:** ✅ **Tested** (Milestone 6 Hybrid `pgvector` + PostgreSQL FTS RAG Live)
+* **Priority:** P0
+* **Dependencies:** Technical Specifications (docs 07, 11), Milestones 1–5
 * **Relevant Files:**
+  - `apps/api/alembic/versions/eddfbde391c1_milestone_6_pgvector_rag_counselor.py`
+  - `apps/api/app/models/rag.py`
+  - `apps/api/app/ingestion/rag_indexer.py`
+  - `apps/api/app/services/embeddings.py`
   - `apps/api/app/services/counselor.py`
   - `apps/api/app/api/v1/counselor.py`
   - `apps/web/src/app/counselor/page.tsx`
-* **Acceptance Criteria:** Conversational RAG agent answering admission queries; 100% strict institutional citation enforcement (Assist.org, UC Transfer Pathways, WES); zero model training on student PII. Tested across English, Spanish, French, and Haitian Creole.
+* **Acceptance Criteria:** Zero-cost `$0` 384-dim `pgvector` cosine + PostgreSQL `tsvector` hybrid retrieval across `1,689+` verified institutional chunks (`94` requirements, `25` deadlines, `8` official scholarship programs, `11` country qualifications, `4` articulation agreements, institutional overviews/costs/programs); strict separation of official vs historical vs AI interpretation; multi-turn follow-up context tracking; strict `profile_id`-scoped private profile/document/match context; automated tests across English, Haitian Creole, French, Spanish, and Arabic RTL.
 * **Last Verified Date:** November 24, 2026
-* **Next Action:** Phase 3: Connect vector embeddings and live LLM RAG inference (Gemini 1.5 Pro) with PostgreSQL `pgvector`.
+* **Next Action:** Milestone 7 external application routing directory and link verification.
 
 ### 17. Scholarship & Financial Affordability Engine
 * **Status:** ⭕ **Not Started**

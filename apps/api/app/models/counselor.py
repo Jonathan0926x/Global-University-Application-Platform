@@ -13,6 +13,9 @@ class CounselorConversation(Base):
     profile_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), default="Admissions Inquiry", nullable=False)
     primary_language = Column(String(20), default="en-US", nullable=False)
+    active_institution_id = Column(UUID(as_uuid=True), ForeignKey("institutions.id", ondelete="SET NULL"), nullable=True)
+    active_applicant_type = Column(String(30), nullable=True)
+    active_topic = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -27,7 +30,8 @@ class CounselorMessage(Base):
     role = Column(String(20), nullable=False)  # "user" or "assistant"
     content = Column(Text, nullable=False)
     language = Column(String(20), default="en-US", nullable=False)
-    citations = Column(JSONB, default=list)  # List of {title, url, source, verified_at}
+    citations = Column(JSONB, default=list)  # List of {title, url, institution, verified_at, summary, source_type, epistemic_tier}
+    epistemic_breakdown = Column(JSONB, default=dict)  # {official_facts, historical_facts, ai_interpretation, missing_or_conflicting, suggested_workflows}
     disclaimer = Column(
         String(255),
         default="AI Interpretation only — not an official university admissions decision.",

@@ -6,11 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 In Progress (Milestones 6–7)
+## [Unreleased] - Phase 3 In Progress (Milestone 7)
 
 ### Planned
-- Milestone 6: Live `pgvector` RAG Multilingual AI Counselor (`$0` local embedding default).
 - Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+
+---
+
+## [0.6.0-m6] - 2026-11-24
+
+### Added — Phase 3 Milestone 6: pgvector RAG Multilingual AI Counselor
+- **Hybrid `pgvector` + FTS RAG Schema & Migration (`eddfbde391c1`):**
+  - Added `rag_knowledge_chunks` (`Vector(384)` HNSW cosine index + PostgreSQL `TSVECTOR` GIN index + `content_hash` idempotency + `epistemic_tier` / `source_type` / `is_outdated` / `has_conflict` metadata) and `scholarship_programs` (`8` curated official domestic & international aid policies).
+  - Extended `counselor_conversations` (`active_institution_id`, `active_applicant_type`, `active_topic`) and `counselor_messages` (`epistemic_breakdown`) for multi-turn contextual follow-ups and structured provenance.
+- **Zero-Cost (`$0`) Multilingual Embeddings & Knowledge Indexer (`embeddings.py`, `rag_indexer.py`):**
+  - Expanded local 384-dim feature-hashing tokenizer with Latin accents, Arabic Unicode, Devanagari, CJK, subword 3-grams, and multilingual admissions/tuition/scholarship/transfer concept bridges.
+  - Seeded & indexed **1,689** verified chunks across requirements (`94`), deadlines (`25`), scholarships (`8`), country qualifications (`11`), articulation agreements (`4`), and prioritized institutional overviews/costs/programs (`1,547` chunks) with on-demand indexing for all `6,699` institutions.
+- **Retrieval-Grounded Counselor Service, Security & UI (`/counselor`):**
+  - Separates **Official Institutional Facts**, **Historical Patterns**, **Personalized AI Interpretation**, and **Missing / Conflicting / Outdated Warnings**; detects uncurated requirements and `DataQualityFlag` conflicts without fabricating answers.
+  - Loads `StudentProfile`, native GPA scales (`16.5/20`, `4.0`, etc.), courses, Document Vault extractions, Milestone 3 checklists, Milestone 4 transfer analyses, and Milestone 5 recommendations strictly scoped by `profile_id`.
+  - Added `GET/DELETE /api/v1/counselor/conversations/{id}` (strict `profile_id` ownership check) and `POST /api/v1/counselor/rag/search`.
+  - Rebuilt `/counselor` UI with light theme + Arabic RTL support, multi-turn `conversation_id` memory sidebar, source-typed citation cards, and workflow deep links (`Ask AI Counselor` from `/matching`).
+  - Verified with **43** passing backend `pytest` tests, **9** frontend unit tests, Next.js production build, and live browser conversations across English follow-ups, Haitian Creole, Harvard uncurated guardrails, and Arabic RTL.
 
 ---
 

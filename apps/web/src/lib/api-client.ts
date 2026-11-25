@@ -207,6 +207,29 @@ export interface Citation {
   institution: string;
   verified_at: string;
   summary?: string;
+  source_type?: string;
+  epistemic_tier?: "official" | "historical" | "ai_interpretation" | "student_vault" | string;
+  retrieval_score?: number;
+}
+
+export interface WorkflowSuggestion {
+  label: string;
+  href: string;
+  workflow_type: string;
+}
+
+export interface EpistemicBreakdown {
+  official_facts?: string[];
+  historical_facts?: string[];
+  ai_interpretation?: string[];
+  missing_or_conflicting?: string[];
+  student_context_used?: string[];
+  context_institution_id?: string | null;
+  context_institution_name?: string | null;
+  context_applicant_type?: string | null;
+  active_topic?: string | null;
+  retrieval_stats?: Record<string, unknown>;
+  suggested_workflows?: WorkflowSuggestion[];
 }
 
 export interface CounselorMessage {
@@ -216,6 +239,7 @@ export interface CounselorMessage {
   content: string;
   language: string;
   citations: Citation[];
+  epistemic_breakdown?: EpistemicBreakdown | null;
   disclaimer: string;
   created_at: string;
 }
@@ -225,6 +249,9 @@ export interface CounselorConversation {
   profile_id: string;
   title: string;
   primary_language: string;
+  active_institution_id?: string | null;
+  active_applicant_type?: string | null;
+  active_topic?: string | null;
   created_at: string;
   updated_at: string;
   messages: CounselorMessage[];
@@ -311,6 +338,14 @@ export async function fetchCounselorHistory(): Promise<CounselorConversation[]> 
   });
   if (!res.ok) return [];
   return res.json();
+}
+
+export async function deleteCounselorConversation(conversationId: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE_URL}/counselor/conversations/${conversationId}`, {
+    method: "DELETE",
+    headers: { ...auth.getAuthHeader() },
+  });
+  return res.ok;
 }
 
 export async function uploadDocument(

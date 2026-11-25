@@ -311,6 +311,12 @@ export function MatchExplanationPanel({
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Link
+            href={`/counselor?institution_id=${rec.institution_id}&pathway=${rec.applicant_type}`}
+            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800 hover:bg-indigo-100 transition-colors"
+          >
+            Ask AI Counselor
+          </Link>
+          <Link
             href={`/universities/${rec.institution_id}`}
             className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100 transition-colors"
           >

@@ -23,6 +23,7 @@ from app.models.matching import MatchingPreference, UniversityRecommendation
 from app.models.application import StandardizedTest, ExtracurricularActivity, Application, ApplicationRequirementStatus
 from app.models.document import Document, DocumentExtraction, DocumentTranslation
 from app.models.counselor import CounselorConversation, CounselorMessage
+from app.models.rag import ScholarshipProgram, RagKnowledgeChunk
 
 __all__ = [
     "Base",
@@ -60,4 +61,6 @@ __all__ = [
     "DocumentTranslation",
     "CounselorConversation",
     "CounselorMessage",
+    "ScholarshipProgram",
+    "RagKnowledgeChunk",
 ]
