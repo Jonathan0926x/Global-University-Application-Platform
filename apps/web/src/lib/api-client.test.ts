@@ -194,6 +194,18 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
     "fin.audit_by_citizenship",
     "fin.audit_by_destination",
     "fin.audit_manual_queue",
+    "fin.student_matched_label",
+    "fin.student_verified_funding",
+    "fin.student_open_cycle",
+    "fin.student_actionable_open",
+    "fin.aid_fixed_label",
+    "fin.aid_variable_label",
+    "fin.why_matched_heading",
+    "fin.why_failed_heading",
+    "fin.missing_info_heading",
+    "fin.gaps_panel_title",
+    "fin.not_admission_notice",
+    "fin.audit_gaps_title",
   ] as const;
   for (const locale of ALL_10_LOCALES) {
     for (const key of BATCH2_REQUIRED_KEYS) {

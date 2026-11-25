@@ -50,11 +50,13 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     match_score: int
     rule_evaluations: List[ScholarshipRuleEvaluationSchema] = []
     renewal_evaluations: List[ScholarshipRuleEvaluationSchema] = []
+    satisfied_reasons: List[str] = []
     missing_requirements: List[str] = []
     conditional_requirements: List[str] = []
     manual_review_reasons: List[str] = []
     failed_reasons: List[str] = []
     student_evidence_used: Dict[str, Any] = {}
+    official_supporting_sources: List[Dict[str, Any]] = []
     funding_scope: List[str] = []
     duration_renewal_summary: Optional[str] = None
     freshness_warnings: List[str] = []
@@ -77,7 +79,15 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     verified_by: Optional[str] = None
     verification_expires_at: Optional[datetime] = None
     freshness_status: str = "requires_manual_review"
-    application_cycle_status: str = "unspecified"  # open | closed | cyclical_check_official | unspecified
+    application_cycle_status: str = "unspecified"  # open | closed | rolling | cyclical_check_official | unspecified
+    cycle_status_detail: Optional[str] = None
+    is_cycle_open: bool = False
+    is_amount_verified: bool = False
+    is_actionable_for_student: bool = False
+    aid_classification: Optional[str] = None
+    is_variable_aid: bool = False
+    transfer_pathway_classification: Optional[str] = None
+    transfer_eligibility_detail: Optional[str] = None
     claim_freshness: Dict[str, str] = {}
     requires_manual_review: bool = False
     claim_provenance: Dict[str, Any] = {}
@@ -122,6 +132,7 @@ class ScholarshipMatchResponse(BaseModel):
     total_active_programs: int = 0
     verified_funding_programs: int = 0
     verified_funding_coverage: float = 0.0
+    student_coverage_summary: Dict[str, Any] = {}
     aggregation_precedence: List[str] = [
         "ineligible",
         "requires_manual_review",
@@ -130,6 +141,27 @@ class ScholarshipMatchResponse(BaseModel):
         "eligible",
     ]
     results: List[ScholarshipEligibilityResultSchema]
+    disclaimer: str
+
+
+class StudentCoverageReportResponse(BaseModel):
+    evaluated_profile: Dict[str, Any]
+    programs_evaluated: int
+    programs_matched: int
+    programs_verified_eligibility: int
+    programs_verified_funding: int
+    programs_open_cycle: int
+    programs_actionable_open_verified: int
+    programs_insufficient_info: int
+    programs_manual_review: int
+    programs_variable_aid_matched: int
+    programs_expired_cycle_matched: int
+    programs_transfer_unconfirmed: int
+    aid_classification_breakdown: Dict[str, int] = {}
+    transfer_pathway_breakdown: Dict[str, int] = {}
+    gap_codes: List[str] = []
+    profile_coverage_gaps: List[Dict[str, str]] = []
+    next_steps_for_student: List[str] = []
     disclaimer: str
 
 
@@ -148,6 +180,7 @@ class CatalogCoverageAuditResponse(BaseModel):
     verified_funding_coverage: float
     actionable_coverage_count: int
     actionable_coverage_ratio: float
+    confirmed_open_verified_programs: int = 0
     unknown_eligibility_count: int
     requires_manual_review_count: int
     expired_claim_count: int
@@ -158,10 +191,15 @@ class CatalogCoverageAuditResponse(BaseModel):
     multi_destination_programs: int
     citizenships_with_verified_funding_count: int
     by_pathway: Dict[str, int]
+    transfer_pathway_breakdown: Dict[str, int] = {}
+    aid_classification_breakdown: Dict[str, int] = {}
     by_degree_level: Dict[str, Dict[str, int]]
     by_citizenship: List[Dict[str, Any]]
     by_destination: List[Dict[str, Any]]
     intersections: List[Dict[str, Any]]
+    student_archetype_matrix: List[Dict[str, Any]] = []
+    coverage_gaps: List[Dict[str, Any]] = []
+    deferred_research_queue: List[Dict[str, Any]] = []
     manual_review_programs: List[Dict[str, Any]]
     unavailable_source_programs: List[Dict[str, Any]]
 

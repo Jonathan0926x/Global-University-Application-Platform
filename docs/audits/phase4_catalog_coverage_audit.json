@@ -1,5 +1,5 @@
 {
-  "audited_at": "2026-11-25T21:02:20.104015+00:00",
+  "audited_at": "2026-11-25T21:20:10.891818+00:00",
   "total_catalog_programs": 69,
   "total_active_programs": 69,
   "programs_reviewed": 69,
@@ -13,6 +13,7 @@
   "verified_funding_coverage": 0.3623,
   "actionable_coverage_count": 18,
   "actionable_coverage_ratio": 0.2609,
+  "confirmed_open_verified_programs": 7,
   "unknown_eligibility_count": 1,
   "requires_manual_review_count": 18,
   "expired_claim_count": 16,
@@ -30,6 +31,25 @@
     "community_college_required": 1,
     "graduate_doctoral_only": 22,
     "exchange_mobility_only": 1
+  },
+  "transfer_pathway_breakdown": {
+    "explicitly_accepts_transfer": 8,
+    "ug_transfer_unconfirmed": 12,
+    "first_year_only": 18,
+    "community_college_required": 1,
+    "transfer_restricted_by_institution_or_country": 7,
+    "graduate_only": 22,
+    "exchange_only": 1
+  },
+  "aid_classification_breakdown": {
+    "fixed_statutory": 1,
+    "fixed_published": 23,
+    "tuition_waiver": 4,
+    "css_profile_full_need": 6,
+    "variable_institutional_need": 14,
+    "variable_merit": 5,
+    "exchange_only": 1,
+    "unpublished_or_manual_review": 15
   },
   "by_degree_level": {
     "bachelors": {
@@ -670,6 +690,431 @@
         "MA eligible: 11 (incl. SI SISGP)",
         "MR eligible: 10 (SI SISGP Morocco-only excluded)"
       ]
+    }
+  ],
+  "student_archetype_matrix": [
+    {
+      "profile_id": "ht_us_cc_transfer_cs",
+      "label": "Haiti citizen at US Community College (Transfer UG, Computer Science, High Need)",
+      "programs_evaluated": 47,
+      "programs_matched": 6,
+      "programs_verified_eligibility": 6,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 6,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid"
+      ]
+    },
+    {
+      "profile_id": "ht_ca_first_year_ug",
+      "label": "Haiti citizen seeking Canada UG (First-Year, High Need)",
+      "programs_evaluated": 47,
+      "programs_matched": 2,
+      "programs_verified_eligibility": 2,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 1,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "ng_uk_masters_need",
+      "label": "Nigeria citizen seeking UK Master's (High Need, IELTS 7.0)",
+      "programs_evaluated": 27,
+      "programs_matched": 2,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 1,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_actionable_opportunities",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "ng_se_masters_need",
+      "label": "Nigeria citizen seeking Sweden Master's (IELTS 7.0)",
+      "programs_evaluated": 27,
+      "programs_matched": 3,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 2,
+      "programs_open_cycle": 1,
+      "programs_actionable_open_verified": 1,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": []
+    },
+    {
+      "profile_id": "ma_se_masters",
+      "label": "Morocco citizen seeking Sweden Master's",
+      "programs_evaluated": 27,
+      "programs_matched": 3,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 2,
+      "programs_open_cycle": 1,
+      "programs_actionable_open_verified": 1,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": []
+    },
+    {
+      "profile_id": "mr_se_masters",
+      "label": "Mauritania citizen seeking Sweden Master's",
+      "programs_evaluated": 27,
+      "programs_matched": 2,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 1,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_actionable_opportunities",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "jm_bb_transfer_ug",
+      "label": "Jamaica CARICOM citizen seeking UWI Cave Hill UG Transfer",
+      "programs_evaluated": 47,
+      "programs_matched": 2,
+      "programs_verified_eligibility": 1,
+      "programs_verified_funding": 2,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_actionable_opportunities",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "in_de_transfer_ug",
+      "label": "India citizen seeking Germany UG Transfer (Engineering)",
+      "programs_evaluated": 47,
+      "programs_matched": 1,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 3,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "in_asia_phd_cs",
+      "label": "India citizen seeking Doctoral CS in China",
+      "programs_evaluated": 17,
+      "programs_matched": 1,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 1,
+      "programs_open_cycle": 1,
+      "programs_actionable_open_verified": 1,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": []
+    },
+    {
+      "profile_id": "br_br_first_year_ug",
+      "label": "Brazil resident citizen seeking Brazil UG (ENEM 700, High Need)",
+      "programs_evaluated": 47,
+      "programs_matched": 1,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "co_co_masters",
+      "label": "Colombia citizen seeking Master's in Colombia",
+      "programs_evaluated": 27,
+      "programs_matched": 0,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities"
+      ]
+    },
+    {
+      "profile_id": "pe_pe_first_year_ug",
+      "label": "Peru citizen seeking Peru UG (ENP 92, Age 19, High Need)",
+      "programs_evaluated": 47,
+      "programs_matched": 1,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "kr_kr_first_year_dual",
+      "label": "Korean dual US citizen seeking South Korea GKS-U",
+      "programs_evaluated": 47,
+      "programs_matched": 0,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities"
+      ]
+    },
+    {
+      "profile_id": "vn_nl_first_year_ug",
+      "label": "Vietnam non-EEA citizen seeking Netherlands UG",
+      "programs_evaluated": 47,
+      "programs_matched": 2,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 1,
+      "programs_open_cycle": 1,
+      "programs_actionable_open_verified": 1,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": []
+    },
+    {
+      "profile_id": "fr_ch_masters",
+      "label": "France citizen seeking ETH Zurich Master's (Switzerland)",
+      "programs_evaluated": 27,
+      "programs_matched": 1,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 1,
+      "programs_open_cycle": 1,
+      "programs_actionable_open_verified": 1,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": []
+    },
+    {
+      "profile_id": "es_es_first_year_ug",
+      "label": "Spain resident citizen seeking Spain UG (MEFD Beca General)",
+      "programs_evaluated": 47,
+      "programs_matched": 2,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 1,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 0,
+      "gap_codes": [
+        "no_actionable_opportunities",
+        "only_expired_cycles"
+      ]
+    },
+    {
+      "profile_id": "us_ca_transfer_ug",
+      "label": "US California resident at US CC (Transfer UG, $45k income)",
+      "programs_evaluated": 47,
+      "programs_matched": 9,
+      "programs_verified_eligibility": 9,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 9,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 1,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid"
+      ]
+    },
+    {
+      "profile_id": "ht_fr_bachelors_incomplete",
+      "label": "Haiti citizen seeking France UG (Transfer / Missing Test Details)",
+      "programs_evaluated": 47,
+      "programs_matched": 1,
+      "programs_verified_eligibility": 0,
+      "programs_verified_funding": 0,
+      "programs_open_cycle": 0,
+      "programs_actionable_open_verified": 0,
+      "programs_insufficient_info": 0,
+      "programs_manual_review": 1,
+      "gap_codes": [
+        "no_verified_funding",
+        "no_actionable_opportunities",
+        "only_variable_institutional_aid",
+        "only_expired_cycles"
+      ]
+    }
+  ],
+  "coverage_gaps": [
+    {
+      "gap_code": "no_actionable_opportunities",
+      "priority": "P0_CRITICAL",
+      "title": "No Actionable Open Verified Funding",
+      "missing_dimension_significance": "open_application_cycle / published_award_amount",
+      "description": "Student profiles match 0 awards that combine verified funding amounts AND an open/rolling application deadline.",
+      "affected_profile_count": 13,
+      "affected_profiles": [
+        "Haiti citizen at US Community College (Transfer UG, Computer Science, High Need)",
+        "Haiti citizen seeking Canada UG (First-Year, High Need)",
+        "Nigeria citizen seeking UK Master's (High Need, IELTS 7.0)",
+        "Mauritania citizen seeking Sweden Master's",
+        "Jamaica CARICOM citizen seeking UWI Cave Hill UG Transfer",
+        "India citizen seeking Germany UG Transfer (Engineering)",
+        "Brazil resident citizen seeking Brazil UG (ENEM 700, High Need)",
+        "Colombia citizen seeking Master's in Colombia",
+        "Peru citizen seeking Peru UG (ENP 92, Age 19, High Need)",
+        "Korean dual US citizen seeking South Korea GKS-U",
+        "Spain resident citizen seeking Spain UG (MEFD Beca General)",
+        "US California resident at US CC (Transfer UG, $45k income)",
+        "Haiti citizen seeking France UG (Transfer / Missing Test Details)"
+      ]
+    },
+    {
+      "gap_code": "no_verified_funding",
+      "priority": "P0_HIGH",
+      "title": "No Verified Fixed/Published Funding",
+      "missing_dimension_significance": "published_award_amount",
+      "description": "Matched programs rely exclusively on unpublished or variable formulaic aid without verified numeric guarantees.",
+      "affected_profile_count": 9,
+      "affected_profiles": [
+        "Haiti citizen at US Community College (Transfer UG, Computer Science, High Need)",
+        "Haiti citizen seeking Canada UG (First-Year, High Need)",
+        "India citizen seeking Germany UG Transfer (Engineering)",
+        "Brazil resident citizen seeking Brazil UG (ENEM 700, High Need)",
+        "Colombia citizen seeking Master's in Colombia",
+        "Peru citizen seeking Peru UG (ENP 92, Age 19, High Need)",
+        "Korean dual US citizen seeking South Korea GKS-U",
+        "US California resident at US CC (Transfer UG, $45k income)",
+        "Haiti citizen seeking France UG (Transfer / Missing Test Details)"
+      ]
+    },
+    {
+      "gap_code": "only_expired_cycles",
+      "priority": "P2_MEDIUM",
+      "title": "All Matched Cycles Currently Closed/Expired",
+      "missing_dimension_significance": "active_application_deadlines",
+      "description": "Published verified funding exists for the profile, but all current cycle deadlines have passed or are unconfirmed.",
+      "affected_profile_count": 9,
+      "affected_profiles": [
+        "Haiti citizen seeking Canada UG (First-Year, High Need)",
+        "Nigeria citizen seeking UK Master's (High Need, IELTS 7.0)",
+        "Mauritania citizen seeking Sweden Master's",
+        "Jamaica CARICOM citizen seeking UWI Cave Hill UG Transfer",
+        "India citizen seeking Germany UG Transfer (Engineering)",
+        "Brazil resident citizen seeking Brazil UG (ENEM 700, High Need)",
+        "Peru citizen seeking Peru UG (ENP 92, Age 19, High Need)",
+        "Spain resident citizen seeking Spain UG (MEFD Beca General)",
+        "Haiti citizen seeking France UG (Transfer / Missing Test Details)"
+      ]
+    },
+    {
+      "gap_code": "only_variable_institutional_aid",
+      "priority": "P1_HIGH",
+      "title": "Only Variable Institutional / CSS Profile Aid",
+      "missing_dimension_significance": "verified_fixed_or_bounded_amounts",
+      "description": "All matched programs calculate awards dynamically via CSS Profile or discretionary need/merit formulas.",
+      "affected_profile_count": 7,
+      "affected_profiles": [
+        "Haiti citizen at US Community College (Transfer UG, Computer Science, High Need)",
+        "Haiti citizen seeking Canada UG (First-Year, High Need)",
+        "India citizen seeking Germany UG Transfer (Engineering)",
+        "Brazil resident citizen seeking Brazil UG (ENEM 700, High Need)",
+        "Peru citizen seeking Peru UG (ENP 92, Age 19, High Need)",
+        "US California resident at US CC (Transfer UG, $45k income)",
+        "Haiti citizen seeking France UG (Transfer / Missing Test Details)"
+      ]
+    }
+  ],
+  "deferred_research_queue": [
+    {
+      "queue_id": "DRQ-01",
+      "priority": "P0",
+      "target_gap": "no_verified_funding / only_variable_institutional_aid",
+      "focus": "Fixed-amount US Community College & International UG Transfer Merit Awards",
+      "official_sources_to_verify": [
+        "jackkentcooke.org (manual browser re-verification)",
+        "oas.org/fms (manual review)",
+        "state/system transfer articulation scholarships (UC/CSU/SUNY)"
+      ],
+      "why_deferred": "Current JKCF and OAS primary portals block automated HTTP fetches (403 WAF), while CSS Profile institutional aid is inherently variable."
+    },
+    {
+      "queue_id": "DRQ-02",
+      "priority": "P1",
+      "target_gap": "only_unconfirmed_transfer",
+      "focus": "Confirm transfer-student eligibility across 12 broad 'all' undergraduate scholarships",
+      "official_sources_to_verify": [
+        "Becas Progresar (AR)",
+        "MEFD Beca General (ES)",
+        "Deutschlandstipendium/LMU/Heidelberg (DE)",
+        "Paris-Saclay (FR)",
+        "CHED TES (PH)",
+        "VNU Hanoi (VN)",
+        "PTDF ISS (NG)",
+        "KNB (ID)"
+      ],
+      "why_deferred": "Official sources establish undergraduate eligibility broadly without an explicit published clause permitting mid-degree external transfers."
+    },
+    {
+      "queue_id": "DRQ-03",
+      "priority": "P1",
+      "target_gap": "no_actionable_opportunities",
+      "focus": "Canada & Australia Fixed Undergraduate Scholarships (University-Published Schedules)",
+      "official_sources_to_verify": [
+        "future.utoronto.ca (Pearson)",
+        "you.ubc.ca (OIS/KMES)",
+        "mcgill.ca/studentaid (split Entrance vs Mastercard)",
+        "scholarships.unimelb.edu.au"
+      ],
+      "why_deferred": "Currently classified under variable/full-cost or WAF-blocked; requires institutional fee-schedule linkage without inventing USD figures."
+    },
+    {
+      "queue_id": "DRQ-04",
+      "priority": "P2",
+      "target_gap": "only_expired_cycles",
+      "focus": "Upcoming 2027/2028 cycle deadline refresh for closed UK Commonwealth, GKS-U, PRONABEC, MIS, and Chevening programs",
+      "official_sources_to_verify": [
+        "cscuk.fcdo.gov.uk",
+        "chevening.org",
+        "studyinkorea.go.kr",
+        "pronabec.gob.pe",
+        "biasiswa.mohe.gov.my"
+      ],
+      "why_deferred": "Programs remain verified in existence and rules; next-cycle call dates open periodically and are preserved historically until officially published."
     }
   ],
   "manual_review_programs": [

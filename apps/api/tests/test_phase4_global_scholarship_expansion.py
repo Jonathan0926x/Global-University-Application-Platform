@@ -219,7 +219,24 @@ def test_13c_african_and_caribbean_deterministic_eligibility_scenarios():
         assert do_by_title["P. J. Patterson Endowment Fund Scholarship (UWI Cave Hill)"]["eligibility_status"] == "conditionally_eligible"
         assert do_by_title["The UWI Toronto Gala Scholarship (UWI Cave Hill)"]["eligibility_status"] == "ineligible"
         assert do_by_title["The AFUWI Undergraduate Scholarship (UWI Cave Hill)"]["eligibility_status"] == "ineligible"
-        assert do_by_title["MESCyT Becas Internacionales de Grado y Postgrado (Dominican Republic)"]["eligibility_status"] == "conditionally_eligible"
+        # MESCyT (applicant_type='all') has unconfirmed transfer eligibility; Phase 4.1 refuses to infer transfer eligibility blindly
+        assert do_by_title["MESCyT Becas Internacionales de Grado y Postgrado (Dominican Republic)"]["eligibility_status"] == "requires_manual_review"
+
+        do_fy = match_scholarships_deterministic(
+            db,
+            None,
+            {
+                "citizenship_country": "DO",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "gpa_4": 3.5,
+                "financial_need_level": "high",
+                "field_of_study": "Political Science",
+            },
+            include_ineligible=True,
+        )
+        do_fy_by_title = {r["title"]: r for r in do_fy["results"]}
+        assert do_fy_by_title["MESCyT Becas Internacionales de Grado y Postgrado (Dominican Republic)"]["eligibility_status"] == "conditionally_eligible"
 
         jm_ug = match_scholarships_deterministic(
             db,

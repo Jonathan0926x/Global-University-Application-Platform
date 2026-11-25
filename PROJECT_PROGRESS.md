@@ -43,7 +43,7 @@
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
 | **AI College Counselor** | ✅ **Tested** (Milestone 6 Live: Hybrid pgvector RAG) | P0 | Phase 3 M6 | Nov 24, 2026 | AI / Backend |
-| **Scholarship & Net Price** | ✅ **Tested** (Phase 4 Catalog Audit Complete: 69/69 Verified & Coverage Dashboard Live) | P1 | Phase 4 | Nov 25, 2026 | Backend / Full Stack |
+| **Scholarship & Net Price** | ✅ **Tested** (Phase 4.1 Complete: Student-Level Eligibility, Transfer Intelligence & Coverage Gaps Live) | P1 | Phase 4.1 | Nov 25, 2026 | Backend / Full Stack |
 | **Security & Privacy Testing**| ✅ **Tested** (DB Audit Triggers + DNS Pinning + Outbound Firewall) | P0 | Phase 1–5 | Nov 25, 2026 | Security / QA |
 | **Beta Release (Pilot)** | ⭕ **Not Started** | P0 | Phase 5 | Phase 5 (M6) | Entire Team |
 
@@ -278,9 +278,9 @@
   - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`, `apps/api/app/services/freshness_governance.py`, `apps/api/app/services/coverage_analytics.py`
   - `apps/api/app/api/v1/financial.py`, `apps/api/app/api/v1/credentials.py`
   - `apps/web/src/app/financial/page.tsx`, `apps/web/src/app/credentials/page.tsx`
-* **Acceptance Criteria:** **69 / 69** global scholarship programs audited and annotated in PostgreSQL (**27** remediated legacy + **42** re-verified Batches 1–4 across **100%** 15-field `claim_provenance` with `0` fabricated USD conversions on non-USD awards, **`36.2%` (`25/69`)** `verified_funding_coverage` vs **`26.1%` (`18/69`)** `actionable_coverage`, `MA` Morocco vs `MR` Mauritania distinct ISO country rows + African region mapping, strict `first_year` vs `transfer` vs `exchange_mobility` isolation, Dual-View International Credential Evaluator (`11` grading scales + `12` recognition corridors), `GET /api/v1/financial/coverage-audit` analytics & interactive `/financial` Coverage Audit tab across all 10 locales incl. `ar-SA` RTL), **91** backend `pytest` + **12** frontend tests + **16/16** Next.js routes + live browser QA.
+* **Acceptance Criteria:** **69 / 69** global scholarship programs audited and annotated in PostgreSQL (`100%` 15-field `claim_provenance`, `0` fabricated USD conversions on non-USD awards, **`36.2%` (`25/69`)** `verified_funding_coverage` vs **`26.1%` (`18/69`)** `actionable_coverage` vs **`7/69`** confirmed open-cycle verified awards), strict 7-way `classify_transfer_pathway` (never inferring transfer from `'all'` UG status), 8-way `classify_aid_type` separating CSS Profile / variable / exchange-only aid from fixed funding, implicit `destination_country` & deterministic `enrollments` sorting, **`POST /api/v1/financial/student-coverage`** + student-level 6+ separated counters, `18`-archetype gap ranking + `DRQ-01..DRQ-04` deferred research queue, and enhanced `/financial` UI across all 10 locales incl. `ar-SA` RTL, **95** backend `pytest` + **12** frontend tests + **16/16** Next.js routes + live browser QA.
 * **Last Verified Date:** November 25, 2026
-* **Next Action:** Review Global Catalog Verification & Coverage Audit report (`30_PHASE_4_GLOBAL_CATALOG_VERIFICATION_COVERAGE_AUDIT_REPORT.md`); deploy outbound worker firewall (`infra/firewall/`) before Phase 5 production launch.
+* **Next Action:** Review Phase 4.1 Student-Level Eligibility Intelligence report (`31_PHASE_4_1_STUDENT_LEVEL_ELIGIBILITY_INTELLIGENCE_REPORT.md`); execute `DRQ-01..DRQ-04` official-source checks or deploy outbound worker firewall (`infra/firewall/`) before Phase 5 launch.
 
 ### 18. Security & Privacy Hardening
 * **Status:** ✅ **Tested** (Audit Retention Triggers, DNS Pinning & Outbound Firewall Configs)

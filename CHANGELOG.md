@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Improved — Phase 4.1: Student-Level Scholarship Eligibility Intelligence & Coverage Optimization
+- **Non-Inference Transfer & Destination Hardening (`financial_engine.py`, `schemas/phase4.py`):**
+  - Added 7-way `classify_transfer_pathway` (`explicitly_accepts_transfer`, `ug_transfer_unconfirmed`, `first_year_only`, `community_college_required`, `transfer_restricted_by_institution_or_country`, `graduate_only`, `exchange_only`) and enforced strict manual-review flagging (`requires_manual_review`) when `transfer` applicants evaluate `ug_transfer_unconfirmed` awards (`12` broad `'all'` UG records) rather than inferring transfer eligibility.
+  - Added implicit `destination_country` enforcement for awards without explicit `destination_country` rules and deterministic priority sorting on `profile.enrollments` in `_derive_student_context`.
+- **Variable vs. Fixed Aid Intelligence & Per-Card Explainability (`financial_engine.py`, `/financial`):**
+  - Added 8-category `classify_aid_type` separating fixed statutory/published awards from `css_profile_full_need`, `variable_institutional_need`, `variable_merit`, `tuition_waiver`, and `exchange_only` policies (`is_variable_aid`, `is_amount_verified`, `is_cycle_open`, `is_actionable_for_student`), plus explicit `satisfied_reasons`, `failed_reasons`, `missing_requirements`, `official_supporting_sources`, and non-probability advisories.
+- **Student-Level Coverage Analytics, Gaps & Deferred Research Queue (`coverage_analytics.py`, `POST /api/v1/financial/student-coverage`):**
+  - Exposed separated non-blended student counters (`programs_matched`, `programs_verified_eligibility`, `programs_verified_funding`, `programs_open_cycle`, `programs_actionable_open_verified`, `programs_insufficient_info`, `programs_manual_review`), prioritized profile coverage gaps (`no_actionable_opportunities`, `no_verified_funding`, `only_expired_cycles`, `only_variable_institutional_aid`, `only_unconfirmed_transfer`) across an `18`-archetype matrix, `confirmed_open_verified_programs` (`7 / 69`), and `DRQ-01`..`DRQ-04` deferred research targets.
+  - Surfaced student coverage metrics, gap alerts, aid-type/transfer badges, and Coverage Audit gap panels on `/financial` across all **10** locales incl. `ar-SA` RTL, verified by **95 / 95** backend `pytest`, **12 / 12** frontend `api-client.test.ts`, **16 / 16** Next.js build routes, and live Chromium QA.
+
 ### Audited & Remediated — Global Catalog Verification & Coverage Audit (Workstreams A–G)
 - **Full 69-Program Remediation & Re-Verification (`phase4_catalog_audit_remediation.py`, `phase4_seed.py`):**
   - Audited all **27** legacy records and re-verified all **42** Batches 1–4 scholarships (`69 / 69` reviewed, **`100%`** 15-field `claim_provenance` completeness, `0` invalid URLs, `0` duplicates).

@@ -1767,6 +1767,15 @@ export interface ScholarshipEligibilityResult {
   missing_requirements: string[];
   conditional_requirements?: string[];
   manual_review_reasons?: string[];
+  satisfied_reasons?: string[];
+  official_supporting_sources?: Array<{
+    source_name: string;
+    source_url: string;
+    sponsoring_institution?: string | null;
+    source_type?: string;
+    verified_at?: string | null;
+    claim_domains_supported?: string[];
+  }>;
   failed_reasons: string[];
   funding_scope?: string[];
   duration_renewal_summary?: string | null;
@@ -1775,6 +1784,14 @@ export interface ScholarshipEligibilityResult {
   conflict_notes?: string | null;
   freshness_status?: string;
   application_cycle_status?: string;
+  cycle_status_detail?: string | null;
+  is_cycle_open?: boolean;
+  is_amount_verified?: boolean;
+  is_actionable_for_student?: boolean;
+  aid_classification?: string | null;
+  is_variable_aid?: boolean;
+  transfer_pathway_classification?: string | null;
+  transfer_eligibility_detail?: string | null;
   claim_freshness?: Record<string, string>;
   freshness_warnings?: string[];
   verification_expires_at?: string | null;
@@ -1783,6 +1800,29 @@ export interface ScholarshipEligibilityResult {
   source_name: string;
   source_url: string;
   verified_at: string;
+}
+
+export interface StudentCoverageSummary {
+  programs_evaluated: number;
+  programs_matched: number;
+  programs_verified_eligibility: number;
+  programs_verified_funding: number;
+  programs_open_cycle: number;
+  programs_actionable_open_verified: number;
+  programs_insufficient_info: number;
+  programs_manual_review: number;
+  programs_variable_aid_matched: number;
+  programs_expired_cycle_matched: number;
+  programs_transfer_unconfirmed: number;
+  aid_classification_breakdown: Record<string, number>;
+  transfer_pathway_breakdown: Record<string, number>;
+  gap_codes: string[];
+  profile_coverage_gaps: Array<{
+    gap_code: string;
+    title: string;
+    detail: string;
+  }>;
+  next_steps_for_student: string[];
 }
 
 export interface ScholarshipMatchResponse {
@@ -1796,6 +1836,7 @@ export interface ScholarshipMatchResponse {
   total_active_programs?: number;
   verified_funding_programs?: number;
   verified_funding_coverage?: number;
+  student_coverage_summary?: StudentCoverageSummary;
   aggregation_precedence?: string[];
   results: ScholarshipEligibilityResult[];
   disclaimer: string;
@@ -2069,6 +2110,7 @@ export interface CatalogCoverageAuditResponse {
   verified_funding_coverage: number;
   actionable_coverage_count: number;
   actionable_coverage_ratio: number;
+  confirmed_open_verified_programs?: number;
   unknown_eligibility_count: number;
   requires_manual_review_count: number;
   expired_claim_count: number;
@@ -2079,6 +2121,8 @@ export interface CatalogCoverageAuditResponse {
   multi_destination_programs: number;
   citizenships_with_verified_funding_count: number;
   by_pathway: Record<string, number>;
+  transfer_pathway_breakdown?: Record<string, number>;
+  aid_classification_breakdown?: Record<string, number>;
   by_degree_level: Record<string, Record<string, number>>;
   by_citizenship: Array<{
     country_code: string;
@@ -2102,6 +2146,36 @@ export interface CatalogCoverageAuditResponse {
     matched_count: number;
     verified_funding_count: number;
     sample_titles: string[];
+  }>;
+  student_archetype_matrix?: Array<{
+    profile_id: string;
+    label: string;
+    programs_evaluated: number;
+    programs_matched: number;
+    programs_verified_eligibility: number;
+    programs_verified_funding: number;
+    programs_open_cycle: number;
+    programs_actionable_open_verified: number;
+    programs_insufficient_info: number;
+    programs_manual_review: number;
+    gap_codes: string[];
+  }>;
+  coverage_gaps?: Array<{
+    gap_code: string;
+    priority: string;
+    title: string;
+    missing_dimension_significance: string;
+    description: string;
+    affected_profile_count: number;
+    affected_profiles: string[];
+  }>;
+  deferred_research_queue?: Array<{
+    queue_id: string;
+    priority: string;
+    target_gap: string;
+    focus: string;
+    official_sources_to_verify: string[];
+    why_deferred: string;
   }>;
   manual_review_programs: Array<{
     title: string;

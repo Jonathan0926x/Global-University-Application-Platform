@@ -14,8 +14,9 @@ from app.schemas.phase4 import (
     ScholarshipEligibilityResultSchema,
     ScholarshipMatchRequest,
     ScholarshipMatchResponse,
+    StudentCoverageReportResponse,
 )
-from app.services.coverage_analytics import generate_global_coverage_audit
+from app.services.coverage_analytics import analyze_student_coverage, generate_global_coverage_audit
 from app.services.financial_engine import (
     calculate_net_price,
     ensure_phase4_seeded,
@@ -144,7 +145,25 @@ def run_net_price_calculator(
 )
 def get_catalog_coverage_audit(db: Session = Depends(get_db)):
     """
-    Returns live Workstream E–G global catalog verification metrics, pathway coverage,
-    citizenship & destination analytics, reference intersections, and manual-review queue.
+    Returns live Workstream E–G & Phase 4.1 global catalog verification metrics, pathway coverage,
+    student archetype matrix, prioritized coverage gaps, and deferred research queue.
     """
     return CatalogCoverageAuditResponse(**generate_global_coverage_audit(db))
+
+
+@router.post(
+    "/financial/student-coverage",
+    response_model=StudentCoverageReportResponse,
+    tags=["Financial & Scholarships"],
+)
+def evaluate_student_scholarship_coverage(
+    payload: ScholarshipMatchRequest,
+    profile: Optional[StudentProfile] = Depends(get_current_profile),
+    db: Session = Depends(get_db),
+):
+    """
+    Evaluates student-level scholarship accessibility across separated non-blended counters
+    (matched, verified eligibility, verified funding, open cycle, actionable open verified,
+    insufficient info, and manual review) plus actionable coverage gaps.
+    """
+    return StudentCoverageReportResponse(**analyze_student_coverage(db, profile, payload.model_dump()))

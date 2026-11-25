@@ -752,6 +752,66 @@ export default function FinancialIntelligencePage() {
               </div>
             )}
 
+            {schResult.student_coverage_summary && (
+              <div id="fin-student-coverage-panel" className="rounded-2xl border border-zinc-200 bg-white p-4 space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                    <div className="text-[10px] font-bold uppercase text-zinc-500">
+                      {t("fin.student_matched_label", "Matched for Your Profile")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-lg font-extrabold text-zinc-900">
+                      {schResult.student_coverage_summary.programs_matched}/{schResult.student_coverage_summary.programs_evaluated}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                    <div className="text-[10px] font-bold uppercase text-emerald-800">
+                      {t("fin.student_verified_funding", "Verified Fixed/Published Funding")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-lg font-extrabold text-emerald-900">
+                      {schResult.student_coverage_summary.programs_verified_funding}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3">
+                    <div className="text-[10px] font-bold uppercase text-sky-800">
+                      {t("fin.student_open_cycle", "Open Application Cycle")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-lg font-extrabold text-sky-900">
+                      {schResult.student_coverage_summary.programs_open_cycle}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3">
+                    <div className="text-[10px] font-bold uppercase text-teal-800">
+                      {t("fin.student_actionable_open", "Actionable Now (Open + Verified)")}
+                    </div>
+                    <div dir="ltr" className="mt-1 text-lg font-extrabold text-teal-900">
+                      {schResult.student_coverage_summary.programs_actionable_open_verified}
+                    </div>
+                  </div>
+                </div>
+
+                {schResult.student_coverage_summary.profile_coverage_gaps.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-1.5 text-xs">
+                    <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0" aria-hidden="true" />
+                      <span>{t("fin.gaps_panel_title", "Detected Student Coverage Gaps & Recommended Checks")}</span>
+                    </div>
+                    <ul className="space-y-1 text-[11px] text-amber-900">
+                      {schResult.student_coverage_summary.profile_coverage_gaps.map((gap) => (
+                        <li key={gap.gap_code}>
+                          <strong>{gap.title}:</strong> {gap.detail}
+                        </li>
+                      ))}
+                    </ul>
+                    {schResult.student_coverage_summary.next_steps_for_student.length > 0 && (
+                      <div className="pt-1 border-t border-amber-200/70 text-[11px] text-amber-950">
+                        {schResult.student_coverage_summary.next_steps_for_student.join(" • ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-3">
               {schResult.results.map((s) => (
                 <article key={s.id} className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3 shadow-xs">
@@ -819,6 +879,24 @@ export default function FinancialIntelligencePage() {
                         {s.transfer_supported === null && s.degree_levels?.includes("bachelors") && (
                           <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                             {t("fin.badge_transfer_unknown", "Transfer Status Unconfirmed")}
+                          </span>
+                        )}
+                        {s.is_variable_aid !== undefined && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                              s.is_variable_aid
+                                ? "bg-purple-50 border-purple-200 text-purple-800"
+                                : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                            }`}
+                          >
+                            {s.is_variable_aid
+                              ? t("fin.aid_variable_label", "Variable / Formulaic Aid Policy")
+                              : t("fin.aid_fixed_label", "Verified Fixed / Bounded Award")}
+                          </span>
+                        )}
+                        {s.transfer_pathway_classification && (
+                          <span className="rounded-full bg-zinc-50 border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
+                            {s.transfer_pathway_classification.replace(/_/g, " ")}
                           </span>
                         )}
                         {s.amount_classification && s.amount_classification !== "unspecified" && (
@@ -894,8 +972,51 @@ export default function FinancialIntelligencePage() {
                           </span>
                         </div>
                       )}
+                      {s.cycle_status_detail && (
+                        <div className="text-[10px] text-zinc-500 max-w-xs md:ms-auto">
+                          {s.cycle_status_detail}
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Structured Eligibility Explanation Summary */}
+                  {((s.satisfied_reasons && s.satisfied_reasons.length > 0) ||
+                    s.failed_reasons.length > 0 ||
+                    s.missing_requirements.length > 0) && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                      {s.satisfied_reasons && s.satisfied_reasons.length > 0 && (
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-emerald-900">
+                          <div className="font-bold mb-1">{t("fin.why_matched_heading", "Conditions Satisfied")}</div>
+                          <ul className="space-y-0.5 list-disc list-inside">
+                            {s.satisfied_reasons.slice(0, 4).map((reason, ridx) => (
+                              <li key={ridx}>{reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {s.failed_reasons.length > 0 && (
+                        <div className="rounded-lg border border-red-200 bg-red-50/40 p-2.5 text-red-900">
+                          <div className="font-bold mb-1">{t("fin.why_failed_heading", "Failed Reasons")}</div>
+                          <ul className="space-y-0.5 list-disc list-inside">
+                            {s.failed_reasons.map((reason, ridx) => (
+                              <li key={ridx}>{reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {s.missing_requirements.length > 0 && (
+                        <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-2.5 text-sky-900">
+                          <div className="font-bold mb-1">{t("fin.missing_info_heading", "Missing Student Evidence")}</div>
+                          <ul className="space-y-0.5 list-disc list-inside">
+                            {s.missing_requirements.map((reason, ridx) => (
+                              <li key={ridx}>{reason}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Deterministic Rule Provenance */}
                   {s.rule_evaluations.length > 0 && (
@@ -921,6 +1042,12 @@ export default function FinancialIntelligencePage() {
                       ))}
                     </div>
                   )}
+                  <div className="text-[10px] text-zinc-500">
+                    {t(
+                      "fin.not_admission_notice",
+                      "Eligibility reflects published award criteria only — not admission probability or guaranteed funding."
+                    )}
+                  </div>
                 </article>
               ))}
             </div>
@@ -1169,6 +1296,54 @@ export default function FinancialIntelligencePage() {
                     ))}
                   </div>
                 </div>
+
+                {/* Phase 4.1 Prioritized Coverage Gaps & Deferred Research Queue */}
+                {auditData.coverage_gaps && auditData.coverage_gaps.length > 0 && (
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-extrabold text-zinc-900">
+                        {t("fin.audit_gaps_title", "Prioritized Coverage Gaps & Deferred Research Queue")}
+                      </h3>
+                      {auditData.confirmed_open_verified_programs !== undefined && (
+                        <span dir="ltr" className="rounded-full bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-[11px] font-bold text-teal-900">
+                          Confirmed Open Deadlines w/ Verified Amounts: {auditData.confirmed_open_verified_programs}/{auditData.total_active_programs}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {auditData.coverage_gaps.map((g) => (
+                        <div key={g.gap_code} className="rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 text-xs space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-zinc-900">{g.title}</span>
+                            <span dir="ltr" className="rounded bg-amber-200/70 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-950">
+                              {g.priority} • {g.affected_profile_count} profiles
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-700">{g.description}</p>
+                          <div className="text-[10px] text-zinc-500">
+                            {g.affected_profiles.slice(0, 4).join(" • ")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {auditData.deferred_research_queue && auditData.deferred_research_queue.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-zinc-200">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+                          {auditData.deferred_research_queue.map((q) => (
+                            <div key={q.queue_id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span dir="ltr" className="font-mono font-bold text-indigo-800">{q.queue_id} ({q.priority})</span>
+                                <span className="text-[10px] font-mono text-zinc-500">{q.target_gap}</span>
+                              </div>
+                              <div className="font-bold text-zinc-900">{q.focus}</div>
+                              <p className="text-[11px] text-zinc-600">{q.why_deferred}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>

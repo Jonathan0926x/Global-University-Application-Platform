@@ -15,11 +15,16 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.ingestion.phase4_catalog_audit_remediation import LEGACY_AUDIT_SPECS
 from app.models.country import Country
+from app.models.profile import StudentProfile
 from app.models.rag import ScholarshipProgram
 from app.services.financial_engine import (
     _derive_student_context,
+    classify_aid_type,
+    classify_transfer_pathway,
+    compute_student_coverage_metrics,
     ensure_phase4_seeded,
     evaluate_single_scholarship,
+    match_scholarships_deterministic,
 )
 from app.services.freshness_governance import (
     _has_verified_funding_coverage,
@@ -103,6 +108,7 @@ def generate_global_coverage_audit(
     verified_elig_count = 0
     verified_funding_count = 0
     actionable_count = 0
+    confirmed_open_verified_count = 0
     unknown_elig_count = 0
     manual_review_count = 0
     expired_claim_count = 0
@@ -141,6 +147,26 @@ def generate_global_coverage_audit(
         }
     )
 
+    aid_classification_breakdown: Dict[str, int] = {
+        "fixed_statutory": 0,
+        "fixed_published": 0,
+        "tuition_waiver": 0,
+        "css_profile_full_need": 0,
+        "variable_institutional_need": 0,
+        "variable_merit": 0,
+        "exchange_only": 0,
+        "unpublished_or_manual_review": 0,
+    }
+    transfer_pathway_breakdown: Dict[str, int] = {
+        "explicitly_accepts_transfer": 0,
+        "ug_transfer_unconfirmed": 0,
+        "first_year_only": 0,
+        "community_college_required": 0,
+        "transfer_restricted_by_institution_or_country": 0,
+        "graduate_only": 0,
+        "exchange_only": 0,
+    }
+
     manual_review_items: List[Dict[str, Any]] = []
     unavailable_source_items: List[Dict[str, Any]] = []
 
@@ -158,7 +184,17 @@ def generate_global_coverage_audit(
         fresh = evaluate_scholarship_freshness(p, now=ref_now)
         is_funded = _has_verified_funding_coverage(p, ref_now)
         is_actionable = bool(is_funded and not cb["deadline_expired"])
+        is_open_confirmed = bool(
+            is_funded
+            and not cb["deadline_expired"]
+            and (bool(p.application_deadline_date and p.application_deadline_date >= ref_now.date()) or bool(p.is_deadline_rolling))
+        )
         is_exchange = (p.funding_type or "").strip().lower() == "exchange_mobility"
+
+        aid_cls, _, _ = classify_aid_type(p, cb)
+        aid_classification_breakdown[aid_cls] = aid_classification_breakdown.get(aid_cls, 0) + 1
+        tx_cls, _ = classify_transfer_pathway(p)
+        transfer_pathway_breakdown[tx_cls] = transfer_pathway_breakdown.get(tx_cls, 0) + 1
 
         if (
             cb["existence_current"]
@@ -172,6 +208,8 @@ def generate_global_coverage_audit(
             verified_funding_count += 1
         if is_actionable:
             actionable_count += 1
+        if is_open_confirmed:
+            confirmed_open_verified_count += 1
 
         if p.requires_manual_review or fresh in ("requires_manual_review", "conflicting_information", "source_unavailable"):
             manual_review_count += 1
@@ -409,6 +447,207 @@ def generate_global_coverage_audit(
             }
         )
 
+    # Phase 4.1 Systematic Student-Level Profile Matrix, Gap Ranking & Deferred Research Queue
+    archetype_specs: List[Dict[str, Any]] = [
+        {
+            "profile_id": "ht_us_cc_transfer_cs",
+            "label": "Haiti citizen at US Community College (Transfer UG, Computer Science, High Need)",
+            "overrides": {"citizenship_country": "HT", "country_of_residence": "US", "destination_country": "US", "degree_level": "bachelors", "applicant_type": "transfer", "us_community_college_enrolled": True, "field_of_study": "Computer Science", "gpa_4": 3.85, "financial_need_level": "high", "household_income_usd": 20000.0},
+        },
+        {
+            "profile_id": "ht_ca_first_year_ug",
+            "label": "Haiti citizen seeking Canada UG (First-Year, High Need)",
+            "overrides": {"citizenship_country": "HT", "country_of_residence": "HT", "destination_country": "CA", "degree_level": "bachelors", "applicant_type": "first_year", "gpa_4": 3.85, "financial_need_level": "high", "household_income_usd": 18000.0},
+        },
+        {
+            "profile_id": "ng_uk_masters_need",
+            "label": "Nigeria citizen seeking UK Master's (High Need, IELTS 7.0)",
+            "overrides": {"citizenship_country": "NG", "country_of_residence": "NG", "destination_country": "GB", "degree_level": "masters", "applicant_type": "first_year", "gpa_4": 3.8, "financial_need_level": "high", "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 7.0}}},
+        },
+        {
+            "profile_id": "ng_se_masters_need",
+            "label": "Nigeria citizen seeking Sweden Master's (IELTS 7.0)",
+            "overrides": {"citizenship_country": "NG", "country_of_residence": "NG", "destination_country": "SE", "degree_level": "masters", "applicant_type": "first_year", "gpa_4": 3.85, "financial_need_level": "high", "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 7.0}}},
+        },
+        {
+            "profile_id": "ma_se_masters",
+            "label": "Morocco citizen seeking Sweden Master's",
+            "overrides": {"citizenship_country": "MA", "country_of_residence": "MA", "destination_country": "SE", "degree_level": "masters", "applicant_type": "first_year", "gpa_4": 3.85, "financial_need_level": "high", "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 7.0}}},
+        },
+        {
+            "profile_id": "mr_se_masters",
+            "label": "Mauritania citizen seeking Sweden Master's",
+            "overrides": {"citizenship_country": "MR", "country_of_residence": "MR", "destination_country": "SE", "degree_level": "masters", "applicant_type": "first_year", "gpa_4": 3.85, "financial_need_level": "high", "language_proficiencies": {"en": {"format": "ielts", "test_type": "IELTS", "score": 7.0}}},
+        },
+        {
+            "profile_id": "jm_bb_transfer_ug",
+            "label": "Jamaica CARICOM citizen seeking UWI Cave Hill UG Transfer",
+            "overrides": {"citizenship_country": "JM", "country_of_residence": "JM", "destination_country": "BB", "degree_level": "bachelors", "applicant_type": "transfer", "gpa_4": 3.6, "financial_need_level": "high", "currently_enrolled": True, "field_of_study": "Economics"},
+        },
+        {
+            "profile_id": "in_de_transfer_ug",
+            "label": "India citizen seeking Germany UG Transfer (Engineering)",
+            "overrides": {"citizenship_country": "IN", "country_of_residence": "IN", "destination_country": "DE", "degree_level": "bachelors", "applicant_type": "transfer", "gpa_4": 3.8, "financial_need_level": "moderate", "field_of_study": "Engineering"},
+        },
+        {
+            "profile_id": "in_asia_phd_cs",
+            "label": "India citizen seeking Doctoral CS in China",
+            "overrides": {"citizenship_country": "IN", "country_of_residence": "IN", "destination_country": "CN", "degree_level": "doctoral", "applicant_type": "first_year", "gpa_4": 3.85, "field_of_study": "Computer Science", "date_of_birth": "1998-05-01"},
+        },
+        {
+            "profile_id": "br_br_first_year_ug",
+            "label": "Brazil resident citizen seeking Brazil UG (ENEM 700, High Need)",
+            "overrides": {"citizenship_country": "BR", "country_of_residence": "BR", "destination_country": "BR", "degree_level": "bachelors", "applicant_type": "first_year", "gpa_4": 3.6, "financial_need_level": "high", "exam_scores": {"ENEM": 700}, "qualifications": ["high_school"]},
+        },
+        {
+            "profile_id": "co_co_masters",
+            "label": "Colombia citizen seeking Master's in Colombia",
+            "overrides": {"citizenship_country": "CO", "country_of_residence": "CO", "destination_country": "CO", "degree_level": "masters", "applicant_type": "first_year", "gpa_4": 3.7, "date_of_birth": "1999-03-01"},
+        },
+        {
+            "profile_id": "pe_pe_first_year_ug",
+            "label": "Peru citizen seeking Peru UG (ENP 92, Age 19, High Need)",
+            "overrides": {"citizenship_country": "PE", "country_of_residence": "PE", "destination_country": "PE", "degree_level": "bachelors", "applicant_type": "first_year", "gpa_4": 3.75, "financial_need_level": "high", "date_of_birth": "2007-04-01", "exam_scores": {"ENP": 92}, "qualifications": ["high_school"]},
+        },
+        {
+            "profile_id": "kr_kr_first_year_dual",
+            "label": "Korean dual US citizen seeking South Korea GKS-U",
+            "overrides": {"citizenships": ["KR", "US"], "dual_citizenship": True, "country_of_residence": "US", "destination_country": "KR", "degree_level": "bachelors", "applicant_type": "first_year", "gpa_4": 3.8, "date_of_birth": "2006-05-01"},
+        },
+        {
+            "profile_id": "vn_nl_first_year_ug",
+            "label": "Vietnam non-EEA citizen seeking Netherlands UG",
+            "overrides": {"citizenship_country": "VN", "country_of_residence": "VN", "destination_country": "NL", "degree_level": "bachelors", "applicant_type": "first_year", "gpa_4": 3.8, "financial_need_level": "high"},
+        },
+        {
+            "profile_id": "fr_ch_masters",
+            "label": "France citizen seeking ETH Zurich Master's (Switzerland)",
+            "overrides": {"citizenship_country": "FR", "country_of_residence": "FR", "destination_country": "CH", "degree_level": "masters", "applicant_type": "first_year", "gpa_4": 3.9, "financial_need_level": "moderate"},
+        },
+        {
+            "profile_id": "es_es_first_year_ug",
+            "label": "Spain resident citizen seeking Spain UG (MEFD Beca General)",
+            "overrides": {"citizenship_country": "ES", "country_of_residence": "ES", "destination_country": "ES", "degree_level": "bachelors", "applicant_type": "first_year", "gpa_4": 3.6, "financial_need_level": "high"},
+        },
+        {
+            "profile_id": "us_ca_transfer_ug",
+            "label": "US California resident at US CC (Transfer UG, $45k income)",
+            "overrides": {"citizenship_country": "US", "country_of_residence": "US", "residency_state": "CA", "destination_country": "US", "degree_level": "bachelors", "applicant_type": "transfer", "us_community_college_enrolled": True, "gpa_4": 3.7, "financial_need_level": "high", "household_income_usd": 45000.0},
+        },
+        {
+            "profile_id": "ht_fr_bachelors_incomplete",
+            "label": "Haiti citizen seeking France UG (Transfer / Missing Test Details)",
+            "overrides": {"citizenship_country": "HT", "country_of_residence": "HT", "destination_country": "FR", "degree_level": "bachelors", "applicant_type": "transfer", "gpa_4": None},
+        },
+    ]
+
+    student_archetype_matrix: List[Dict[str, Any]] = []
+    gap_buckets: Dict[str, List[str]] = defaultdict(list)
+    for spec in archetype_specs:
+        mres = match_scholarships_deterministic(db, None, spec["overrides"], include_ineligible=True)
+        summary = mres["student_coverage_summary"]
+        student_archetype_matrix.append(
+            {
+                "profile_id": spec["profile_id"],
+                "label": spec["label"],
+                "programs_evaluated": summary["programs_evaluated"],
+                "programs_matched": summary["programs_matched"],
+                "programs_verified_eligibility": summary["programs_verified_eligibility"],
+                "programs_verified_funding": summary["programs_verified_funding"],
+                "programs_open_cycle": summary["programs_open_cycle"],
+                "programs_actionable_open_verified": summary["programs_actionable_open_verified"],
+                "programs_insufficient_info": summary["programs_insufficient_info"],
+                "programs_manual_review": summary["programs_manual_review"],
+                "gap_codes": summary["gap_codes"],
+            }
+        )
+        for gc in summary["gap_codes"]:
+            gap_buckets[gc].append(spec["label"])
+
+    gap_catalog_meta = {
+        "no_actionable_opportunities": (
+            "P0_CRITICAL",
+            "No Actionable Open Verified Funding",
+            "open_application_cycle / published_award_amount",
+            "Student profiles match 0 awards that combine verified funding amounts AND an open/rolling application deadline.",
+        ),
+        "no_verified_funding": (
+            "P0_HIGH",
+            "No Verified Fixed/Published Funding",
+            "published_award_amount",
+            "Matched programs rely exclusively on unpublished or variable formulaic aid without verified numeric guarantees.",
+        ),
+        "only_variable_institutional_aid": (
+            "P1_HIGH",
+            "Only Variable Institutional / CSS Profile Aid",
+            "verified_fixed_or_bounded_amounts",
+            "All matched programs calculate awards dynamically via CSS Profile or discretionary need/merit formulas.",
+        ),
+        "only_unconfirmed_transfer": (
+            "P1_HIGH",
+            "Only Unconfirmed Transfer Eligibility",
+            "explicit_transfer_pathway_confirmation",
+            "Transfer students receive only programs with general undergraduate wording lacking explicit transfer confirmation.",
+        ),
+        "only_expired_cycles": (
+            "P2_MEDIUM",
+            "All Matched Cycles Currently Closed/Expired",
+            "active_application_deadlines",
+            "Published verified funding exists for the profile, but all current cycle deadlines have passed or are unconfirmed.",
+        ),
+    }
+    coverage_gaps: List[Dict[str, Any]] = []
+    for gc, meta in gap_catalog_meta.items():
+        affected = gap_buckets.get(gc, [])
+        if affected:
+            coverage_gaps.append(
+                {
+                    "gap_code": gc,
+                    "priority": meta[0],
+                    "title": meta[1],
+                    "missing_dimension_significance": meta[2],
+                    "description": meta[3],
+                    "affected_profile_count": len(affected),
+                    "affected_profiles": affected,
+                }
+            )
+    coverage_gaps.sort(key=lambda x: (-x["affected_profile_count"], x["priority"], x["gap_code"]))
+
+    deferred_research_queue: List[Dict[str, Any]] = [
+        {
+            "queue_id": "DRQ-01",
+            "priority": "P0",
+            "target_gap": "no_verified_funding / only_variable_institutional_aid",
+            "focus": "Fixed-amount US Community College & International UG Transfer Merit Awards",
+            "official_sources_to_verify": ["jackkentcooke.org (manual browser re-verification)", "oas.org/fms (manual review)", "state/system transfer articulation scholarships (UC/CSU/SUNY)"],
+            "why_deferred": "Current JKCF and OAS primary portals block automated HTTP fetches (403 WAF), while CSS Profile institutional aid is inherently variable.",
+        },
+        {
+            "queue_id": "DRQ-02",
+            "priority": "P1",
+            "target_gap": "only_unconfirmed_transfer",
+            "focus": "Confirm transfer-student eligibility across 12 broad 'all' undergraduate scholarships",
+            "official_sources_to_verify": ["Becas Progresar (AR)", "MEFD Beca General (ES)", "Deutschlandstipendium/LMU/Heidelberg (DE)", "Paris-Saclay (FR)", "CHED TES (PH)", "VNU Hanoi (VN)", "PTDF ISS (NG)", "KNB (ID)"],
+            "why_deferred": "Official sources establish undergraduate eligibility broadly without an explicit published clause permitting mid-degree external transfers.",
+        },
+        {
+            "queue_id": "DRQ-03",
+            "priority": "P1",
+            "target_gap": "no_actionable_opportunities",
+            "focus": "Canada & Australia Fixed Undergraduate Scholarships (University-Published Schedules)",
+            "official_sources_to_verify": ["future.utoronto.ca (Pearson)", "you.ubc.ca (OIS/KMES)", "mcgill.ca/studentaid (split Entrance vs Mastercard)", "scholarships.unimelb.edu.au"],
+            "why_deferred": "Currently classified under variable/full-cost or WAF-blocked; requires institutional fee-schedule linkage without inventing USD figures.",
+        },
+        {
+            "queue_id": "DRQ-04",
+            "priority": "P2",
+            "target_gap": "only_expired_cycles",
+            "focus": "Upcoming 2027/2028 cycle deadline refresh for closed UK Commonwealth, GKS-U, PRONABEC, MIS, and Chevening programs",
+            "official_sources_to_verify": ["cscuk.fcdo.gov.uk", "chevening.org", "studyinkorea.go.kr", "pronabec.gob.pe", "biasiswa.mohe.gov.my"],
+            "why_deferred": "Programs remain verified in existence and rules; next-cycle call dates open periodically and are preserved historically until officially published.",
+        },
+    ]
+
     return {
         "audited_at": ref_now.isoformat(),
         "total_catalog_programs": len(programs),
@@ -424,6 +663,7 @@ def generate_global_coverage_audit(
         "verified_funding_coverage": round(verified_funding_count / total_active, 4) if total_active else 0.0,
         "actionable_coverage_count": actionable_count,
         "actionable_coverage_ratio": round(actionable_count / total_active, 4) if total_active else 0.0,
+        "confirmed_open_verified_programs": confirmed_open_verified_count,
         "unknown_eligibility_count": unknown_elig_count,
         "requires_manual_review_count": manual_review_count,
         "expired_claim_count": expired_claim_count,
@@ -434,10 +674,33 @@ def generate_global_coverage_audit(
         "multi_destination_programs": multi_dest_count,
         "citizenships_with_verified_funding_count": citizenships_with_verified,
         "by_pathway": pathway_counts,
+        "transfer_pathway_breakdown": transfer_pathway_breakdown,
+        "aid_classification_breakdown": aid_classification_breakdown,
         "by_degree_level": degree_stats,
         "by_citizenship": by_citizenship,
         "by_destination": sorted(dest_stats.values(), key=lambda x: (-x["catalog_count"], x["country_code"])),
         "intersections": intersections,
+        "student_archetype_matrix": student_archetype_matrix,
+        "coverage_gaps": coverage_gaps,
+        "deferred_research_queue": deferred_research_queue,
         "manual_review_programs": manual_review_items,
         "unavailable_source_programs": unavailable_source_items,
+    }
+
+
+def analyze_student_coverage(
+    db: Session,
+    profile: Optional[StudentProfile],
+    overrides: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Produces separated student-level scholarship coverage counts and actionable
+    profile gap explanations without blending eligibility, funding, and cycle state.
+    """
+    mres = match_scholarships_deterministic(db, profile, overrides, include_ineligible=True)
+    summary = mres["student_coverage_summary"]
+    return {
+        "evaluated_profile": mres["evaluated_profile"],
+        **summary,
+        "disclaimer": mres["disclaimer"],
     }

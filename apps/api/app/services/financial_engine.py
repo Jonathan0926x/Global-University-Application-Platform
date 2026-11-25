@@ -27,6 +27,8 @@ from app.models.institution import Institution, InstitutionCost
 from app.models.profile import CitizenshipRecord, StudentProfile
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
 from app.services.freshness_governance import (
+    _has_verified_funding_coverage,
+    _utcnow,
     compute_verified_funding_coverage,
     evaluate_scholarship_claim_breakdown,
     evaluate_scholarship_freshness,
@@ -233,7 +235,16 @@ def _derive_student_context(
         date_of_birth = profile.date_of_birth
         field_of_study = profile.intended_major.strip() if profile.intended_major else None
 
-        enrollments = list(profile.enrollments or [])
+        enrollments = sorted(
+            list(profile.enrollments or []),
+            key=lambda e: (
+                1 if e.enrollment_status == "attending" else 0,
+                1 if (e.enrollment_type or "") != "high_school" else 0,
+                1 if (e.gpa_scale or 0) == 4.0 else 0,
+                str(e.start_date or ""),
+                str(e.id),
+            ),
+        )
         has_enrollment_history = len(enrollments) > 0
         if enrollments:
             currently_enrolled = any(e.enrollment_status == "attending" for e in enrollments)
@@ -729,6 +740,127 @@ def _format_duration_renewal(sch: ScholarshipProgram) -> str:
     return "; ".join(parts)
 
 
+def classify_transfer_pathway(sch: ScholarshipProgram) -> Tuple[str, str]:
+    """
+    Classifies a scholarship into one of 7 explicit transfer-intelligence categories
+    without ever inferring transfer eligibility from general undergraduate status:
+      1. exchange_only
+      2. graduate_only
+      3. community_college_required
+      4. transfer_restricted_by_institution_or_country
+      5. explicitly_accepts_transfer
+      6. first_year_only
+      7. ug_transfer_unconfirmed
+    """
+    ftype = (sch.funding_type or "").strip().lower()
+    if ftype == "exchange_mobility":
+        return (
+            "exchange_only",
+            "Short-term exchange/mobility grant only (not a degree-seeking transfer or first-year award).",
+        )
+
+    degs = {str(d).strip().lower() for d in (sch.degree_levels or []) if str(d).strip()}
+    if degs and degs <= {"masters", "doctoral", "research"}:
+        return (
+            "graduate_only",
+            "Restricted to graduate/doctoral degree pathways (undergraduate transfer not applicable).",
+        )
+
+    rules = list(sch.rules or [])
+    if any(
+        (r.rule_dimension or "").strip().lower() == "enrollment_context"
+        and isinstance(r.rule_value, dict)
+        and r.rule_value.get("requires_us_community_college")
+        for r in rules
+    ):
+        return (
+            "community_college_required",
+            "Requires current enrollment at an accredited U.S. 2-year community college before transferring.",
+        )
+
+    audit_meta = (sch.claim_provenance or {}).get("audit_metadata") if isinstance(sch.claim_provenance, dict) else {}
+    explicit_tx = audit_meta.get("transfer_supported") if isinstance(audit_meta, dict) else None
+    app_type = (sch.applicant_type or "all").strip().lower()
+    title_l = (sch.title or "").lower()
+
+    has_transfer_restriction = (
+        sch.institution_id is not None and len(sch.eligible_residency_states or []) > 0
+    ) or any(kw in title_l for kw in ("alianza del pacífico", "oas academic scholarship", "promise grant"))
+    if has_transfer_restriction and (app_type == "transfer" or explicit_tx is True):
+        return (
+            "transfer_restricted_by_institution_or_country",
+            "Transfer eligibility is verified only for designated participating institutions, states, or partner-country universities.",
+        )
+
+    if app_type == "transfer" or explicit_tx is True:
+        return (
+            "explicitly_accepts_transfer",
+            "Explicitly accepts transfer applicants under published institutional or statutory rules.",
+        )
+
+    if app_type == "first_year" or explicit_tx is False:
+        return (
+            "first_year_only",
+            "Restricted to incoming first-year applicants; transfer students are explicitly excluded.",
+        )
+
+    return (
+        "ug_transfer_unconfirmed",
+        "Accepts undergraduate applicants broadly, but transfer eligibility is not explicitly confirmed in official source documentation.",
+    )
+
+
+def classify_aid_type(
+    sch: ScholarshipProgram,
+    claim_breakdown: Dict[str, Any],
+) -> Tuple[str, bool, bool]:
+    """
+    Distinguishes fixed verified funding from variable, formulaic, waiver, exchange-only,
+    and unverified awards. Returns (aid_classification, is_variable_aid, is_amount_verified).
+    """
+    ftype = (sch.funding_type or "").strip().lower()
+    atype = (sch.award_type or "").strip().lower()
+    audit_meta = (sch.claim_provenance or {}).get("audit_metadata") if isinstance(sch.claim_provenance, dict) else {}
+    amt_class = str((audit_meta or {}).get("amount_classification") or "").strip().lower()
+    title_l = (sch.title or "").lower()
+
+    is_amt_verified = _has_verified_funding_coverage(sch, _utcnow(None))
+
+    if ftype == "exchange_mobility" or atype == "mobility_grant":
+        return "exchange_only", True, False
+
+    if "css" in amt_class or amt_class == "need_based_variable" or any(
+        kw in title_l for kw in ("mit need-blind", "yale need-blind", "princeton financial aid", "stanford university need-based")
+    ):
+        return "css_profile_full_need", True, False
+
+    if sch.is_guaranteed_statutory and amt_class in ("published_fixed", "published_range") and is_amt_verified:
+        return "fixed_statutory", False, True
+
+    if atype in ("tuition_waiver",) or ftype in ("tuition_waiver", "tuition_free") or "waiver" in amt_class or "tuition_free" in amt_class:
+        return "tuition_waiver", not is_amt_verified, is_amt_verified
+
+    if amt_class in (
+        "conditional_sai_formula",
+        "conditional_last_dollar_gift_aid",
+        "conditional_per_unit",
+        "destination_and_commission_dependent",
+        "full_cost_program_dependent",
+    ) or (ftype in ("need_based", "need_and_merit") and not is_amt_verified):
+        return "variable_institutional_need", True, False
+
+    if ftype == "merit" and not is_amt_verified:
+        return "variable_merit", True, False
+
+    if is_amt_verified and amt_class in ("published_fixed", "published_range", "published_mixed_fee_policy"):
+        return "fixed_published", False, True
+
+    if is_amt_verified:
+        return "fixed_published", False, True
+
+    return "unpublished_or_manual_review", True, False
+
+
 def _aggregate_outcomes(outcomes: List[str]) -> str:
     """Applies documented deterministic precedence:
     ineligible > requires_manual_review > insufficient_information > conditionally_eligible > eligible.
@@ -745,6 +877,7 @@ def evaluate_single_scholarship(
 ) -> Dict[str, Any]:
     evals: List[Dict[str, Any]] = []
     renewal_evals: List[Dict[str, Any]] = []
+    satisfied_reasons: List[str] = []
     failed_reasons: List[str] = []
     missing_reqs: List[str] = []
     conditional_reqs: List[str] = []
@@ -768,7 +901,9 @@ def evaluate_single_scholarship(
         if not mandatory:
             return
         st = outcome_dict["outcome"]
-        if st == "ineligible":
+        if st == "eligible":
+            satisfied_reasons.append(f"{label}: {outcome_dict['detail']}")
+        elif st == "ineligible":
             failed_reasons.append(outcome_dict["detail"])
         elif st == "requires_manual_review":
             manual_reasons.append(outcome_dict["detail"])
@@ -781,13 +916,23 @@ def evaluate_single_scholarship(
     claim_breakdown = evaluate_scholarship_claim_breakdown(sch)
     if claim_breakdown["deadline_expired"]:
         app_cycle_status = "closed"
+        cycle_status_detail = (
+            f"Cycle deadline ({sch.application_deadline_date.isoformat()}) has passed; confirm next cycle on official sponsor portal."
+            if sch.application_deadline_date
+            else "Recorded cycle deadline has expired; verify next application window on official sponsor portal."
+        )
         freshness_warnings.append("Current cycle application deadline has passed; confirm next cycle opening dates on official sponsor site.")
     elif sch.application_deadline_date and sch.application_deadline_date >= date.today():
         app_cycle_status = "open"
+        cycle_status_detail = f"Open cycle (published deadline: {sch.application_deadline_date.isoformat()})."
     elif sch.is_deadline_rolling:
         app_cycle_status = "rolling"
+        cycle_status_detail = "Rolling application cycle accepted continuously per official policy."
     else:
         app_cycle_status = "cyclical_check_official"
+        cycle_status_detail = "Annual application cycle; exact current deadline not verified in catalog — verify on official portal."
+
+    is_cycle_open = app_cycle_status in ("open", "rolling")
 
     if freshness == "approaching_expiration":
         exp_str = sch.verification_expires_at.date().isoformat() if sch.verification_expires_at else "soon"
@@ -814,6 +959,9 @@ def evaluate_single_scholarship(
     if not sch.is_verified:
         manual_reasons.append("Scholarship lacks primary-source verification.")
 
+    tx_pathway_cls, tx_pathway_detail = classify_transfer_pathway(sch)
+    aid_cls, is_variable_aid, is_amt_verified = classify_aid_type(sch, claim_breakdown)
+
     # Degree-level implicit check whenever no explicit degree_level rule is attached
     has_degree_rule = any(r.rule_dimension == "degree_level" for r in (sch.rules or []))
     if not has_degree_rule:
@@ -827,9 +975,28 @@ def evaluate_single_scholarship(
         else:
             _record("degree_level", "Eligible degree levels", _outcome("eligible", f"Degree level '{ctx['degree_level']}' qualifies."), mandatory=True)
 
-    # Applicant pathway baseline check
+    # Destination-country implicit check whenever no explicit destination_country rule is attached
+    has_dest_rule = any(r.rule_dimension == "destination_country" for r in (sch.rules or []))
+    if not has_dest_rule and ctx.get("destination_country"):
+        allowed_dests = [
+            str(d).strip().upper()[:2]
+            for d in (sch.eligible_destination_countries or ([sch.country_code] if sch.country_code else []))
+            if str(d).strip()
+        ]
+        if allowed_dests and ctx["destination_country"] not in allowed_dests:
+            _record(
+                "destination_country",
+                "Eligible study destination",
+                _outcome(
+                    "ineligible",
+                    f"Scholarship applies to study in {', '.join(allowed_dests)} (selected destination: '{ctx['destination_country']}').",
+                ),
+                mandatory=True,
+            )
+
+    # Applicant pathway baseline check + strict non-inference guard for unconfirmed UG transfer awards
+    has_app_rule = any(r.rule_dimension == "applicant_type" for r in (sch.rules or []))
     if sch.applicant_type and sch.applicant_type != "all":
-        has_app_rule = any(r.rule_dimension == "applicant_type" for r in (sch.rules or []))
         if not has_app_rule:
             app_t = ctx.get("applicant_type")
             if not app_t:
@@ -838,18 +1005,38 @@ def evaluate_single_scholarship(
                 _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("ineligible", f"Restricted to {sch.applicant_type} applicants (student: '{app_t}')."), mandatory=True)
             else:
                 _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("eligible", f"Applicant pathway '{app_t}' matches."), mandatory=True)
+    elif ctx.get("applicant_type") == "transfer" and tx_pathway_cls == "ug_transfer_unconfirmed":
+        # Section 3 safeguard: NEVER infer transfer eligibility from general applicant_type='all' UG status!
+        _record(
+            "transfer_eligibility",
+            "Transfer pathway verification",
+            _outcome(
+                "requires_manual_review",
+                "Program covers undergraduates broadly ('all'), but transfer student eligibility is unconfirmed in official source documentation — manual verification required.",
+            ),
+            mandatory=True,
+        )
 
-    # International citizenship baseline guard
+    # International citizenship baseline guard (with explicit LPR/permanent_resident exception for domestic US programs)
     stud_cits = ctx["citizenships"]
-    if stud_cits and not sch.covers_international:
-        dom_allowed = [str(c).strip().upper()[:2] for c in (sch.eligible_citizenships or [sch.country_code]) if str(c).strip()]
-        if not any(c in dom_allowed for c in stud_cits):
+    is_us_lpr = ctx.get("residency_status") == "permanent_resident" and sch.country_code == "US"
+    if not sch.covers_international:
+        if not stud_cits:
             _record(
                 "international_policy",
                 "International student coverage",
-                _outcome("ineligible", f"Award is restricted to {', '.join(dom_allowed)} domestic/resident students (excludes international {stud_cits[0]} applicants)."),
+                _outcome("insufficient_information", "Citizenship status is required to verify domestic/eligible non-citizen funding rules."),
                 mandatory=True,
             )
+        elif not is_us_lpr:
+            dom_allowed = [str(c).strip().upper()[:2] for c in (sch.eligible_citizenships or [sch.country_code]) if str(c).strip()]
+            if not any(c in dom_allowed for c in stud_cits):
+                _record(
+                    "international_policy",
+                    "International student coverage",
+                    _outcome("ineligible", f"Award is restricted to {', '.join(dom_allowed)} domestic/eligible non-citizen students (excludes temporary/international {stud_cits[0]} applicants)."),
+                    mandatory=True,
+                )
 
     # Evaluate structured rules
     for rule in (sch.rules or []):
@@ -870,7 +1057,7 @@ def evaluate_single_scholarship(
     elif elig_status == "insufficient_information":
         score = 55
         bucket = "potential_insufficient_info"
-    elif freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired"):
+    elif freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired") or not is_amt_verified:
         score = 65 if elig_status == "eligible" else 55
         bucket = "review_required"
     elif elig_status == "conditionally_eligible":
@@ -880,17 +1067,37 @@ def evaluate_single_scholarship(
         score = 100 if sch.is_guaranteed_statutory else 90
         bucket = "verified_applicable"
 
+    is_actionable_student = bool(
+        elig_status in ("eligible", "conditionally_eligible")
+        and is_amt_verified
+        and is_cycle_open
+        and (sch.funding_type or "").strip().lower() != "exchange_mobility"
+    )
+
+    official_sources = [
+        {
+            "source_name": sch.source_name,
+            "source_url": sch.source_url,
+            "sponsoring_institution": sch.sponsoring_institution,
+            "source_type": sch.source_type or "unknown",
+            "verified_at": sch.verified_at.isoformat() if sch.verified_at else None,
+            "claim_domains_supported": list((sch.claim_provenance or {}).keys())[:15] if isinstance(sch.claim_provenance, dict) else [],
+        }
+    ]
+
     evidence_used = {
         "citizenships": ctx["citizenships"],
         "dual_citizenship": ctx.get("dual_citizenship"),
         "country_of_residence": ctx.get("country_of_residence"),
         "residency_state": ctx.get("residency_state"),
+        "residency_status": ctx.get("residency_status"),
         "applicant_type": ctx.get("applicant_type"),
         "degree_level": ctx.get("degree_level"),
         "gpa_4": ctx.get("gpa_4"),
         "household_income_usd": ctx.get("household_income_usd"),
         "financial_need_level": ctx.get("financial_need_level"),
         "field_of_study": ctx.get("field_of_study"),
+        "has_us_community_college": ctx.get("has_us_community_college"),
     }
 
     return {
@@ -929,6 +1136,7 @@ def evaluate_single_scholarship(
         "match_score": score,
         "rule_evaluations": evals,
         "renewal_evaluations": renewal_evals,
+        "satisfied_reasons": satisfied_reasons,
         "missing_requirements": missing_reqs,
         "conditional_requirements": conditional_reqs,
         "manual_review_reasons": manual_reasons,
@@ -957,12 +1165,135 @@ def evaluate_single_scholarship(
         "verification_expires_at": sch.verification_expires_at,
         "freshness_status": freshness,
         "application_cycle_status": app_cycle_status,
+        "cycle_status_detail": cycle_status_detail,
+        "is_cycle_open": is_cycle_open,
+        "is_amount_verified": is_amt_verified,
+        "is_actionable_for_student": is_actionable_student,
+        "aid_classification": aid_cls,
+        "is_variable_aid": is_variable_aid,
+        "transfer_pathway_classification": tx_pathway_cls,
+        "transfer_eligibility_detail": tx_pathway_detail,
+        "official_supporting_sources": official_sources,
         "claim_freshness": claim_breakdown["claims"],
         "requires_manual_review": bool(sch.requires_manual_review),
         "claim_provenance": sch.claim_provenance or {},
         "conflict_notes": sch.conflict_notes,
         "amount_classification": ((sch.claim_provenance or {}).get("audit_metadata") or {}).get("amount_classification"),
         "transfer_supported": ((sch.claim_provenance or {}).get("audit_metadata") or {}).get("transfer_supported"),
+    }
+
+
+def compute_student_coverage_metrics(
+    evaluated_results: List[Dict[str, Any]],
+    ctx: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Computes separated, non-blended student-level scholarship coverage denominators
+    and detects student-specific funding/pathway gaps cleanly.
+    """
+    total_evaluated = len(evaluated_results)
+    matched = [r for r in evaluated_results if r["eligibility_status"] in ("eligible", "conditionally_eligible")]
+    verified_elig = [r for r in evaluated_results if r["eligibility_status"] == "eligible"]
+    verified_funding = [r for r in matched if r.get("is_amount_verified")]
+    open_cycle = [r for r in matched if r.get("is_cycle_open")]
+    actionable = [r for r in matched if r.get("is_actionable_for_student")]
+    insufficient_info = [r for r in evaluated_results if r["eligibility_status"] == "insufficient_information"]
+    manual_review = [r for r in evaluated_results if r["eligibility_status"] == "requires_manual_review"]
+    variable_matched = [r for r in matched if r.get("is_variable_aid")]
+    closed_cycle_matched = [r for r in matched if not r.get("is_cycle_open")]
+    unconfirmed_transfer_flagged = [
+        r for r in evaluated_results
+        if r.get("transfer_pathway_classification") == "ug_transfer_unconfirmed"
+        and r["eligibility_status"] == "requires_manual_review"
+    ]
+
+    aid_breakdown: Dict[str, int] = {}
+    tx_breakdown: Dict[str, int] = {}
+    for r in evaluated_results:
+        ac = r.get("aid_classification") or "unpublished_or_manual_review"
+        aid_breakdown[ac] = aid_breakdown.get(ac, 0) + 1
+        tp = r.get("transfer_pathway_classification") or "ug_transfer_unconfirmed"
+        tx_breakdown[tp] = tx_breakdown.get(tp, 0) + 1
+
+    gaps: List[str] = []
+    gap_details: List[Dict[str, str]] = []
+    if len(verified_funding) == 0:
+        gaps.append("no_verified_funding")
+        gap_details.append(
+            {
+                "gap_code": "no_verified_funding",
+                "title": "No Fixed Verified Funding Matched",
+                "detail": "None of the matched scholarships currently publish a verified fixed or bounded award amount in this profile; variable or manual-review programs cannot guarantee exact dollar discounts.",
+            }
+        )
+    if len(actionable) == 0:
+        gaps.append("no_actionable_opportunities")
+        gap_details.append(
+            {
+                "gap_code": "no_actionable_opportunities",
+                "title": "No Actionable Open Verified Funding",
+                "detail": "0 matched scholarships currently satisfy BOTH verified published funding amounts AND an open/rolling application deadline.",
+            }
+        )
+    if matched and len(verified_funding) == 0 and len(variable_matched) == len(matched):
+        gaps.append("only_variable_institutional_aid")
+        gap_details.append(
+            {
+                "gap_code": "only_variable_institutional_aid",
+                "title": "Only Variable / Formulaic Aid Matched",
+                "detail": "Available matches rely on institutional CSS Profile / financial-aid office calculations or unpublished award amounts.",
+            }
+        )
+    if matched and len(open_cycle) == 0 and len(closed_cycle_matched) > 0:
+        gaps.append("only_expired_cycles")
+        gap_details.append(
+            {
+                "gap_code": "only_expired_cycles",
+                "title": "All Matched Programs Have Closed or Unverified Deadlines",
+                "detail": "Matched programs exist in the catalog, but current application deadlines have closed or require checking next cycle dates.",
+            }
+        )
+    if ctx.get("applicant_type") == "transfer" and len(matched) == 0 and len(unconfirmed_transfer_flagged) > 0:
+        gaps.append("only_unconfirmed_transfer")
+        gap_details.append(
+            {
+                "gap_code": "only_unconfirmed_transfer",
+                "title": "Only Unconfirmed Transfer Scholarships",
+                "detail": "Undergraduate matches lack confirmed transfer eligibility and require official verification before relying on them.",
+            }
+        )
+
+    next_steps: List[str] = []
+    if insufficient_info:
+        next_steps.append(
+            f"Complete missing profile evidence (e.g., exam scores, language tests, enrollment history, or DOB) to resolve {len(insufficient_info)} 'Insufficient Info' scholarships."
+        )
+    if unconfirmed_transfer_flagged:
+        next_steps.append(
+            f"Confirm transfer student eligibility directly with sponsors for {len(unconfirmed_transfer_flagged)} general undergraduate programs currently flagged for manual transfer review."
+        )
+    if closed_cycle_matched:
+        next_steps.append(
+            f"Track next-cycle opening dates on official sponsor sites for {len(closed_cycle_matched)} currently closed matched programs."
+        )
+
+    return {
+        "programs_evaluated": total_evaluated,
+        "programs_matched": len(matched),
+        "programs_verified_eligibility": len(verified_elig),
+        "programs_verified_funding": len(verified_funding),
+        "programs_open_cycle": len(open_cycle),
+        "programs_actionable_open_verified": len(actionable),
+        "programs_insufficient_info": len(insufficient_info),
+        "programs_manual_review": len(manual_review),
+        "programs_variable_aid_matched": len(variable_matched),
+        "programs_expired_cycle_matched": len(closed_cycle_matched),
+        "programs_transfer_unconfirmed": len(unconfirmed_transfer_flagged),
+        "aid_classification_breakdown": aid_breakdown,
+        "transfer_pathway_breakdown": tx_breakdown,
+        "gap_codes": gaps,
+        "profile_coverage_gaps": gap_details,
+        "next_steps_for_student": next_steps,
     }
 
 
@@ -1025,6 +1356,7 @@ def match_scholarships_deterministic(
     filtered = evaluated if include_ineligible else [r for r in evaluated if r["eligibility_status"] != "ineligible"]
 
     coverage_metrics = compute_verified_funding_coverage(db)
+    student_metrics = compute_student_coverage_metrics(evaluated, ctx)
 
     return {
         "evaluated_profile": ctx,
@@ -1035,6 +1367,7 @@ def match_scholarships_deterministic(
         "requires_manual_review_count": counts["requires_manual_review"],
         "ineligible_count": counts["ineligible"],
         **coverage_metrics,
+        "student_coverage_summary": student_metrics,
         "aggregation_precedence": list(AGGREGATION_PRECEDENCE),
         "results": filtered,
         "disclaimer": FINANCIAL_DISCLAIMER,
@@ -1330,11 +1663,15 @@ def calculate_net_price(
         permitted_keys, has_scope = _permitted_cost_keys(s)
         amin_raw, amax_raw = _raw_award_range(s)
 
-        # 1. Segregate unverified / manual-review / conflicting freshness first
+        # 1. Segregate unverified / variable formulaic / manual-review / conflicting freshness first
         if (
             elig_st == "requires_manual_review"
             or freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired")
             or amt_freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired")
+            or (
+                s.get("aid_classification") in ("css_profile_full_need", "variable_institutional_need", "variable_merit")
+                and amin_raw is not None
+            )
         ):
             reason = (
                 "; ".join(s.get("manual_review_reasons") or [])
