@@ -21,6 +21,10 @@ from app.ingestion.phase4_batch1_seed import (
     BATCH1_AFRICA_CARIBBEAN_SCHOLARSHIPS,
     seed_phase4_batch1_africa_caribbean,
 )
+from app.ingestion.phase4_batch2_seed import (
+    BATCH2_LATIN_AMERICA_SCHOLARSHIPS,
+    seed_phase4_batch2_latin_america,
+)
 from app.models.country import Country
 from app.models.institution import Institution
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
@@ -70,9 +74,9 @@ def test_13a_batch1_count_guard_and_provenance_completeness():
         for code in ("NG", "GH", "KE", "ZA", "ET", "RW", "SN", "CI", "HT", "JM", "TT", "BB", "BS", "DO"):
             assert db.query(Country).filter(Country.code == code).first() is not None
 
-        # Verify total catalog count: 27 legacy + 11 Batch 1 = 38
+        # Verify catalog has at least the Batch 1 baseline (27 legacy + 11 Batch 1 = 38; subsequent batches add beyond 38)
         total = db.query(ScholarshipProgram).count()
-        assert total == 38, f"Expected 38 total programs (27 legacy + 11 Batch 1), got {total}"
+        assert total >= 38, f"Expected at least 38 total programs (27 legacy + 11 Batch 1), got {total}"
 
         # Every Batch 1 record has non-empty 15-field provenance, non-fabricated reviewer/FX, and HTTPS official URL
         titles = [item["title"] for item in BATCH1_AFRICA_CARIBBEAN_SCHOLARSHIPS]
@@ -373,5 +377,418 @@ def test_13d_e_currency_isolation_and_claim_level_expiration_in_net_price():
             assert "__TEST__ Current Program With Expired Amount Claim" not in applied_titles
         finally:
             db.rollback()
+    finally:
+        db.close()
+
+
+# =====================================================================
+# Phase 4, Step 3 — Batch 2: Latin America Expansion Tests
+# =====================================================================
+
+
+def test_14a_batch2_count_guard_and_provenance_completeness():
+    # Hard gate: Batch 2 targets 6-10 programs and must never exceed 12
+    assert 6 <= len(BATCH2_LATIN_AMERICA_SCHOLARSHIPS) <= 12
+    assert len(BATCH2_LATIN_AMERICA_SCHOLARSHIPS) == 10
+
+    db = SessionLocal()
+    try:
+        seed_phase4_batch2_latin_america(db)
+        second = seed_phase4_batch2_latin_america(db)
+        assert second["batch2_created"] == 0
+        assert second["batch2_rules_created"] == 0
+
+        for code in ("BR", "MX", "CO", "CL", "AR", "PE", "ES", "UY", "EC", "BO", "PY", "VE", "CR", "PA", "GT", "HN", "NI", "SV", "CU"):
+            assert db.query(Country).filter(Country.code == code).first() is not None
+
+        # Verify total catalog count: 27 legacy + 11 Batch 1 + 10 Batch 2 = 48
+        total = db.query(ScholarshipProgram).count()
+        assert total == 48, f"Expected 48 total programs (27 legacy + 11 Batch 1 + 10 Batch 2), got {total}"
+
+        titles = [item["title"] for item in BATCH2_LATIN_AMERICA_SCHOLARSHIPS]
+        batch2_rows = db.query(ScholarshipProgram).filter(ScholarshipProgram.title.in_(titles)).all()
+        assert len(batch2_rows) == 10
+
+        for sch in batch2_rows:
+            assert sch.source_url.startswith("https://")
+            assert sch.sponsoring_institution
+            assert sch.source_type in ("government_portal", "official_institutional", "official_agency")
+            assert sch.verification_method == "manual_primary_source_fetch"
+            assert sch.verified_by is None, "Never fabricate reviewer identity"
+            assert sch.academic_year
+            assert sch.award_currency and len(sch.award_currency.strip()) == 3
+            assert isinstance(sch.claim_provenance, dict)
+            missing_keys = REQUIRED_15_CLAIM_KEYS - set(sch.claim_provenance.keys())
+            assert not missing_keys, f"{sch.title} missing provenance keys: {missing_keys}"
+            if sch.award_currency != "USD":
+                assert sch.award_amount_min_usd is None
+                assert sch.award_amount_max_usd is None
+
+        audit = validate_scholarship_catalog(db)
+        assert audit["invalid_urls"] == []
+        assert audit["duplicates"] == []
+        assert audit["conflicting_records"] == []
+        assert audit["expired_records"] == []
+    finally:
+        db.close()
+
+
+def test_14b_batch2_exam_and_residency_eligibility():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch2_latin_america(db)
+
+        # 1. ProUni (BR) requires ENEM >= 450 without fabricated GPA conversion
+        prouni = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "ProUni — Programa Universidade para Todos (MEC Brasil)"
+        ).one()
+        prouni_pass = evaluate_single_scholarship(
+            prouni,
+            {
+                "citizenships": ["BR"],
+                "destination_country": "BR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+                "exam_scores": {"ENEM": 620},
+            },
+        )
+        assert prouni_pass["eligibility_status"] == "conditionally_eligible"
+
+        prouni_low = evaluate_single_scholarship(
+            prouni,
+            {
+                "citizenships": ["BR"],
+                "destination_country": "BR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+                "exam_scores": {"ENEM": 410},
+            },
+        )
+        assert prouni_low["eligibility_status"] == "ineligible"
+
+        prouni_missing_exam = evaluate_single_scholarship(
+            prouni,
+            {
+                "citizenships": ["BR"],
+                "destination_country": "BR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+            },
+        )
+        assert prouni_missing_exam["eligibility_status"] == "insufficient_information"
+
+        # 2. PRONABEC Beca 18 (PE) enforces age < 22 on 2026-10-09 and ENP >= 84
+        beca18 = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "PRONABEC Beca 18 y Becas Especiales — Convocatoria 2027 (Perú)"
+        ).one()
+        beca18_pass = evaluate_single_scholarship(
+            beca18,
+            {
+                "citizenships": ["PE"],
+                "destination_country": "PE",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+                "date_of_birth": "2007-05-01",
+                "exam_scores": {"ENP": 92},
+            },
+        )
+        assert beca18_pass["eligibility_status"] == "conditionally_eligible"
+
+        beca18_overage = evaluate_single_scholarship(
+            beca18,
+            {
+                "citizenships": ["PE"],
+                "destination_country": "PE",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+                "date_of_birth": "2000-01-01",
+                "exam_scores": {"ENP": 92},
+            },
+        )
+        assert beca18_overage["eligibility_status"] == "ineligible"
+
+        beca18_missing_enp = evaluate_single_scholarship(
+            beca18,
+            {
+                "citizenships": ["PE"],
+                "destination_country": "PE",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "financial_need_level": "high",
+                "date_of_birth": "2007-05-01",
+            },
+        )
+        assert beca18_missing_enp["eligibility_status"] == "insufficient_information"
+
+        # 3. ICETEX Beca Colombia excludes CO nationals, CO residents, and out-of-range ages
+        icetex = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "ICETEX Programa de Reciprocidad para Extranjeros en Colombia (Beca Colombia 2026-2)"
+        ).one()
+        icetex_br_ok = evaluate_single_scholarship(
+            icetex,
+            {
+                "citizenships": ["BR"],
+                "country_of_residence": "BR",
+                "destination_country": "CO",
+                "degree_level": "masters",
+                "date_of_birth": "1999-03-10",
+            },
+        )
+        assert icetex_br_ok["eligibility_status"] == "conditionally_eligible"
+
+        icetex_co_nat = evaluate_single_scholarship(
+            icetex,
+            {
+                "citizenships": ["CO"],
+                "country_of_residence": "BR",
+                "destination_country": "CO",
+                "degree_level": "masters",
+                "date_of_birth": "1999-03-10",
+            },
+        )
+        assert icetex_co_nat["eligibility_status"] == "ineligible"
+
+        icetex_co_res = evaluate_single_scholarship(
+            icetex,
+            {
+                "citizenships": ["BR"],
+                "country_of_residence": "CO",
+                "destination_country": "CO",
+                "degree_level": "masters",
+                "date_of_birth": "1999-03-10",
+            },
+        )
+        assert icetex_co_res["eligibility_status"] == "ineligible"
+
+        icetex_missing_res = evaluate_single_scholarship(
+            icetex,
+            {
+                "citizenships": ["BR"],
+                "destination_country": "CO",
+                "degree_level": "masters",
+                "date_of_birth": "1999-03-10",
+            },
+        )
+        assert icetex_missing_res["eligibility_status"] == "insufficient_information"
+
+        icetex_overage = evaluate_single_scholarship(
+            icetex,
+            {
+                "citizenships": ["BR"],
+                "country_of_residence": "BR",
+                "destination_country": "CO",
+                "degree_level": "masters",
+                "date_of_birth": "1974-01-01",
+            },
+        )
+        assert icetex_overage["eligibility_status"] == "ineligible"
+    finally:
+        db.close()
+
+
+def test_14c_batch2_regional_blocs_and_spanish_exclusion():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch2_latin_america(db)
+
+        alianza = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Alianza del Pacífico — Plataforma de Movilidad Estudiantil y Académica"
+        ).one()
+        assert evaluate_single_scholarship(
+            alianza,
+            {
+                "citizenships": ["CL"],
+                "destination_country": "MX",
+                "degree_level": "bachelors",
+                "applicant_type": "transfer",
+                "field_of_study": "Engineering",
+            },
+        )["eligibility_status"] == "conditionally_eligible"
+        assert evaluate_single_scholarship(
+            alianza,
+            {
+                "citizenships": ["CO"],
+                "destination_country": "PE",
+                "degree_level": "bachelors",
+                "applicant_type": "transfer",
+                "field_of_study": "Computer Science",
+            },
+        )["eligibility_status"] == "conditionally_eligible"
+        assert evaluate_single_scholarship(
+            alianza,
+            {
+                "citizenships": ["BR"],
+                "destination_country": "MX",
+                "degree_level": "bachelors",
+                "applicant_type": "transfer",
+                "field_of_study": "Engineering",
+            },
+        )["eligibility_status"] == "ineligible"
+        assert evaluate_single_scholarship(
+            alianza,
+            {
+                "citizenships": ["AR"],
+                "destination_country": "CL",
+                "degree_level": "bachelors",
+                "applicant_type": "transfer",
+                "field_of_study": "Economics",
+            },
+        )["eligibility_status"] == "ineligible"
+        assert evaluate_single_scholarship(
+            alianza,
+            {
+                "citizenships": ["MX"],
+                "destination_country": "CO",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "field_of_study": "Engineering",
+            },
+        )["eligibility_status"] == "ineligible"
+
+        agcid = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "AGCID Programa de Becas República de Chile para Estudios de Magíster"
+        ).one()
+        assert evaluate_single_scholarship(
+            agcid,
+            {
+                "citizenships": ["HT"],
+                "destination_country": "CL",
+                "degree_level": "masters",
+            },
+        )["eligibility_status"] == "conditionally_eligible"
+        assert evaluate_single_scholarship(
+            agcid,
+            {
+                "citizenships": ["CL"],
+                "destination_country": "CL",
+                "degree_level": "masters",
+            },
+        )["eligibility_status"] == "ineligible"
+
+        carolina = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Fundación Carolina — Becas de Postgrado (España / América Latina)"
+        ).one()
+        assert evaluate_single_scholarship(
+            carolina,
+            {
+                "citizenships": ["PE"],
+                "country_of_residence": "PE",
+                "destination_country": "ES",
+                "degree_level": "masters",
+            },
+        )["eligibility_status"] == "conditionally_eligible"
+        assert evaluate_single_scholarship(
+            carolina,
+            {
+                "citizenships": ["PE"],
+                "country_of_residence": "ES",
+                "destination_country": "ES",
+                "degree_level": "masters",
+            },
+        )["eligibility_status"] == "ineligible"
+    finally:
+        db.close()
+
+
+def test_14d_e_batch2_native_currencies_net_price_and_closed_cycles():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch2_latin_america(db)
+
+        mx_match = match_scholarships_deterministic(
+            db,
+            None,
+            {
+                "citizenship_country": "MX",
+                "country_of_residence": "MX",
+                "destination_country": "MX",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+            },
+            include_ineligible=False,
+        )
+        mx_by_title = {r["title"]: r for r in mx_match["results"]}
+        secihti_nat = mx_by_title["SECIHTI Becas Nacionales para Estudios de Posgrado (México)"]
+        assert secihti_nat["award_currency"] == "MXN"
+        assert secihti_nat["native_amount_min"] == 192575.88
+        assert secihti_nat["native_amount_max"] == 256767.84
+        assert secihti_nat["award_amount_min_usd"] is None
+        assert secihti_nat["application_cycle_status"] == "closed"
+        assert secihti_nat["claim_freshness"]["deadlines"] == "expired"
+        assert secihti_nat["claim_freshness"]["award_amounts"] == "current"
+
+        ar_match = match_scholarships_deterministic(
+            db,
+            None,
+            {
+                "citizenship_country": "AR",
+                "country_of_residence": "AR",
+                "destination_country": "AR",
+                "degree_level": "bachelors",
+                "applicant_type": "first_year",
+                "date_of_birth": "2006-05-01",
+                "financial_need_level": "high",
+            },
+            include_ineligible=False,
+        )
+        progresar = {r["title"]: r for r in ar_match["results"]}[
+            "Becas Progresar Nivel Superior (Educación Superior y Enfermería)"
+        ]
+        assert progresar["award_currency"] == "ARS"
+        assert progresar["native_amount_min"] == 420000.0
+        assert progresar["native_amount_max"] == 420000.0
+        assert progresar["application_cycle_status"] == "closed"
+
+        pe_es_match = match_scholarships_deterministic(
+            db,
+            None,
+            {
+                "citizenship_country": "PE",
+                "country_of_residence": "PE",
+                "destination_country": "ES",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+            },
+            include_ineligible=False,
+        )
+        carolina_out = {r["title"]: r for r in pe_es_match["results"]}[
+            "Fundación Carolina — Becas de Postgrado (España / América Latina)"
+        ]
+        assert carolina_out["award_currency"] == "EUR"
+        assert carolina_out["application_cycle_status"] == "closed"
+        assert carolina_out["claim_freshness"]["deadlines"] == "expired"
+
+        alianza = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Alianza del Pacífico — Plataforma de Movilidad Estudiantil y Académica"
+        ).one()
+        assert alianza.award_currency == "UNK"
+        assert alianza.native_amount_min is None
+        assert alianza.native_amount_max is None
+
+        us_inst = db.query(Institution).filter(Institution.country_code == "US").first()
+        assert us_inst is not None
+        np_res = calculate_net_price(
+            db,
+            us_inst,
+            None,
+            {
+                "residency_classification": "international",
+                "housing_preference": "on_campus",
+                "applicant_type": "first_year",
+                "degree_level": "masters",
+                "citizenship_country": "MX",
+                "country_of_residence": "MX",
+                "destination_country": "MX",
+                "include_competitive_aid": True,
+            },
+        )
+        for applied in np_res["verified_applicable_aid"] + np_res["conditional_aid"]:
+            assert applied["award_currency"] == "USD"
+            assert applied["estimated_max_usd"] > 0
     finally:
         db.close()

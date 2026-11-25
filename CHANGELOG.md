@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Added & Verified — Step 3 (Batch 2): Latin America Scholarship Expansion
+- **Batch 2 Verified Latin America Expansion (`phase4_batch2_seed.py`, **10** new programs -> **48** total):**
+  - Seeded **10** official primary-source-verified scholarships (`<= 12` cap) with complete 15-field `claim_provenance`, **52** deterministic rules, and **19** country entries (`BR, MX, CO, CL, AR, PE, ES, UY, EC, BO, PY, VE, CR, PA, GT, HN, NI, SV, CU`) across Brazil, Mexico, Colombia, Chile, Argentina, Peru, Pacific Alliance, and Ibero-America: **ProUni (MEC Brasil)** (`BRL`, `ENEM >= 450` rule), **CAPES Demanda Social** (`BRL`), **SECIHTI Becas Nacionales** (`192,575.88–256,767.84 MXN`, closed `2026-11-21`), **SECIHTI Extranjero** (`MXN`, closed `2026-05-22`), **ICETEX Beca Colombia 2026-2** (`COP`, excludes `CO` citizens & `CO` residents, age `19–49`, closed `2026-06-05`), **AGCID República de Chile** (`CLP`, excludes `CL`), **Becas Progresar Nivel Superior** (`420,000 ARS/yr`, closed `2026-09-11`), **PRONABEC Beca 18 Convocatoria 2027** (`PEN`, age `< 22`, `ENP >= 84`, closed `2026-10-18`), **Alianza del Pacífico Movilidad Estudiantil** (`UNK` host currency, `pacific_alliance` transfers only, excludes `BR`/`AR`), and **Fundación Carolina Postgrado** (`EUR`, `iberoamerica` residing outside `ES`, closed `2026-03-02`).
+  - Added `"pacific_alliance"` and `"iberoamerica"` to `REGION_COUNTRIES` (`financial_engine.py`) and updated `ensure_phase4_seeded` to ensure idempotent Batch 2 presence.
+  - Preserved native currencies (`BRL, MXN, COP, CLP, ARS, PEN, EUR, UNK`) without fabricated USD conversions and without unsupported GPA scale conversions (`ENEM` / `ENP` evaluated via native `required_exams`).
+- **Financial Dashboard & QA (`/financial`):** Expanded citizenship, residence, and destination selectors with Batch 2 countries (`CO, CL, AR, PE, ES` + `BR, MX`), verified **75 / 75** backend `pytest`, **12 / 12** frontend `api-client.test.ts` (across all 10 locales), **16 / 16** Next.js build routes, and live browser QA (`0` console errors, `0` HTTP `>= 500`, Arabic `ar-SA` RTL zero overflow). Stopped cleanly before Batch 3 (Asia & Southeast Asia).
+
 ### Added & Verified — Step 3 (Batch 0 + Batch 1): Global Scholarship Expansion (Africa & Caribbean)
 - **Batch 0 Global Source Audit & Claim-Level Freshness Hardening (`freshness_governance.py`, `financial_engine.py`, `schemas/phase4.py`):**
   - Audited all **27** baseline scholarships (`AU: 1, CA: 3, DE: 3, FR: 2, GB: 4, JP: 1, US: 13`) preserving legacy `requires_manual_review` / `unknown` honesty with zero fabricated cycle dates or reviewers.

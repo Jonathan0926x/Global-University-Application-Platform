@@ -317,10 +317,15 @@ export default function FinancialIntelligencePage() {
                 <option value="FR">FR</option>
                 <option value="IN">IN</option>
                 <option value="BR">BR</option>
+                <option value="MX">MX</option>
+                <option value="CO">CO</option>
+                <option value="CL">CL</option>
+                <option value="AR">AR</option>
+                <option value="PE">PE</option>
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
                 <option value="DE">DE</option>
-                <option value="MX">MX</option>
+                <option value="ES">ES</option>
               </select>
             </div>
             <div>
@@ -351,10 +356,15 @@ export default function FinancialIntelligencePage() {
                 <option value="FR">FR</option>
                 <option value="IN">IN</option>
                 <option value="BR">BR</option>
+                <option value="MX">MX</option>
+                <option value="CO">CO</option>
+                <option value="CL">CL</option>
+                <option value="AR">AR</option>
+                <option value="PE">PE</option>
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
                 <option value="DE">DE</option>
-                <option value="MX">MX</option>
+                <option value="ES">ES</option>
               </select>
             </div>
             <div>
@@ -454,6 +464,13 @@ export default function FinancialIntelligencePage() {
                 <option value="BB">BB</option>
                 <option value="JM">JM</option>
                 <option value="DO">DO</option>
+                <option value="BR">BR</option>
+                <option value="MX">MX</option>
+                <option value="CO">CO</option>
+                <option value="CL">CL</option>
+                <option value="AR">AR</option>
+                <option value="PE">PE</option>
+                <option value="ES">ES</option>
               </select>
             </div>
           </div>

@@ -156,6 +156,32 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
   assert.equal(translate("fin.cycle_closed", "ht-HT"), "Sik Fèmen");
   assert.equal(translate("fin.cycle_open", "ar-SA"), "مفتوح الآن");
   assert.equal(translate("fin.sponsor_label", "es-419"), "Patrocinador");
+
+  const ALL_10_LOCALES = [
+    "en-US",
+    "es-419",
+    "fr-FR",
+    "ht-HT",
+    "ar-SA",
+    "zh-Hans",
+    "hi-IN",
+    "pt-BR",
+    "ja-JP",
+    "de-DE",
+  ] as const;
+  const BATCH2_REQUIRED_KEYS = [
+    "nav.financial",
+    "fin.amount_unpublished",
+    "fin.cycle_closed",
+    "fin.cycle_open",
+    "fin.sponsor_label",
+  ] as const;
+  for (const locale of ALL_10_LOCALES) {
+    for (const key of BATCH2_REQUIRED_KEYS) {
+      const value = translate(key, locale);
+      assert.ok(value && value.trim().length > 0 && value !== key, `Missing ${key} for ${locale}`);
+    }
+  }
 });
 
 

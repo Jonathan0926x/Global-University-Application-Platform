@@ -63,6 +63,8 @@ REGION_COUNTRIES: Dict[str, set] = {
     "caricom": {"JM", "BB", "TT", "BS", "BZ", "DM", "GD", "LC", "VC", "AG", "KN", "GY", "HT", "SR"},
     "latam": {"BR", "MX", "CO", "CL", "AR", "PE", "EC", "BO", "PY", "UY", "VE", "CR", "PA", "GT"},
     "latin_america": {"BR", "MX", "CO", "CL", "AR", "PE", "EC", "BO", "PY", "UY", "VE", "CR", "PA", "GT"},
+    "iberoamerica": {"BR", "MX", "CO", "CL", "AR", "PE", "EC", "BO", "PY", "UY", "VE", "CR", "PA", "GT", "HN", "NI", "SV", "DO", "CU"},
+    "pacific_alliance": {"CL", "CO", "MX", "PE"},
     "americas": {"US", "CA", "MX", "HT", "JM", "TT", "BB", "BS", "DO", "BR", "CO", "CL", "AR", "PE"},
     "eu": {"FR", "DE", "NL", "SE", "FI", "IT", "ES", "IE", "BE", "AT", "PT", "PL", "DK", "CZ", "GR"},
     "eea": {"FR", "DE", "NL", "SE", "FI", "IT", "ES", "IE", "BE", "AT", "PT", "PL", "DK", "CZ", "GR", "NO", "IS", "LI"},
@@ -101,7 +103,13 @@ def ensure_phase4_seeded(db: Session) -> None:
         .limit(1)
         .first()
     )
-    if has_rule is None or has_yale is None or has_batch1 is None:
+    has_batch2 = (
+        db.query(ScholarshipProgram.id)
+        .filter(ScholarshipProgram.title == "ICETEX Programa de Reciprocidad para Extranjeros en Colombia (Beca Colombia 2026-2)")
+        .limit(1)
+        .first()
+    )
+    if has_rule is None or has_yale is None or has_batch1 is None or has_batch2 is None:
         seed_phase4_financial_and_credentials(db)
 
 
