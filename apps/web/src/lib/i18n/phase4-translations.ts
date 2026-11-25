@@ -492,4 +492,16 @@ export const PHASE4_TRANSLATIONS: Record<string, Record<string, string>> = {
     "件の有効な金額・資格条件が検証済みのプログラム",
     "Programme mit aktuell geprüften Förderbeträgen & Kriterien"
   ),
+  "fin.badge_exchange_only": entry(
+    "Exchange / Mobility Only (Non-Degree)",
+    "Solo Intercambio / Movilidad (No Grado Completo)",
+    "Échange / Mobilité Uniquement (Hors Diplôme)",
+    "Echanj / Mobilite Sèlman (Pa Diplòm Konplè)",
+    "تبادل طلابي / حركية فقط (ليس منحة شهادة كاملة)",
+    "仅限短期交换 / 流动资助（非完整学位）",
+    "केवल एक्सचेंज / मोबिलिटी अनुदान (पूर्ण डिग्री नहीं)",
+    "Apenas Intercâmbio / Mobilidade (Não Grau)",
+    "交換留学・モビリティ限定（正規課程外）",
+    "Nur Austausch / Mobilität (Kein Vollstudium)"
+  ),
 };

@@ -67,9 +67,22 @@ REGION_COUNTRIES: Dict[str, set] = {
     "iberoamerica": {"BR", "MX", "CO", "CL", "AR", "PE", "EC", "BO", "PY", "UY", "VE", "CR", "PA", "GT", "HN", "NI", "SV", "DO", "CU"},
     "pacific_alliance": {"CL", "CO", "MX", "PE"},
     "americas": {"US", "CA", "MX", "HT", "JM", "TT", "BB", "BS", "DO", "BR", "CO", "CL", "AR", "PE"},
-    "eu": {"FR", "DE", "NL", "SE", "FI", "IT", "ES", "IE", "BE", "AT", "PT", "PL", "DK", "CZ", "GR"},
-    "eea": {"FR", "DE", "NL", "SE", "FI", "IT", "ES", "IE", "BE", "AT", "PT", "PL", "DK", "CZ", "GR", "NO", "IS", "LI"},
-    "europe": {"GB", "CH", "FR", "DE", "NL", "SE", "NO", "FI", "IT", "ES", "IE", "BE", "AT", "PT", "PL", "UA", "TR"},
+    "eu": {
+        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+        "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+        "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+    },
+    "eea": {
+        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+        "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+        "PL", "PT", "RO", "SK", "SI", "ES", "SE", "NO", "IS", "LI",
+    },
+    "europe": {
+        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+        "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+        "PL", "PT", "RO", "SK", "SI", "ES", "SE", "NO", "IS", "LI",
+        "CH", "GB", "UA", "TR", "MD", "BY", "RS", "AL", "MK", "ME", "BA", "XK",
+    },
     "asia": {"IN", "CN", "JP", "KR", "SG", "MY", "ID", "PH", "VN", "PK", "BD", "TH"},
     "asean": {"SG", "MY", "ID", "PH", "VN", "TH", "KH", "LA", "MM", "BN"},
     "commonwealth": {"GB", "CA", "AU", "NZ", "IN", "NG", "GH", "KE", "ZA", "JM", "TT", "BB", "BS", "MY", "SG", "PK", "BD"},
@@ -116,12 +129,19 @@ def ensure_phase4_seeded(db: Session) -> None:
         .limit(1)
         .first()
     )
+    has_batch4 = (
+        db.query(ScholarshipProgram.id)
+        .filter(ScholarshipProgram.title == "NL Scholarship (Incoming Non-EEA Bachelor's & Master's — Study in NL / OCW)")
+        .limit(1)
+        .first()
+    )
     if (
         has_rule is None
         or has_yale is None
         or has_batch1 is None
         or has_batch2 is None
         or has_batch3 is None
+        or has_batch4 is None
     ):
         seed_phase4_financial_and_credentials(db)
 

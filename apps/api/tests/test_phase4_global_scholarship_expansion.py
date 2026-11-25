@@ -29,6 +29,10 @@ from app.ingestion.phase4_batch3_seed import (
     BATCH3_ASIA_PACIFIC_SCHOLARSHIPS,
     seed_phase4_batch3_asia_pacific,
 )
+from app.ingestion.phase4_batch4_seed import (
+    BATCH4_EUROPE_SCHOLARSHIPS,
+    seed_phase4_batch4_europe,
+)
 from app.models.country import Country
 from app.models.institution import Institution
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
@@ -812,7 +816,7 @@ def test_15a_batch3_count_guard_and_provenance_completeness():
             assert db.query(Country).filter(Country.code == code).first() is not None
 
         total = db.query(ScholarshipProgram).count()
-        assert total == 59, f"Expected 59 total programs (48 prior + 11 Batch 3), got {total}"
+        assert total >= 59, f"Expected at least 59 total programs (48 prior + 11 Batch 3), got {total}"
 
         titles = [item["title"] for item in BATCH3_ASIA_PACIFIC_SCHOLARSHIPS]
         batch3_rows = db.query(ScholarshipProgram).filter(ScholarshipProgram.title.in_(titles)).all()
@@ -850,8 +854,8 @@ def test_15b_batch3_verified_funding_coverage_metric():
     try:
         seed_phase4_batch3_asia_pacific(db)
         audit = validate_scholarship_catalog(db)
-        assert audit["total_active_programs"] == 59
-        assert 0 < audit["verified_funding_programs"] < 59
+        assert audit["total_active_programs"] >= 59
+        assert 0 < audit["verified_funding_programs"] < audit["total_active_programs"]
         assert 0.0 < audit["verified_funding_coverage"] < 1.0
 
         match_res = match_scholarships_deterministic(
@@ -1221,4 +1225,368 @@ def test_15e_batch3_native_currencies_never_converted_to_usd_net_price():
                 assert applied["estimated_max_usd"] > 0
     finally:
         db.close()
+
+
+def test_16a_batch4_count_guard_and_provenance_completeness():
+    assert 6 <= len(BATCH4_EUROPE_SCHOLARSHIPS) <= 12
+
+    db = SessionLocal()
+    try:
+        seed_phase4_batch4_europe(db)
+        second = seed_phase4_batch4_europe(db)
+        assert second["batch4_created"] == 0
+        assert second["batch4_rules_created"] == 0
+
+        for code in ("NL", "CH", "SE", "NO", "FI", "IT", "ES", "BE"):
+            assert db.query(Country).filter(Country.code == code).first() is not None
+
+        total = db.query(ScholarshipProgram).count()
+        assert total == 69, f"Expected 69 total programs (59 prior + 10 Batch 4), got {total}"
+
+        titles = [item["title"] for item in BATCH4_EUROPE_SCHOLARSHIPS]
+        batch4_rows = db.query(ScholarshipProgram).filter(ScholarshipProgram.title.in_(titles)).all()
+        assert len(batch4_rows) == 10
+
+        currencies_seen = {sch.award_currency for sch in batch4_rows}
+        assert currencies_seen == {"EUR", "CHF", "SEK", "NOK"}
+
+        for sch in batch4_rows:
+            assert sch.source_url.startswith("https://")
+            assert sch.sponsoring_institution
+            assert sch.source_type in ("government_portal", "official_institutional", "official_agency")
+            assert sch.verification_method == "manual_primary_source_fetch"
+            assert sch.verified_by is None, "Never fabricate reviewer identity"
+            assert sch.academic_year
+            assert sch.award_currency in {"EUR", "CHF", "SEK", "NOK"}
+            assert sch.award_amount_min_usd is None
+            assert sch.award_amount_max_usd is None
+            assert isinstance(sch.claim_provenance, dict)
+            missing_keys = REQUIRED_15_CLAIM_KEYS - set(sch.claim_provenance.keys())
+            assert not missing_keys, f"{sch.title} missing provenance keys: {missing_keys}"
+
+        audit = validate_scholarship_catalog(db)
+        assert audit["invalid_urls"] == []
+        assert audit["duplicates"] == []
+        assert audit["conflicting_records"] == []
+        assert audit["expired_records"] == []
+        assert audit["total_active_programs"] == 69
+        assert 0.0 < audit["verified_funding_coverage"] < 1.0
+    finally:
+        db.close()
+
+
+def test_16b_batch4_eu_eea_vs_non_eu_and_citizenship_vs_residence():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch4_europe(db)
+
+        # 1. NL Scholarship: Non-EEA eligible; EU/EEA citizens excluded even in NL; fixed €5,000 non-renewable
+        nl = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "NL Scholarship (Incoming Non-EEA Bachelor's & Master's — Study in NL / OCW)"
+        ).one()
+        nl_br = evaluate_single_scholarship(
+            nl,
+            {
+                "citizenships": ["BR"],
+                "destination_country": "NL",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+            },
+        )
+        assert nl_br["eligibility_status"] == "conditionally_eligible"
+        assert nl_br["award_currency"] == "EUR"
+        assert nl_br["native_amount_min"] == 5000.0
+        assert nl_br["application_cycle_status"] == "open"
+        for eea_cit in ("DE", "NL", "NO", "RO"):
+            assert evaluate_single_scholarship(
+                nl,
+                {
+                    "citizenships": [eea_cit],
+                    "destination_country": "NL",
+                    "degree_level": "masters",
+                    "applicant_type": "first_year",
+                },
+            )["eligibility_status"] == "ineligible"
+
+        # 2. Swiss Gov Excellence: PhD research abroad eligible (29,400 CHF); CH citizens & CH residents excluded
+        fcs = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Swiss Government Excellence Scholarships (SERI / FCS — Research, PhD & Postdoc)"
+        ).one()
+        fcs_ok = evaluate_single_scholarship(
+            fcs,
+            {
+                "citizenships": ["IN"],
+                "country_of_residence": "IN",
+                "destination_country": "CH",
+                "degree_level": "doctoral",
+                "date_of_birth": "1998-05-01",
+            },
+        )
+        assert fcs_ok["eligibility_status"] == "conditionally_eligible"
+        assert fcs_ok["award_currency"] == "CHF"
+        assert fcs_ok["native_amount_min"] == 29400.0
+        # Already residing in Switzerland (>1 yr bar) fails independently of citizenship
+        assert evaluate_single_scholarship(
+            fcs,
+            {
+                "citizenships": ["IN"],
+                "country_of_residence": "CH",
+                "destination_country": "CH",
+                "degree_level": "doctoral",
+                "date_of_birth": "1998-05-01",
+            },
+        )["eligibility_status"] == "ineligible"
+        assert evaluate_single_scholarship(
+            fcs,
+            {
+                "citizenships": ["CH"],
+                "country_of_residence": "FR",
+                "destination_country": "CH",
+                "degree_level": "doctoral",
+                "date_of_birth": "1998-05-01",
+            },
+        )["eligibility_status"] == "ineligible"
+
+        # 3. ETH Zurich ESOP: Open Nov 1–30, 2026 (27,000 CHF/yr HS27), top 10% Grade A (GPA >= 3.7)
+        esop = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "ETH Zurich Excellence Scholarship & Opportunity Programme (ESOP — Master's)"
+        ).one()
+        esop_ok = evaluate_single_scholarship(
+            esop,
+            {
+                "citizenships": ["CH"],
+                "destination_country": "CH",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+                "gpa_4": 3.85,
+            },
+        )
+        assert esop_ok["eligibility_status"] == "conditionally_eligible"
+        assert esop_ok["award_currency"] == "CHF"
+        assert esop_ok["native_amount_min"] == 27000.0
+        assert esop_ok["application_cycle_status"] == "open"
+        assert evaluate_single_scholarship(
+            esop,
+            {
+                "citizenships": ["CH"],
+                "destination_country": "CH",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+                "gpa_4": 3.3,
+            },
+        )["eligibility_status"] == "ineligible"
+
+        # 4. University of Turku Finland: Tuition waiver ONLY (no living costs), strictly non-EU/EEA/CH
+        utu = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "University of Turku (UTU) International Tuition Fee Waiver Scholarship (Finland)"
+        ).one()
+        assert utu.covers_tuition is True
+        assert utu.provides_living_stipend is False
+        assert utu.covers_housing is False
+        utu_vn = evaluate_single_scholarship(
+            utu,
+            {
+                "citizenships": ["VN"],
+                "destination_country": "FI",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+            },
+        )
+        assert utu_vn["eligibility_status"] == "conditionally_eligible"
+        assert utu_vn["award_currency"] == "EUR"
+        for exempt_cit in ("DE", "SE", "CH"):
+            assert evaluate_single_scholarship(
+                utu,
+                {
+                    "citizenships": [exempt_cit],
+                    "destination_country": "FI",
+                    "degree_level": "masters",
+                    "applicant_type": "first_year",
+                },
+            )["eligibility_status"] == "ineligible"
+
+        # 5. Spain MEFD Beca General: evaluates country_of_residence=ES independently of EU citizenship/admission
+        mefd = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "MEFD Beca General para Estudios Universitarios (Grado y Máster — España)"
+        ).one()
+        assert evaluate_single_scholarship(
+            mefd,
+            {
+                "citizenships": ["FR"],
+                "country_of_residence": "ES",
+                "destination_country": "ES",
+                "degree_level": "bachelors",
+                "financial_need_level": "high",
+            },
+        )["eligibility_status"] == "conditionally_eligible"
+        assert evaluate_single_scholarship(
+            mefd,
+            {
+                "citizenships": ["ES"],
+                "country_of_residence": "US",
+                "destination_country": "ES",
+                "degree_level": "bachelors",
+                "financial_need_level": "high",
+            },
+        )["eligibility_status"] == "ineligible"
+        assert evaluate_single_scholarship(
+            mefd,
+            {
+                "citizenships": ["ES"],
+                "destination_country": "ES",
+                "degree_level": "bachelors",
+                "financial_need_level": "high",
+            },
+        )["eligibility_status"] == "insufficient_information"
+    finally:
+        db.close()
+
+
+def test_16c_batch4_sweden_norway_italy_rules():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch4_europe(db)
+
+        # 1. SI SISGP (Sweden, SEK): 34 countries citizen-only (even residing in DE), EU/US excluded
+        sisgp = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Swedish Institute Scholarship for Global Professionals (SISGP 2027–2028)"
+        ).one()
+        sisgp_ke = evaluate_single_scholarship(
+            sisgp,
+            {
+                "citizenships": ["KE"],
+                "country_of_residence": "DE",
+                "destination_country": "SE",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+            },
+        )
+        assert sisgp_ke["eligibility_status"] == "conditionally_eligible"
+        assert sisgp_ke["award_currency"] == "SEK"
+        assert sisgp_ke["native_amount_min"] == 144000.0
+        assert sisgp_ke["native_amount_max"] == 159000.0
+        assert sisgp_ke["application_cycle_status"] == "open"
+        for non_si in ("SE", "DE", "US"):
+            assert evaluate_single_scholarship(
+                sisgp,
+                {
+                    "citizenships": [non_si],
+                    "destination_country": "SE",
+                    "degree_level": "masters",
+                    "applicant_type": "first_year",
+                },
+            )["eligibility_status"] == "ineligible"
+
+        # 2. BI Presidential (Norway, NOK): Grade A (3.7+ GPA)
+        bi = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "BI Presidential Scholarship (BI Norwegian Business School — Full-Time Master's)"
+        ).one()
+        bi_ok = evaluate_single_scholarship(
+            bi,
+            {
+                "citizenships": ["NG"],
+                "destination_country": "NO",
+                "degree_level": "masters",
+                "applicant_type": "first_year",
+                "gpa_4": 3.85,
+            },
+        )
+        assert bi_ok["eligibility_status"] == "conditionally_eligible"
+        assert bi_ok["award_currency"] == "NOK"
+        assert bi_ok["native_amount_min"] == 100000.0
+        assert bi_ok["application_cycle_status"] == "open"
+
+        # 3. Polimi DSU (Italy, EUR): unpublished EUR cap & 2025/2026 call closed
+        dsu = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Politecnico di Milano DSU Regional Financial Aid (Diritto allo Studio Universitario)"
+        ).one()
+        dsu_ok = evaluate_single_scholarship(
+            dsu,
+            {
+                "citizenships": ["MA"],
+                "destination_country": "IT",
+                "degree_level": "bachelors",
+                "financial_need_level": "high",
+            },
+        )
+        assert dsu_ok["eligibility_status"] == "conditionally_eligible"
+        assert dsu_ok["award_currency"] == "EUR"
+        assert dsu_ok["native_amount_min"] is None
+        assert dsu_ok["application_cycle_status"] == "closed"
+    finally:
+        db.close()
+
+
+def test_16d_batch4_erasmus_full_degree_vs_short_term_mobility_separation():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch4_europe(db)
+
+        emjm = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Erasmus Mundus Joint Masters (EMJM) Full-Degree Scholarship (Erasmus+)"
+        ).one()
+        mobility = db.query(ScholarshipProgram).filter(
+            ScholarshipProgram.title == "Erasmus+ Higher Education Student Mobility Grant (Short-Term Exchange Only)"
+        ).one()
+
+        assert emjm.funding_type == "full_funding"
+        assert emjm.award_type == "full_ride"
+        assert emjm.native_amount_min == 16800.0
+        assert emjm.is_renewable is True
+
+        assert mobility.funding_type == "exchange_mobility"
+        assert mobility.award_type == "mobility_grant"
+        assert mobility.native_amount_min is None
+        assert mobility.is_renewable is False
+        assert mobility.max_funding_periods == 1
+
+        # EMJM only covers Master's degrees; undergrads are ineligible
+        assert evaluate_single_scholarship(
+            emjm,
+            {"citizenships": ["PK"], "destination_country": "NL", "degree_level": "bachelors"},
+        )["eligibility_status"] == "ineligible"
+        assert evaluate_single_scholarship(
+            emjm,
+            {"citizenships": ["PK"], "destination_country": "NL", "degree_level": "masters"},
+        )["eligibility_status"] == "conditionally_eligible"
+
+        # Erasmus+ short-term mobility never evaluates to unconditional full-degree 'eligible'
+        mob_eval = evaluate_single_scholarship(
+            mobility,
+            {"citizenships": ["FR"], "destination_country": "ES", "degree_level": "bachelors"},
+        )
+        assert mob_eval["eligibility_status"] == "conditionally_eligible"
+        assert mob_eval["funding_type"] == "exchange_mobility"
+    finally:
+        db.close()
+
+
+def test_16e_batch4_native_currencies_isolated_in_usd_net_price():
+    db = SessionLocal()
+    try:
+        seed_phase4_batch4_europe(db)
+        us_inst = db.query(Institution).filter(Institution.country_code == "US").first()
+        assert us_inst is not None
+        for cit, dest in (("BR", "NL"), ("IN", "CH"), ("KE", "SE"), ("NG", "NO"), ("VN", "FI"), ("FR", "ES")):
+            np_res = calculate_net_price(
+                db,
+                us_inst,
+                None,
+                {
+                    "residency_classification": "international",
+                    "housing_preference": "on_campus",
+                    "applicant_type": "first_year",
+                    "degree_level": "masters",
+                    "citizenship_country": cit,
+                    "country_of_residence": cit,
+                    "destination_country": dest,
+                    "include_competitive_aid": True,
+                },
+            )
+            for applied in np_res["verified_applicable_aid"] + np_res["conditional_aid"]:
+                assert applied["award_currency"] == "USD"
+                assert applied["estimated_max_usd"] > 0
+    finally:
+        db.close()
+
 

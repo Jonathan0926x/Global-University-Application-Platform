@@ -335,6 +335,19 @@ export default function FinancialIntelligencePage() {
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
                 <option value="DE">DE</option>
+                <option value="NL">NL</option>
+                <option value="CH">CH</option>
+                <option value="SE">SE</option>
+                <option value="NO">NO</option>
+                <option value="FI">FI</option>
+                <option value="IT">IT</option>
+                <option value="BE">BE</option>
+                <option value="PT">PT</option>
+                <option value="AT">AT</option>
+                <option value="DK">DK</option>
+                <option value="PL">PL</option>
+                <option value="UA">UA</option>
+                <option value="AM">AM</option>
                 <option value="ES">ES</option>
               </select>
             </div>
@@ -384,6 +397,19 @@ export default function FinancialIntelligencePage() {
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
                 <option value="DE">DE</option>
+                <option value="NL">NL</option>
+                <option value="CH">CH</option>
+                <option value="SE">SE</option>
+                <option value="NO">NO</option>
+                <option value="FI">FI</option>
+                <option value="IT">IT</option>
+                <option value="BE">BE</option>
+                <option value="PT">PT</option>
+                <option value="AT">AT</option>
+                <option value="DK">DK</option>
+                <option value="PL">PL</option>
+                <option value="UA">UA</option>
+                <option value="AM">AM</option>
                 <option value="ES">ES</option>
               </select>
             </div>
@@ -499,6 +525,15 @@ export default function FinancialIntelligencePage() {
                 <option value="BD">BD</option>
                 <option value="VN">VN</option>
                 <option value="PH">PH</option>
+                <option value="NL">NL</option>
+                <option value="CH">CH</option>
+                <option value="SE">SE</option>
+                <option value="NO">NO</option>
+                <option value="FI">FI</option>
+                <option value="IT">IT</option>
+                <option value="BE">BE</option>
+                <option value="PT">PT</option>
+                <option value="AT">AT</option>
                 <option value="ES">ES</option>
               </select>
             </div>
@@ -711,6 +746,11 @@ export default function FinancialIntelligencePage() {
                         <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-700">
                           {s.country_code} • {s.provider_type} • {s.funding_type.replace(/_/g, " ")}
                         </span>
+                        {s.funding_type === "exchange_mobility" && (
+                          <span className="rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                            {t("fin.badge_exchange_only", "Exchange / Mobility Only (Non-Degree)")}
+                          </span>
+                        )}
                         <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
                           {t("fin.freshness_label", "Freshness")}: {freshnessLabel(s.freshness_status)}
                         </span>

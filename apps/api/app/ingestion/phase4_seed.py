@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.ingestion.phase4_batch1_seed import seed_phase4_batch1_africa_caribbean
 from app.ingestion.phase4_batch2_seed import seed_phase4_batch2_latin_america
 from app.ingestion.phase4_batch3_seed import seed_phase4_batch3_asia_pacific
+from app.ingestion.phase4_batch4_seed import seed_phase4_batch4_europe
 from app.models.country import Country
 from app.models.credentials import CredentialRecognitionRule, GradeConversionRule
 from app.models.institution import Institution
@@ -1303,24 +1304,28 @@ def seed_phase4_financial_and_credentials(db: Session) -> Dict[str, int]:
     batch1_res = seed_phase4_batch1_africa_caribbean(db)
     batch2_res = seed_phase4_batch2_latin_america(db)
     batch3_res = seed_phase4_batch3_asia_pacific(db)
+    batch4_res = seed_phase4_batch4_europe(db)
     return {
         "scholarships_created": (
             scholarships_created
             + batch1_res["batch1_created"]
             + batch2_res["batch2_created"]
             + batch3_res["batch3_created"]
+            + batch4_res["batch4_created"]
         ),
         "scholarships_updated": (
             scholarships_updated
             + batch1_res["batch1_updated"]
             + batch2_res["batch2_updated"]
             + batch3_res["batch3_updated"]
+            + batch4_res["batch4_updated"]
         ),
         "rules_created": (
             rules_created
             + batch1_res["batch1_rules_created"]
             + batch2_res["batch2_rules_created"]
             + batch3_res["batch3_rules_created"]
+            + batch4_res["batch4_rules_created"]
         ),
         "grade_rules_created": grade_rules_created,
         "recognition_rules_created": rec_rules_created,
