@@ -129,6 +129,16 @@ test("Milestone 7 routing and application lifecycle keys translate cleanly acros
   assert.ok(translate("applications.title", "ar-SA").includes("التقديم"));
 });
 
+test("Operations console keys translate cleanly across Arabic RTL, French, Spanish, Haitian Creole, and English", () => {
+  assert.equal(translate("ops.title", "en-US"), "Verification & Trust Operations Console");
+  assert.equal(translate("ops.title", "ar-SA"), "وحدة عمليات التحقق والثقة");
+  assert.equal(translate("ops.role_verifier", "ar-SA"), "مدقق البيانات");
+  assert.equal(translate("ops.role_verifier", "fr-FR"), "Vérificateur");
+  assert.equal(translate("ops.btn_verify_url", "ht-HT"), "Verifye Lyen");
+  assert.equal(translate("ops.rt_filter_manual_review", "es-419"), "Revisión Manual y Pendientes");
+  assert.ok(translate("ops.forbidden_title", "ar-SA").includes("403"));
+});
+
 
 
 

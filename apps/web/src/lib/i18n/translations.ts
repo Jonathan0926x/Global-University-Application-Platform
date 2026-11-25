@@ -14,6 +14,8 @@
  * - de-DE (German)
  */
 
+import { OPERATIONS_TRANSLATIONS } from "./operations-translations.ts";
+
 export const UI_TRANSLATIONS: Record<string, Record<string, string>> = {
   // Brand & Master Statement
   "brand.name": {
@@ -1074,6 +1076,7 @@ export const UI_TRANSLATIONS: Record<string, Record<string, string>> = {
     "ja-JP": "外部ポータルで提出済みとして報告",
     "de-DE": "Externe Einreichung melden",
   },
+  ...OPERATIONS_TRANSLATIONS,
 };
 
 /**

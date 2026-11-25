@@ -9,16 +9,20 @@ Provides:
 - Automatic reverification triggers when institutional websites change
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
+import logging
 import socket
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 from urllib.parse import urljoin, urlparse
 from uuid import UUID
 
+import httpcore
 import httpx
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.ingestion.routing_seed import validate_routing_url
 from app.models.routing import ApplicationRoute
 from app.services.routing_verification import (
@@ -28,11 +32,21 @@ from app.services.routing_verification import (
     record_route_audit,
 )
 
+logger = logging.getLogger(__name__)
+
 # Health check status constants
 HEALTH_STATUS_HEALTHY = "healthy"
 HEALTH_STATUS_UNREACHABLE = "unreachable"
 HEALTH_STATUS_REDIRECTED = "redirected"
 HEALTH_STATUS_ERROR = "error"
+
+_AUTOMATED_SWEEP_STATE: Dict[str, Any] = {
+    "last_run_at": None,
+    "last_expired_checked": 0,
+    "last_flagged": 0,
+    "runs_completed": 0,
+    "last_error": None,
+}
 
 
 def is_route_verification_expired(
@@ -86,10 +100,87 @@ def get_stale_routes(
     )
 
 
+def _is_public_routable_ip(raw_ip: str) -> bool:
+    """Return True strictly for globally routable public IPs (including IPv4-mapped IPv6)."""
+    addr = ip_address(raw_ip)
+    if getattr(addr, "ipv4_mapped", None) is not None:
+        addr = addr.ipv4_mapped
+    return bool(
+        addr.is_global
+        and not addr.is_private
+        and not addr.is_loopback
+        and not addr.is_link_local
+        and not addr.is_multicast
+        and not addr.is_reserved
+        and not addr.is_unspecified
+    )
+
+
+def _resolve_and_validate_public_ips(hostname: Optional[str], port: int) -> List[str]:
+    """Resolve `hostname` and fail closed unless every returned IP is strictly public."""
+    if not hostname:
+        raise ValueError("Missing hostname.")
+    addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    resolved_ips = sorted({item[4][0] for item in addresses if item and len(item) >= 5 and item[4]})
+    if not resolved_ips or any(not _is_public_routable_ip(ip_str) for ip_str in resolved_ips):
+        raise ValueError("Host resolves to a non-public IP address.")
+    return resolved_ips
+
+
+class _PinnedPublicIPBackend(httpcore.SyncBackend):
+    """
+    Connection-time IP-pinning network backend preventing DNS-rebinding TOCTOU attacks.
+
+    Forces TCP sockets to connect strictly to the pre-validated public IP addresses
+    while preserving the original hostname for HTTP `Host` header and TLS SNI/cert validation.
+    """
+
+    def __init__(self, expected_host: str, pinned_ips: Iterable[str]) -> None:
+        super().__init__()
+        self.expected_host = expected_host.lower().strip()
+        self.pinned_ips = [ip for ip in pinned_ips if _is_public_routable_ip(ip)]
+
+    def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: Optional[float] = None,
+        local_address: Optional[str] = None,
+        socket_options: Optional[Iterable[Any]] = None,
+    ) -> httpcore.NetworkStream:
+        norm_host = (host or "").lower().strip()
+        if norm_host != self.expected_host or not self.pinned_ips:
+            raise httpcore.ConnectError(f"Blocked connection to unpinned host: {host}")
+
+        # Re-check DNS at connection time: reject if DNS already rebound to any non-public IP,
+        # and still connect strictly via the pinned public IP (never re-resolving inside connect).
+        try:
+            current_ips = _resolve_and_validate_public_ips(norm_host, port)
+        except (OSError, ValueError) as exc:
+            raise httpcore.ConnectError(f"Connection-time DNS validation failed: {exc}") from exc
+
+        allowed_targets = [ip for ip in self.pinned_ips if ip in current_ips] or self.pinned_ips
+        last_exc: Optional[Exception] = None
+        for target_ip in allowed_targets:
+            if not _is_public_routable_ip(target_ip):
+                raise httpcore.ConnectError("Refusing connection to non-public IP address.")
+            try:
+                return super().connect_tcp(
+                    target_ip,
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except Exception as exc:
+                last_exc = exc
+        raise httpcore.ConnectError(f"Failed connecting to pinned public IPs: {last_exc}")
+
+
 def _default_http_probe(url: str, timeout: float = 6.0) -> Dict[str, Any]:
     """
-    Executes an SSRF-checked HTTP HEAD (with GET fallback on 403/405) request,
-    following redirects safely and returning status, final URL, and chain length.
+    Executes an SSRF-checked, DNS-pinned HTTP HEAD (with GET fallback on 403/405/501) request.
+    Never follows redirects automatically and pins TCP connections to validated public IPs.
     """
     chk = validate_routing_url(url)
     if not chk["valid"]:
@@ -106,10 +197,7 @@ def _default_http_probe(url: str, timeout: float = 6.0) -> Dict[str, Any]:
         if parsed.username or parsed.password:
             raise ValueError("URLs containing embedded credentials are disallowed.")
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        addresses = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
-        resolved_ips = {ip_address(item[4][0]) for item in addresses}
-        if not resolved_ips or any(not address.is_global for address in resolved_ips):
-            raise ValueError("Host resolves to a non-public IP address.")
+        resolved_ips = _resolve_and_validate_public_ips(parsed.hostname, port)
     except (OSError, ValueError) as exc:
         return {
             "ok": False,
@@ -124,9 +212,18 @@ def _default_http_probe(url: str, timeout: float = 6.0) -> Dict[str, Any]:
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     }
     try:
-        # Never follow redirects automatically. Every redirect destination is external
-        # input and must be reviewed before the health checker makes another request.
-        with httpx.Client(follow_redirects=False, timeout=timeout, headers=headers) as client:
+        transport = httpx.HTTPTransport(retries=0, trust_env=False)
+        transport._pool._network_backend = _PinnedPublicIPBackend(parsed.hostname or "", resolved_ips)
+
+        # Never follow redirects automatically and disable env proxies (`trust_env=False`).
+        # Every redirect destination is external input and must be reviewed first.
+        with httpx.Client(
+            follow_redirects=False,
+            timeout=timeout,
+            headers=headers,
+            transport=transport,
+            trust_env=False,
+        ) as client:
             resp = client.head(url)
             if resp.status_code in (403, 405, 501):
                 resp = client.get(url)
@@ -542,4 +639,59 @@ def get_route_health_summary(db: Session) -> Dict[str, Any]:
         "pathway_verified": pathway_verified_count,
         "pathway_assumed": pathway_unverified_count,
         "routes_with_redirect_tracking": has_redirect_tracking,
+        "automated_sweep": get_automated_sweep_status(),
     }
+
+
+def get_automated_sweep_status() -> Dict[str, Any]:
+    """Return telemetry for the automated route verification expiry sweep scheduler."""
+    return {
+        "enabled": bool(settings.ENABLE_AUTOMATED_EXPIRY_SWEEPS),
+        "interval_seconds": int(settings.ROUTE_EXPIRY_SWEEP_INTERVAL_SECONDS),
+        "last_run_at": _AUTOMATED_SWEEP_STATE["last_run_at"],
+        "last_expired_checked": _AUTOMATED_SWEEP_STATE["last_expired_checked"],
+        "last_flagged": _AUTOMATED_SWEEP_STATE["last_flagged"],
+        "runs_completed": _AUTOMATED_SWEEP_STATE["runs_completed"],
+        "last_error": _AUTOMATED_SWEEP_STATE["last_error"],
+    }
+
+
+def run_automated_expiry_sweep_once(db_factory: Optional[Callable[[], Session]] = None) -> Dict[str, Any]:
+    """Execute one automated verification expiration sweep in an isolated DB session."""
+    if db_factory is None:
+        from app.database import SessionLocal
+
+        db_factory = SessionLocal
+
+    db = db_factory()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        res = flag_expired_routes_for_reverification(
+            db=db,
+            actor_role="system",
+            actor_email="scheduler@uniglobe.edu",
+        )
+        _AUTOMATED_SWEEP_STATE["last_run_at"] = now_iso
+        _AUTOMATED_SWEEP_STATE["last_expired_checked"] = res["expired_checked"]
+        _AUTOMATED_SWEEP_STATE["last_flagged"] = res["flagged_for_reverification"]
+        _AUTOMATED_SWEEP_STATE["runs_completed"] += 1
+        _AUTOMATED_SWEEP_STATE["last_error"] = None
+        return res
+    except Exception as exc:
+        _AUTOMATED_SWEEP_STATE["last_run_at"] = now_iso
+        _AUTOMATED_SWEEP_STATE["last_error"] = str(exc)
+        logger.warning("Automated route expiry sweep failed: %s", exc)
+        return {"expired_checked": 0, "flagged_for_reverification": 0, "error": str(exc)}
+    finally:
+        db.close()
+
+
+async def automated_expiry_sweep_loop(
+    interval_seconds: Optional[int] = None,
+    db_factory: Optional[Callable[[], Session]] = None,
+) -> None:
+    """Background loop running automated verification expiry sweeps periodically."""
+    interval = max(30, int(interval_seconds or settings.ROUTE_EXPIRY_SWEEP_INTERVAL_SECONDS))
+    while True:
+        await asyncio.to_thread(run_automated_expiry_sweep_once, db_factory)
+        await asyncio.sleep(interval)

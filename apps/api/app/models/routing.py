@@ -85,24 +85,27 @@ class ApplicationRoute(Base):
     audits = relationship(
         "ApplicationRouteAudit",
         back_populates="route",
-        cascade="all, delete-orphan",
+        passive_deletes="all",
         order_by="ApplicationRouteAudit.created_at.desc()",
     )
 
 
 class ApplicationRouteAudit(Base):
     """
-    Immutable audit log for every routing link verification / rejection action.
+    Database-enforced append-only audit log for every routing verification / rejection action.
+    Parent deletion sets `route_id = NULL` while preserving `retained_route_id` and `parent_deleted_at`.
     """
     __tablename__ = "application_route_audits"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     route_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("application_routes.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("application_routes.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    retained_route_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    parent_deleted_at = Column(DateTime(timezone=True), nullable=True)
     from_status = Column(String(30), nullable=True)
     to_status = Column(String(30), nullable=False, index=True)
     action = Column(String(50), nullable=False)
@@ -125,17 +128,20 @@ class ApplicationRouteAudit(Base):
 
 class ApplicationStatusHistory(Base):
     """
-    Immutable audit trail preserving timestamps and actors for every lifecycle transition.
+    Database-enforced append-only audit trail preserving timestamps and actors for every lifecycle transition.
+    Parent deletion sets `application_id = NULL` while preserving `retained_application_id` and `parent_deleted_at`.
     """
     __tablename__ = "application_status_history"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     application_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("applications.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("applications.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    retained_application_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    parent_deleted_at = Column(DateTime(timezone=True), nullable=True)
     from_status = Column(String(50), nullable=True)
     to_status = Column(String(50), nullable=False, index=True)
     actor_user_id = Column(
@@ -197,30 +203,34 @@ class ApplicationSubmissionEvidence(Base):
     audits = relationship(
         "EvidenceReviewAudit",
         back_populates="evidence",
-        cascade="all, delete-orphan",
+        passive_deletes="all",
         order_by="EvidenceReviewAudit.created_at.asc()",
     )
 
 
 class EvidenceReviewAudit(Base):
     """
-    Immutable chronological audit log of every confirmation evidence upload and reviewer decision.
+    Database-enforced append-only chronological audit log of every confirmation evidence upload and reviewer decision.
+    Parent deletion sets `evidence_id`/`application_id = NULL` while preserving retained IDs and `parent_deleted_at`.
     """
     __tablename__ = "evidence_review_audits"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     evidence_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("application_submission_evidence.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("application_submission_evidence.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     application_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("applications.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("applications.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
+    retained_evidence_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    retained_application_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    parent_deleted_at = Column(DateTime(timezone=True), nullable=True)
     from_review_status = Column(String(30), nullable=True)
     to_review_status = Column(String(30), nullable=False, index=True)
     action = Column(String(40), nullable=False)

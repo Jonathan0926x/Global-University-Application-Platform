@@ -77,7 +77,7 @@ class Application(Base):
     institution = relationship("Institution", back_populates="applications")
     selected_route = relationship("ApplicationRoute")
     requirements_status = relationship("ApplicationRequirementStatus", back_populates="application", cascade="all, delete-orphan")
-    status_history = relationship("ApplicationStatusHistory", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationStatusHistory.changed_at.desc()")
+    status_history = relationship("ApplicationStatusHistory", back_populates="application", passive_deletes="all", order_by="ApplicationStatusHistory.changed_at.desc()")
     submission_evidence = relationship("ApplicationSubmissionEvidence", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationSubmissionEvidence.submitted_at.desc()")
 
 

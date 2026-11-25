@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,6 +6,7 @@ from app.config import settings
 from app.api.v1.router import api_router
 from app.database import SessionLocal
 from app.api.v1.applications import seed_sample_institutions_if_empty
+from app.services.routing_health import automated_expiry_sweep_loop
 
 
 @asynccontextmanager
@@ -14,7 +16,21 @@ async def lifespan(app: FastAPI):
         seed_sample_institutions_if_empty(db)
     finally:
         db.close()
-    yield
+
+    sweep_task = None
+    if settings.ENABLE_AUTOMATED_EXPIRY_SWEEPS:
+        sweep_task = asyncio.create_task(
+            automated_expiry_sweep_loop(settings.ROUTE_EXPIRY_SWEEP_INTERVAL_SECONDS, SessionLocal)
+        )
+    try:
+        yield
+    finally:
+        if sweep_task is not None:
+            sweep_task.cancel()
+            try:
+                await sweep_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(

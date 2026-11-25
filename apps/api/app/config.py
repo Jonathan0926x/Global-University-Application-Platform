@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    # Automated Route Governance Scheduler
+    ENABLE_AUTOMATED_EXPIRY_SWEEPS: bool = (
+        os.getenv("ENABLE_AUTOMATED_EXPIRY_SWEEPS", "true").lower() in ("1", "true", "yes")
+    )
+    ROUTE_EXPIRY_SWEEP_INTERVAL_SECONDS: int = int(
+        os.getenv("ROUTE_EXPIRY_SWEEP_INTERVAL_SECONDS", "3600")
+    )
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 

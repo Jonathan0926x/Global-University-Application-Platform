@@ -198,21 +198,21 @@
 * **Last Verified Date:** November 24, 2026
 * **Next Action:** Phase 3 Milestone 4: 3-Tier Transfer Articulation & Course Equivalency Engine.
 
-### 13. Application Management & Tracker (Phase 3 M7 / M7.1 / M7.2 Verification Ops)
-* **Status:** ✅ **Tested** (Milestones 7, 7.1 & 7.2 Complete — `/applications` + `/operations`)
+### 13. Application Management & Tracker (Phase 3 M7 / M7.1 / M7.2 / M7.3 Verification Ops)
+* **Status:** ✅ **Tested** (Milestones 7–7.3 Complete — `/applications` + `/operations`)
 * **Priority:** P0
 * **Dependencies:** Universal Student Profile, University Discovery (M1–M3), Matching Engine (M5), Document Vault
 * **Relevant Files:**
-  - [`docs/07_APPLICATION_REQUIREMENT_ENGINE.md`](docs/07_APPLICATION_REQUIREMENT_ENGINE.md)
-  - `apps/api/alembic/versions/61d97d129fb9_milestone_7_application_routing.py`, `apps/api/alembic/versions/9b4f21c8e310_m7_verification_operations.py`, `apps/api/alembic/versions/c3e8a4f19d72_m7_2_route_health_and_verification.py`
+  - [`docs/07_APPLICATION_REQUIREMENT_ENGINE.md`](docs/07_APPLICATION_REQUIREMENT_ENGINE.md), [`docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md`](docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md)
+  - `apps/api/alembic/versions/61d97d129fb9_milestone_7_application_routing.py`, `apps/api/alembic/versions/9b4f21c8e310_m7_verification_operations.py`, `apps/api/alembic/versions/c3e8a4f19d72_m7_2_route_health_and_verification.py`, `apps/api/alembic/versions/d8f2a9b41e03_audit_retention_triggers.py`
   - `apps/api/app/models/routing.py`, `apps/api/app/models/application.py`
   - `apps/api/app/ingestion/routing_seed.py`, `apps/api/app/ingestion/base.py`, `apps/api/app/services/routing_engine.py`, `apps/api/app/services/routing_verification.py`, `apps/api/app/services/routing_health.py`, `apps/api/app/services/evidence_ops.py`
   - `apps/api/app/api/v1/routing.py`, `apps/api/app/api/v1/applications.py`, `apps/api/app/api/v1/operations.py`
-  - `apps/web/src/app/applications/page.tsx`, `apps/web/src/app/operations/page.tsx`, `apps/web/src/app/first-year/page.tsx`
-* **Acceptance Criteria:** **428** active routes with **414** verified (**317** IPEDS institutional domain matches, **68** verified public state/centralized admission systems, **28** curated official portals, **1** manual verifier promotion) and **14** CRM/cross-domain URLs + manually reviewed routes kept visible in `/operations` without silent exclusion; periodic link-health & redirect tracking (`final_redirect_url`, `redirect_chain_length`), 180-day `verification_expires_at` + stale sweep, `pathway_verified` controls, and automatic reverification triggers on `IngestionPipeline` website updates; `application_route_audits`; strict 6-state honest lifecycle; private Document Vault confirmation evidence (`evidence_review_audits`); mandatory `rejection_reason_code` taxonomy & `data_verifier`/`admin` RBAC reviewer queue (`/operations` + `/applications`); baseline `50` backend tests, now `51` after readiness regressions; `10` frontend unit tests + Next.js `14/14` production build + live browser review.
-* **Readiness Audit (Nov 25, 2026):** Student recommendations now fail closed for expired routes, unverified applicant pathways, and latest health-check results requiring review. See [`docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md`](docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md). Database-enforced audit immutability and operations-console localization remain open before broad beta.
+  - `apps/web/src/app/applications/page.tsx`, `apps/web/src/app/operations/page.tsx`, `apps/web/src/lib/i18n/operations-translations.ts`
+* **Acceptance Criteria:** **428** active routes with **414** verified and **14** CRM/cross-domain URLs + manually reviewed routes visible in `/operations`; database-enforced append-only triggers (`d8f2a9b41e03`) preserving `application_route_audits`, `application_status_history`, and `evidence_review_audits` across safe parent deletions (`ON DELETE SET NULL` + `retained_*_id`); connection-time IP pinning (`_PinnedPublicIPBackend`) preventing DNS rebinding; automated hourly expiry sweeps (`ENABLE_AUTOMATED_EXPIRY_SWEEPS`); 10-language & Arabic RTL `/operations` localization with ARIA/keyboard semantics; `54` backend `pytest` + `11` frontend unit tests + Next.js `14/14` production build + live Arabic RTL & E2E browser QA.
+* **Readiness Audit (Nov 25, 2026):** All P0/P1/P2 codebase findings in [`docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md`](docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md) resolved and verified.
 * **Last Verified Date:** November 25, 2026
-* **Next Action:** Finish database-level audit retention/immutability and localize `/operations`; then continue Phase 4 Financial Affordability & International Expansion.
+* **Next Action:** Configure production host/VPC outbound firewall egress rules alongside `_PinnedPublicIPBackend`, then continue Phase 4 Financial Affordability & International Expansion.
 
 ### 14. Document Processing & Vault
 * **Status:** ✅ **Tested** (E2E Audited)

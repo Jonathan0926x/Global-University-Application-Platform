@@ -164,6 +164,16 @@ export interface RejectionReasonOption {
   description: string;
 }
 
+export interface AutomatedSweepStatus {
+  enabled: boolean;
+  interval_seconds: number;
+  last_run_at?: string | null;
+  last_expired_checked: number;
+  last_flagged: number;
+  runs_completed: number;
+  last_error?: string | null;
+}
+
 export interface RouteHealthSummary {
   total_active_routes: number;
   health_check_status: Record<string, number>;
@@ -172,6 +182,7 @@ export interface RouteHealthSummary {
   pathway_verified: number;
   pathway_assumed: number;
   routes_with_redirect_tracking: number;
+  automated_sweep?: AutomatedSweepStatus;
 }
 
 export interface RoutingQualitySummary {

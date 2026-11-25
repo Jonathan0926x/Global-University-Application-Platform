@@ -44,7 +44,9 @@ class RejectionReasonOptionSchema(BaseModel):
 
 class ApplicationRouteAuditSchema(BaseModel):
     id: UUID
-    route_id: UUID
+    route_id: Optional[UUID] = None
+    retained_route_id: Optional[UUID] = None
+    parent_deleted_at: Optional[datetime] = None
     from_status: Optional[str] = None
     to_status: str
     action: str
@@ -64,6 +66,16 @@ class RoutingQueueItemSchema(ApplicationRouteSchema):
     audits: List[ApplicationRouteAuditSchema] = []
 
 
+class AutomatedSweepStatusSchema(BaseModel):
+    enabled: bool = True
+    interval_seconds: int = 3600
+    last_run_at: Optional[str] = None
+    last_expired_checked: int = 0
+    last_flagged: int = 0
+    runs_completed: int = 0
+    last_error: Optional[str] = None
+
+
 class RouteHealthSummarySchema(BaseModel):
     total_active_routes: int = 0
     health_check_status: Dict[str, int] = {}
@@ -72,6 +84,7 @@ class RouteHealthSummarySchema(BaseModel):
     pathway_verified: int = 0
     pathway_assumed: int = 0
     routes_with_redirect_tracking: int = 0
+    automated_sweep: Optional[AutomatedSweepStatusSchema] = None
 
 
 class RoutingQualitySummarySchema(BaseModel):
@@ -161,6 +174,9 @@ class DeadlineCountdownSchema(BaseModel):
 
 class StatusHistoryItemSchema(BaseModel):
     id: UUID
+    application_id: Optional[UUID] = None
+    retained_application_id: Optional[UUID] = None
+    parent_deleted_at: Optional[datetime] = None
     from_status: Optional[str] = None
     to_status: str
     actor_role: str
@@ -173,8 +189,11 @@ class StatusHistoryItemSchema(BaseModel):
 
 class EvidenceReviewAuditSchema(BaseModel):
     id: UUID
-    evidence_id: UUID
-    application_id: UUID
+    evidence_id: Optional[UUID] = None
+    application_id: Optional[UUID] = None
+    retained_evidence_id: Optional[UUID] = None
+    retained_application_id: Optional[UUID] = None
+    parent_deleted_at: Optional[datetime] = None
     from_review_status: Optional[str] = None
     to_review_status: str
     action: str

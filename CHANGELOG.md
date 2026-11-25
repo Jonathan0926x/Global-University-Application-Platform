@@ -13,6 +13,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.7.3-m7] - 2026-11-25
+
+### Security, Retention & Localization — Production Readiness Audit Resolution (`docs/16_PRODUCTION_READINESS_AUDIT_MILESTONE_7.md`)
+- **Database-Enforced Append-Only Audit Retention (`d8f2a9b41e03`):**
+  - Added PostgreSQL `BEFORE INSERT` (`audit_populate_retained_ids`) and `BEFORE UPDATE OR DELETE` (`prevent_audit_mutation`) triggers on `application_route_audits`, `application_status_history`, and `evidence_review_audits` blocking all direct row updates and deletes.
+  - Switched parent foreign keys from `ON DELETE CASCADE` to nullable `ON DELETE SET NULL` alongside `retained_route_id`, `retained_application_id`, `retained_evidence_id`, `parent_deleted_at`, and SQLAlchemy `passive_deletes="all"` so legitimate parent deletion cleanly preserves immutable audit records.
+- **DNS-Rebinding Closure & Automated Expiry Sweeps (`routing_health.py`, `main.py`, `config.py`):**
+  - Added `_PinnedPublicIPBackend(httpcore.SyncBackend)` pinning TCP connections strictly to pre-validated global public IP addresses with `trust_env=False` and connection-time DNS verification while preserving TLS SNI/cert verification.
+  - Wired `automated_expiry_sweep_loop` into FastAPI `lifespan` (`ENABLE_AUTOMATED_EXPIRY_SWEEPS`, `ROUTE_EXPIRY_SWEEP_INTERVAL_SECONDS`) and surfaced live sweep status in `/operations`.
+- **Operations Console Localization, RTL & Accessibility (`operations-translations.ts`, `operations/page.tsx`):**
+  - Localized `/operations` across all 10 UniGlobe languages including Arabic RTL (`ar-SA`, `dir="rtl"`), with ARIA `tablist`/`tab`/`tabpanel`, `aria-pressed`, `role="status"`/`role="alert"`, and explicit `<label htmlFor>` bindings.
+- **Verification:** `alembic` reversible migration test (`upgrade -> downgrade -> upgrade`), **54 / 54** backend `pytest` (`test_audit_retention.py` + `test_milestone7_application_routing.py`), **11 / 11** frontend unit tests, **14 / 14** Next.js build routes, and live Arabic RTL + E2E upload/reject/re-upload/accept/delete browser QA.
+
+---
+
 ## [0.7.2-m7] - 2026-11-24
 
 ### Added — Milestone 7.2: Route Link-Health, Expiration, Pathway Verification, Redirect Tracking & Reverification
