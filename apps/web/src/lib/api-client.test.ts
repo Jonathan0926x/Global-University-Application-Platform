@@ -150,6 +150,12 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
   assert.equal(translate("fin.net_coa", "ar-SA"), "إجمالي تكلفة الحضور");
   assert.equal(translate("fin.net_est_price", "ar-SA"), "صافي التكلفة السنوية التقديرية (غير مضمونة)");
   assert.equal(translate("fin.fresh_expired", "ar-SA"), "منتهي الصلاحية");
+  assert.equal(translate("fin.amount_unpublished", "en-US"), "Amount varies / not published");
+  assert.equal(translate("fin.amount_unpublished", "ar-SA"), "القيمة متغيرة / غير منشورة رسميًا");
+  assert.equal(translate("fin.cycle_closed", "fr-FR"), "Cycle Clôturé");
+  assert.equal(translate("fin.cycle_closed", "ht-HT"), "Sik Fèmen");
+  assert.equal(translate("fin.cycle_open", "ar-SA"), "مفتوح الآن");
+  assert.equal(translate("fin.sponsor_label", "es-419"), "Patrocinador");
 });
 
 

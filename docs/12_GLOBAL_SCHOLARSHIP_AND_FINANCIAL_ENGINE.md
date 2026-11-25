@@ -255,4 +255,11 @@ Evaluates 18 rule types against verified `StudentProfile`, `CitizenshipRecord`, 
 
 ### Known Limitations
 - Institutional `InstitutionCost` rows from federal IPEDS data combine housing and meals (`room_board`), so meal-only and housing-only caps share that published pool ceiling until institution-split housing/dining schedules are ingested.
-- Backend API-generated category labels, warning prose, and rule detail strings remain English when `ar-SA` is active, whereas all UI headings, form controls, status/freshness badges, tables, and funding sections are localized in Arabic RTL.
+- Backend API-generated category labels, warning prose, and rule detail strings remain English when `ar-SA` is active, whereas all UI headings, form controls, status/freshness/cycle badges, tables, and funding sections are localized in Arabic RTL.
+
+---
+
+## 9. Step 3 Global Expansion — Batch 1: Africa & Caribbean (`phase4_batch1_seed.py`)
+
+- **Regional Coverage Expansion:** Added **11** primary-source-verified scholarships (`38` total catalog entries alongside `27` preserved legacy records) across **14/14** target Africa & Caribbean countries (`NG, GH, KE, ZA, ET, RW, SN, CI, HT, JM, TT, BB, BS, DO`), distinguishing CARICOM-only programs (`caricom` region) from broader Caribbean programs, and LDC/Vulnerable Commonwealth PhD eligibility from general Commonwealth Master's eligibility.
+- **Claim-Level Freshness Separation (`evaluate_scholarship_claim_breakdown`):** Separately classifies `program_existence`, `eligibility_rules`, `award_amounts`, and `deadlines` so expired cycle deadlines surface transparently (`application_cycle_status = "closed"`) without erasing program visibility or conflating deadlines with expired award amounts. Non-USD native amounts (`GBP`, `EUR`, `CAD`, `ZAR`, `GHS`, `NGN`, `DOP`) and unpublished totals remain isolated (`award_amount_min_usd = NULL`, UI `"Amount varies / not published"` — never `$0` or invented FX).

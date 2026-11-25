@@ -1771,8 +1771,12 @@ export interface ScholarshipEligibilityResult {
   funding_scope?: string[];
   duration_renewal_summary?: string | null;
   freshness_status?: string;
+  application_cycle_status?: string;
+  claim_freshness?: Record<string, string>;
   freshness_warnings?: string[];
   verification_expires_at?: string | null;
+  sponsoring_institution?: string | null;
+  academic_year?: string | null;
   source_name: string;
   source_url: string;
   verified_at: string;

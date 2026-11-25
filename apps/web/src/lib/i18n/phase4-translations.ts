@@ -449,4 +449,23 @@ export const PHASE4_TRANSLATIONS: Record<string, Record<string, string>> = {
     "確認待ちや情報不足の項目はありません。",
     "Keine Einträge zur Prüfung ausstehend."
   ),
+  "fin.amount_unpublished": entry(
+    "Amount varies / not published",
+    "Monto variable / no publicado",
+    "Montant variable / non publié",
+    "Montan varye / pa pibliye",
+    "القيمة متغيرة / غير منشورة رسميًا",
+    "资助金额因情况而异 / 未公布",
+    "राशि परिवर्तनशील / प्रकाशित नहीं",
+    "Valor variável / não divulgado",
+    "支給額は変動・非公表",
+    "Betrag variabel / nicht veröffentlicht"
+  ),
+  "fin.sponsor_label": entry("Sponsor", "Patrocinador", "Organisme", "Òganis", "الجهة المانحة", "资助方", "प्रायोजक", "Patrocinador", "提供機関", "Förderer"),
+  "fin.cycle_label": entry("Cycle", "Ciclo", "Cycle", "Sik", "الدورة", "申请周期", "चक्र", "Ciclo", "募集期", "Zyklus"),
+  "fin.cycle_open": entry("Open", "Abierto", "Ouvert", "Ouvè", "مفتوح الآن", "开放中", "खुला है", "Aberto", "受付中", "Geöffnet"),
+  "fin.cycle_closed": entry("Cycle Closed", "Ciclo Cerrado", "Cycle Clôturé", "Sik Fèmen", "انتهى التقديم", "已截止", "चक्र समाप्त", "Ciclo Encerrado", "締切済", "Frist abgelaufen"),
+  "fin.cycle_rolling": entry("Rolling", "Continuo", "Continu", "Kontini", "مستمر", "滚动申请", "निरंतर", "Contínuo", "随時受付", "Laufend"),
+  "fin.cycle_cyclical_check_official": entry("Annual Cycle (Verify Dates)", "Ciclo Anual", "Cycle Annuel", "Sik Anyèl", "دورة سنوية (تحقق من الموعد)", "年度周期（以官网为准）", "वार्षिक चक्र", "Ciclo Anual", "年次募集（要確認）", "Jährlicher Zyklus"),
+  "fin.cycle_unspecified": entry("Check Official Site", "Consultar Sitio Oficial", "Voir Site Officiel", "Verifye Sit Ofisyèl", "راجع الموقع الرسمي", "请查阅官网", "आधिकारिक साइट देखें", "Consultar Site Oficial", "公式サイト要確認", "Offizielle Website prüfen"),
 };

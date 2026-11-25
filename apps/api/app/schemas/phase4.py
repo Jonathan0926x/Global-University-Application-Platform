@@ -77,6 +77,8 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     verified_by: Optional[str] = None
     verification_expires_at: Optional[datetime] = None
     freshness_status: str = "requires_manual_review"
+    application_cycle_status: str = "unspecified"  # open | closed | cyclical_check_official | unspecified
+    claim_freshness: Dict[str, str] = {}
     requires_manual_review: bool = False
     claim_provenance: Dict[str, Any] = {}
     conflict_notes: Optional[str] = None

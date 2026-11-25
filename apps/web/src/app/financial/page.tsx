@@ -87,6 +87,18 @@ export default function FinancialIntelligencePage() {
     return t(`fin.fresh_${key}`, fallbacks[key] || key);
   };
 
+  const cycleLabel = (st?: string): string => {
+    const key = st || "unspecified";
+    const fallbacks: Record<string, string> = {
+      open: "Open",
+      closed: "Cycle Closed",
+      rolling: "Rolling",
+      cyclical_check_official: "Annual Cycle",
+      unspecified: "Check Official Site",
+    };
+    return t(`fin.cycle_${key}`, fallbacks[key] || key.replace(/_/g, " "));
+  };
+
   const affordabilityLabel = (st: string): string => {
     const fallbacks: Record<string, string> = {
       within_budget: "Within Budget",
@@ -288,10 +300,22 @@ export default function FinancialIntelligencePage() {
                 className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
               >
                 <option value="HT">HT</option>
+                <option value="NG">NG</option>
+                <option value="GH">GH</option>
+                <option value="KE">KE</option>
+                <option value="ZA">ZA</option>
+                <option value="ET">ET</option>
+                <option value="RW">RW</option>
+                <option value="SN">SN</option>
+                <option value="CI">CI</option>
+                <option value="JM">JM</option>
+                <option value="TT">TT</option>
+                <option value="BB">BB</option>
+                <option value="BS">BS</option>
+                <option value="DO">DO</option>
                 <option value="US">US</option>
                 <option value="FR">FR</option>
                 <option value="IN">IN</option>
-                <option value="NG">NG</option>
                 <option value="BR">BR</option>
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
@@ -310,10 +334,22 @@ export default function FinancialIntelligencePage() {
                 className="w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs"
               >
                 <option value="HT">HT</option>
+                <option value="NG">NG</option>
+                <option value="GH">GH</option>
+                <option value="KE">KE</option>
+                <option value="ZA">ZA</option>
+                <option value="ET">ET</option>
+                <option value="RW">RW</option>
+                <option value="SN">SN</option>
+                <option value="CI">CI</option>
+                <option value="JM">JM</option>
+                <option value="TT">TT</option>
+                <option value="BB">BB</option>
+                <option value="BS">BS</option>
+                <option value="DO">DO</option>
                 <option value="US">US</option>
                 <option value="FR">FR</option>
                 <option value="IN">IN</option>
-                <option value="NG">NG</option>
                 <option value="BR">BR</option>
                 <option value="CA">CA</option>
                 <option value="GB">GB</option>
@@ -412,6 +448,12 @@ export default function FinancialIntelligencePage() {
                 <option value="FR">FR</option>
                 <option value="AU">AU</option>
                 <option value="JP">JP</option>
+                <option value="ZA">ZA</option>
+                <option value="GH">GH</option>
+                <option value="NG">NG</option>
+                <option value="BB">BB</option>
+                <option value="JM">JM</option>
+                <option value="DO">DO</option>
               </select>
             </div>
           </div>
@@ -606,6 +648,18 @@ export default function FinancialIntelligencePage() {
                         <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
                           {t("fin.freshness_label", "Freshness")}: {freshnessLabel(s.freshness_status)}
                         </span>
+                        {s.application_cycle_status && s.application_cycle_status !== "unspecified" && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              s.application_cycle_status === "closed"
+                                ? "bg-rose-50 border border-rose-200 text-rose-800"
+                                : "bg-sky-50 border border-sky-200 text-sky-800"
+                            }`}
+                          >
+                            {t("fin.cycle_label", "Cycle")}
+                            {s.academic_year ? ` (${s.academic_year})` : ""}: {cycleLabel(s.application_cycle_status)}
+                          </span>
+                        )}
                         {s.covers_international && (
                           <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
                             {t("fin.badge_intl", "International Eligible")}
@@ -618,6 +672,11 @@ export default function FinancialIntelligencePage() {
                         )}
                       </div>
                       <h2 className="mt-1.5 text-base font-extrabold text-zinc-900">{s.title}</h2>
+                      {s.sponsoring_institution && (
+                        <div className="text-[11px] font-medium text-zinc-500 mt-0.5">
+                          {t("fin.sponsor_label", "Sponsor")}: {s.sponsoring_institution}
+                        </div>
+                      )}
                       <p className="text-xs text-zinc-600 mt-1">{s.eligibility_summary}</p>
                       {(s.funding_scope?.length || s.duration_renewal_summary) && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-600">
@@ -637,9 +696,20 @@ export default function FinancialIntelligencePage() {
 
                     <div className="shrink-0 text-start md:text-end space-y-1">
                       <div dir="ltr" className="text-sm font-extrabold text-zinc-900">
-                        {s.award_amount_min_usd !== null && s.award_amount_max_usd !== null
-                          ? `${fmtMoney(s.award_amount_min_usd, s.award_currency)} – ${fmtMoney(s.award_amount_max_usd, s.award_currency)}`
-                          : s.max_award_info}
+                        {s.native_amount_min !== null &&
+                        s.native_amount_min !== undefined &&
+                        s.award_currency &&
+                        s.award_currency !== "USD"
+                          ? s.native_amount_max !== null &&
+                            s.native_amount_max !== undefined &&
+                            s.native_amount_max !== s.native_amount_min
+                            ? `${fmtMoney(s.native_amount_min, s.award_currency)} – ${fmtMoney(s.native_amount_max, s.award_currency)}`
+                            : fmtMoney(s.native_amount_min, s.award_currency)
+                          : s.award_amount_min_usd !== null && s.award_amount_max_usd !== null
+                            ? s.award_amount_min_usd === s.award_amount_max_usd
+                              ? fmtMoney(s.award_amount_min_usd, s.award_currency)
+                              : `${fmtMoney(s.award_amount_min_usd, s.award_currency)} – ${fmtMoney(s.award_amount_max_usd, s.award_currency)}`
+                            : `${t("fin.amount_unpublished", "Amount varies / not published")} — ${s.max_award_info}`}
                       </div>
                       <a
                         href={s.source_url}

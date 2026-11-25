@@ -12,6 +12,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
+from app.ingestion.phase4_batch1_seed import seed_phase4_batch1_africa_caribbean
 from app.models.country import Country
 from app.models.credentials import CredentialRecognitionRule, GradeConversionRule
 from app.models.institution import Institution
@@ -1297,10 +1298,11 @@ def seed_phase4_financial_and_credentials(db: Session) -> Dict[str, int]:
             rec_rules_created += 1
 
     db.commit()
+    batch1_res = seed_phase4_batch1_africa_caribbean(db)
     return {
-        "scholarships_created": scholarships_created,
-        "scholarships_updated": scholarships_updated,
-        "rules_created": rules_created,
+        "scholarships_created": scholarships_created + batch1_res["batch1_created"],
+        "scholarships_updated": scholarships_updated + batch1_res["batch1_updated"],
+        "rules_created": rules_created + batch1_res["batch1_rules_created"],
         "grade_rules_created": grade_rules_created,
         "recognition_rules_created": rec_rules_created,
     }

@@ -63,6 +63,16 @@ UNOFFICIAL_AGGREGATOR_HOSTS = {
     "www.bold.org",
     "scholarshipowl.com",
     "www.scholarshipowl.com",
+    "scholars4dev.com",
+    "www.scholars4dev.com",
+    "afterschoolafrica.com",
+    "www.afterschoolafrica.com",
+    "opportunitydesk.org",
+    "www.opportunitydesk.org",
+    "opportunitiesforafricans.com",
+    "www.opportunitiesforafricans.com",
+    "iefa.org",
+    "www.iefa.org",
 }
 
 
@@ -162,6 +172,81 @@ def classify_freshness(
     return "requires_manual_review"
 
 
+def evaluate_scholarship_claim_breakdown(
+    sch: ScholarshipProgram,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Returns independent freshness classifications per provenance claim domain
+    (`program_existence`, `award_amounts`, `eligibility_rules`, `deadlines`) so
+    an expired deadline claim flags the cycle closed without erasing verified
+    program existence or conflating deadlines with amount expiration.
+    """
+    ref_now = _utcnow(now)
+    record_conflict = bool(sch.conflict_notes)
+    if sch.award_amount_min_usd is not None and sch.award_amount_max_usd is not None:
+        if float(sch.award_amount_min_usd) > float(sch.award_amount_max_usd):
+            record_conflict = True
+    if sch.native_amount_min is not None and sch.native_amount_max is not None:
+        if float(sch.native_amount_min) > float(sch.native_amount_max):
+            record_conflict = True
+
+    record_exp = _parse_iso_dt(sch.verification_expires_at)
+    record_state = classify_freshness(
+        verified_at=sch.verified_at,
+        verification_expires_at=record_exp,
+        policy_kind="scholarship_eligibility",
+        source_url=sch.source_url,
+        has_conflict=record_conflict,
+        requires_manual_review=bool(sch.requires_manual_review) or not sch.is_verified,
+        now=ref_now,
+    )
+
+    claims = sch.claim_provenance if isinstance(sch.claim_provenance, dict) else {}
+    policy_for_key = {
+        "program_existence": "scholarship_eligibility",
+        "eligibility_rules": "scholarship_eligibility",
+        "award_amounts": "scholarship_amounts",
+        "deadlines": "scholarship_deadlines",
+    }
+    claim_states: Dict[str, str] = {}
+    for key, policy_kind in policy_for_key.items():
+        c = claims.get(key)
+        if not isinstance(c, dict):
+            claim_states[key] = record_state
+            continue
+        c_ver = _parse_iso_dt(c.get("verified_at")) or sch.verified_at
+        c_exp = _parse_iso_dt(c.get("expires_at")) or compute_verification_expiry(c_ver, policy_kind)
+        claim_states[key] = classify_freshness(
+            verified_at=c_ver,
+            verification_expires_at=c_exp,
+            policy_kind=policy_kind,
+            source_url=c.get("source_url") or sch.source_url,
+            has_conflict=bool(c.get("has_conflict")) or record_conflict,
+            source_unavailable=bool(c.get("source_unavailable")),
+            requires_manual_review=bool(c.get("requires_manual_review")),
+            now=ref_now,
+        )
+
+    deadline_expired = claim_states["deadlines"] == "expired"
+    amount_expired = claim_states["award_amounts"] == "expired"
+    record_expired = record_exp is not None and record_exp <= ref_now
+    existence_current = (
+        not record_expired
+        and not record_conflict
+        and claim_states["program_existence"] in ("current", "approaching_expiration")
+    )
+
+    return {
+        "record_state": record_state,
+        "claims": claim_states,
+        "record_expired": record_expired,
+        "existence_current": existence_current,
+        "amount_expired": amount_expired,
+        "deadline_expired": deadline_expired,
+    }
+
+
 def evaluate_scholarship_freshness(
     sch: ScholarshipProgram,
     now: Optional[datetime] = None,
@@ -226,6 +311,81 @@ def evaluate_scholarship_freshness(
         if priority in all_states:
             return priority
     return "current"
+
+
+def evaluate_scholarship_claim_breakdown(
+    sch: ScholarshipProgram,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Returns independent freshness classifications per provenance claim domain
+    (`program_existence`, `award_amounts`, `eligibility_rules`, `deadlines`) so
+    an expired deadline claim flags the cycle closed without erasing verified
+    program existence or conflating deadlines with amount expiration.
+    """
+    ref_now = _utcnow(now)
+    record_conflict = bool(sch.conflict_notes)
+    if sch.award_amount_min_usd is not None and sch.award_amount_max_usd is not None:
+        if float(sch.award_amount_min_usd) > float(sch.award_amount_max_usd):
+            record_conflict = True
+    if sch.native_amount_min is not None and sch.native_amount_max is not None:
+        if float(sch.native_amount_min) > float(sch.native_amount_max):
+            record_conflict = True
+
+    record_exp = _parse_iso_dt(sch.verification_expires_at)
+    record_state = classify_freshness(
+        verified_at=sch.verified_at,
+        verification_expires_at=record_exp,
+        policy_kind="scholarship_eligibility",
+        source_url=sch.source_url,
+        has_conflict=record_conflict,
+        requires_manual_review=bool(sch.requires_manual_review) or not sch.is_verified,
+        now=ref_now,
+    )
+
+    claims = sch.claim_provenance if isinstance(sch.claim_provenance, dict) else {}
+    policy_for_key = {
+        "program_existence": "scholarship_eligibility",
+        "eligibility_rules": "scholarship_eligibility",
+        "award_amounts": "scholarship_amounts",
+        "deadlines": "scholarship_deadlines",
+    }
+    claim_states: Dict[str, str] = {}
+    for key, policy_kind in policy_for_key.items():
+        c = claims.get(key)
+        if not isinstance(c, dict):
+            claim_states[key] = record_state
+            continue
+        c_ver = _parse_iso_dt(c.get("verified_at")) or sch.verified_at
+        c_exp = _parse_iso_dt(c.get("expires_at")) or compute_verification_expiry(c_ver, policy_kind)
+        claim_states[key] = classify_freshness(
+            verified_at=c_ver,
+            verification_expires_at=c_exp,
+            policy_kind=policy_kind,
+            source_url=c.get("source_url") or sch.source_url,
+            has_conflict=bool(c.get("has_conflict")) or record_conflict,
+            source_unavailable=bool(c.get("source_unavailable")),
+            requires_manual_review=bool(c.get("requires_manual_review")),
+            now=ref_now,
+        )
+
+    deadline_expired = claim_states["deadlines"] == "expired"
+    amount_expired = claim_states["award_amounts"] == "expired"
+    record_expired = record_exp is not None and record_exp <= ref_now
+    existence_current = (
+        not record_expired
+        and not record_conflict
+        and claim_states["program_existence"] in ("current", "approaching_expiration")
+    )
+
+    return {
+        "record_state": record_state,
+        "claims": claim_states,
+        "record_expired": record_expired,
+        "existence_current": existence_current,
+        "amount_expired": amount_expired,
+        "deadline_expired": deadline_expired,
+    }
 
 
 def _parse_iso_dt(val: Any) -> Optional[datetime]:
@@ -324,6 +484,7 @@ def validate_scholarship_catalog(
     conflicting_records: List[Dict[str, Any]] = []
 
     seen_title_inst: Dict[Tuple[str, str], str] = {}
+    seen_sponsor_url_cycle: Dict[Tuple[str, str, str, str], str] = {}
 
     for p in programs:
         url_ok, url_reason = is_valid_official_url(p.source_url)
@@ -342,6 +503,33 @@ def validate_scholarship_catalog(
         else:
             seen_title_inst[dup_key] = str(p.id)
 
+        sponsor_key = (
+            (p.sponsoring_institution or p.source_name or "").strip().lower(),
+            (p.source_url or "").strip().lower().rstrip("/"),
+            (p.academic_year or "unspecified").strip().lower(),
+            ",".join(sorted(str(d).lower() for d in (p.degree_levels or []))),
+        )
+        if sponsor_key[0] and sponsor_key[1]:
+            if sponsor_key in seen_sponsor_url_cycle:
+                # Distinct named awards may share a directory page ONLY if titles differ meaningfully
+                prev_id, prev_title = seen_sponsor_url_cycle[sponsor_key].split("|", 1)
+                if prev_title == p.title.strip().lower():
+                    duplicates.append(
+                        {
+                            "id": str(p.id),
+                            "title": p.title,
+                            "duplicate_of": prev_id,
+                        }
+                    )
+            else:
+                seen_sponsor_url_cycle[sponsor_key] = f"{p.id}|{p.title.strip().lower()}"
+
+        cur_val = str(p.award_currency or "").strip().upper()
+        if (p.native_amount_min is not None or p.native_amount_max is not None) and (not cur_val or len(cur_val) != 3 or not cur_val.isalpha()):
+            conflicting_records.append(
+                {"id": str(p.id), "title": p.title, "conflicts": [f"Invalid native currency code '{cur_val}'"]}
+            )
+
         missing_fields: List[str] = []
         if not p.source_name or not p.source_name.strip():
             missing_fields.append("source_name")
@@ -358,9 +546,15 @@ def validate_scholarship_catalog(
         if missing_fields:
             missing_provenance.append({"id": str(p.id), "title": p.title, "missing_fields": missing_fields})
 
+        cb = evaluate_scholarship_claim_breakdown(p, now=ref_now)
         freshness = evaluate_scholarship_freshness(p, now=ref_now)
         p_exp = _parse_iso_dt(p.verification_expires_at)
-        if freshness == "expired" or (p_exp is not None and p_exp <= ref_now):
+        if (
+            cb["record_expired"]
+            or cb["amount_expired"]
+            or (freshness == "expired" and not cb["existence_current"])
+            or (p_exp is not None and p_exp <= ref_now)
+        ):
             expired_records.append(
                 {
                     "id": str(p.id),

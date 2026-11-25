@@ -26,7 +26,10 @@ from app.ingestion.phase4_seed import seed_phase4_financial_and_credentials
 from app.models.institution import Institution, InstitutionCost
 from app.models.profile import CitizenshipRecord, StudentProfile
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
-from app.services.freshness_governance import evaluate_scholarship_freshness
+from app.services.freshness_governance import (
+    evaluate_scholarship_claim_breakdown,
+    evaluate_scholarship_freshness,
+)
 from app.services.matching_engine import _normalize_student_gpa_to_4
 
 FINANCIAL_DISCLAIMER = (
@@ -57,6 +60,7 @@ REGION_COUNTRIES: Dict[str, set] = {
     "africa": {"NG", "GH", "KE", "ZA", "ET", "RW", "SN", "CI", "EG", "MA", "TN", "UG", "TZ", "CM", "ZM", "ZW"},
     "sub_saharan_africa": {"NG", "GH", "KE", "ZA", "ET", "RW", "SN", "CI", "UG", "TZ", "CM", "ZM", "ZW"},
     "caribbean": {"HT", "JM", "TT", "BB", "BS", "DO", "CU", "LC", "GD", "VC", "AG", "DM", "KN"},
+    "caricom": {"JM", "BB", "TT", "BS", "BZ", "DM", "GD", "LC", "VC", "AG", "KN", "GY", "HT", "SR"},
     "latam": {"BR", "MX", "CO", "CL", "AR", "PE", "EC", "BO", "PY", "UY", "VE", "CR", "PA", "GT"},
     "latin_america": {"BR", "MX", "CO", "CL", "AR", "PE", "EC", "BO", "PY", "UY", "VE", "CR", "PA", "GT"},
     "americas": {"US", "CA", "MX", "HT", "JM", "TT", "BB", "BS", "DO", "BR", "CO", "CL", "AR", "PE"},
@@ -91,7 +95,13 @@ def ensure_phase4_seeded(db: Session) -> None:
         .limit(1)
         .first()
     )
-    if has_rule is None or has_yale is None:
+    has_batch1 = (
+        db.query(ScholarshipProgram.id)
+        .filter(ScholarshipProgram.title == "Commonwealth Master's Scholarships (CSC UK / FCDO)")
+        .limit(1)
+        .first()
+    )
+    if has_rule is None or has_yale is None or has_batch1 is None:
         seed_phase4_financial_and_credentials(db)
 
 
@@ -714,11 +724,28 @@ def evaluate_single_scholarship(
             conditional_reqs.append(outcome_dict["detail"])
 
     freshness = evaluate_scholarship_freshness(sch)
+    claim_breakdown = evaluate_scholarship_claim_breakdown(sch)
+    if claim_breakdown["deadline_expired"]:
+        app_cycle_status = "closed"
+        freshness_warnings.append("Current cycle application deadline has passed; confirm next cycle opening dates on official sponsor site.")
+    elif sch.application_deadline_date and sch.application_deadline_date >= date.today():
+        app_cycle_status = "open"
+    elif sch.is_deadline_rolling:
+        app_cycle_status = "rolling"
+    else:
+        app_cycle_status = "cyclical_check_official"
+
     if freshness == "approaching_expiration":
         exp_str = sch.verification_expires_at.date().isoformat() if sch.verification_expires_at else "soon"
         freshness_warnings.append(f"Verification approaching expiration ({exp_str}). Confirm latest terms on official site.")
     elif freshness == "expired":
-        freshness_warnings.append("Source verification expired; excluded from verified funding.")
+        if claim_breakdown["amount_expired"]:
+            freshness_warnings.append("Award amount claim expired; excluded from verified dollar discounts.")
+        elif claim_breakdown["existence_current"] and claim_breakdown["deadline_expired"]:
+            # Existence & amount are verified; only application deadline is closed
+            freshness = claim_breakdown["record_state"]
+        else:
+            freshness_warnings.append("Source verification expired; excluded from verified funding.")
     elif freshness == "conflicting_information":
         manual_reasons.append(sch.conflict_notes or "Conflicting published scholarship terms require manual review.")
         freshness_warnings.append("Conflicting award metadata detected.")
@@ -875,6 +902,8 @@ def evaluate_single_scholarship(
         "verified_by": sch.verified_by,
         "verification_expires_at": sch.verification_expires_at,
         "freshness_status": freshness,
+        "application_cycle_status": app_cycle_status,
+        "claim_freshness": claim_breakdown["claims"],
         "requires_manual_review": bool(sch.requires_manual_review),
         "claim_provenance": sch.claim_provenance or {},
         "conflict_notes": sch.conflict_notes,
@@ -901,12 +930,15 @@ def match_scholarships_deterministic(
 
     active_programs = []
     for p in qry.all():
+        cb = evaluate_scholarship_claim_breakdown(p)
         freshness = evaluate_scholarship_freshness(p)
-        if freshness in ("expired", "source_unavailable", "conflicting_information"):
+        # Exclude record-expired / unavailable / conflicting programs, while retaining existence-current programs
+        # (even if a deadline or award-amount sub-claim has expired — those remain segregated in UI / review_required_aid).
+        if cb["record_expired"] or freshness in ("source_unavailable", "conflicting_information"):
+            continue
+        if freshness == "expired" and not cb["existence_current"]:
             continue
         allowed_levels = [str(d).strip().lower() for d in (p.degree_levels or []) if str(d).strip()]
-        # Enforce strict degree-level filtering only when BOTH student and scholarship declare concrete levels;
-        # keep unknown scholarship degree_levels to surface requires_manual_review cleanly.
         if ctx["degree_level"] and allowed_levels and ctx["degree_level"] not in allowed_levels:
             continue
         active_programs.append(p)
@@ -1233,16 +1265,25 @@ def calculate_net_price(
 
     for s in sch_match["results"]:
         freshness = s["freshness_status"]
+        amt_freshness = (s.get("claim_freshness") or {}).get("award_amounts")
         elig_st = s["eligibility_status"]
         cur = str(s.get("award_currency") or "").strip().upper()
         permitted_keys, has_scope = _permitted_cost_keys(s)
         amin_raw, amax_raw = _raw_award_range(s)
 
         # 1. Segregate unverified / manual-review / conflicting freshness first
-        if elig_st == "requires_manual_review" or freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired"):
+        if (
+            elig_st == "requires_manual_review"
+            or freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired")
+            or amt_freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired")
+        ):
             reason = (
                 "; ".join(s.get("manual_review_reasons") or [])
-                or f"Freshness state '{freshness}' excludes award from guaranteed/verified net-price deductions."
+                or (
+                    f"Award amount claim status '{amt_freshness}' excludes award from guaranteed/verified net-price deductions."
+                    if amt_freshness in ("requires_manual_review", "conflicting_information", "source_unavailable", "expired")
+                    else f"Freshness state '{freshness}' excludes award from guaranteed/verified net-price deductions."
+                )
             )
             review_required_aid.append(_make_aid_entry(s, "review_required", {}, 0.0, 0.0, reason=reason))
             continue
