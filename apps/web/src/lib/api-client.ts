@@ -118,18 +118,98 @@ export interface StatusHistoryItem {
   changed_at: string;
 }
 
+export interface EvidenceReviewAuditItem {
+  id: string;
+  evidence_id: string;
+  application_id: string;
+  from_review_status?: string | null;
+  to_review_status: string;
+  action: string;
+  actor_role: string;
+  actor_email?: string | null;
+  rejection_reason_code?: string | null;
+  rejection_reason_label?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
 export interface SubmissionEvidenceItem {
   id: string;
   application_id: string;
   document_id?: string | null;
   original_filename?: string | null;
+  document_sha256?: string | null;
   evidence_type: string;
   external_confirmation_number?: string | null;
   submitted_note?: string | null;
   review_status: "pending" | "accepted" | "rejected" | string;
+  rejection_reason_code?: string | null;
+  rejection_reason_label?: string | null;
   reviewer_notes?: string | null;
   submitted_at: string;
   reviewed_at?: string | null;
+  audit_history?: EvidenceReviewAuditItem[];
+}
+
+export interface RejectionReasonOption {
+  code: string;
+  label: string;
+  description: string;
+}
+
+export interface RoutingQualitySummary {
+  total_routes: number;
+  verified: number;
+  needs_verification: number;
+  unverified: number;
+  by_method: Record<string, number>;
+  auto_verifiable_candidates: number;
+  manual_review_remaining: number;
+}
+
+export interface ApplicationRouteAuditItem {
+  id: string;
+  route_id: string;
+  from_status?: string | null;
+  to_status: string;
+  action: string;
+  actor_role: string;
+  actor_email?: string | null;
+  rejection_reason_code?: string | null;
+  notes?: string | null;
+  checks_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface RoutingQueueItem extends ApplicationRouteItem {
+  verification_method?: string | null;
+  verification_notes?: string | null;
+  institution_website?: string | null;
+  trust_checks: Record<string, unknown> & { warnings?: string[]; auto_verifiable?: boolean };
+  audits: ApplicationRouteAuditItem[];
+}
+
+export interface EvidenceQueueItem extends SubmissionEvidenceItem {
+  institution_id: string;
+  institution_name: string;
+  applicant_type: string;
+  application_status: string;
+  student_email?: string | null;
+  student_name?: string | null;
+  file_size_bytes?: number | null;
+  file_type?: string | null;
+}
+
+export interface EvidenceVaultPreview {
+  document_id: string;
+  original_filename: string;
+  file_type: string;
+  file_size_bytes: number;
+  file_sha256: string;
+  document_category: string;
+  extracted_text?: string | null;
+  detected_language?: string | null;
+  reviewed_by_role: string;
 }
 
 export interface ApplicationWorkspace {
@@ -1407,6 +1487,117 @@ export async function deleteApplicationWorkspace(applicationId: string): Promise
     headers: { ...auth.getAuthHeader() },
   });
   if (!res.ok) throw new Error("Failed to remove application workspace");
+}
+
+// ============================================================================
+// Phase 3 Milestone 7.1: Routing Data Quality & Confirmation Verification Ops
+// ============================================================================
+
+async function opsFetch(path: string, init?: RequestInit, authHeaders?: Record<string, string>) {
+  const headers = {
+    ...(init?.headers || {}),
+    ...(authHeaders || auth.getAuthHeader()),
+  };
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const e = new Error(err.detail || `Request failed (${res.status})`) as Error & { status?: number };
+    e.status = res.status;
+    throw e;
+  }
+  return res.json();
+}
+
+export async function fetchVerificationTaxonomies(
+  authHeaders?: Record<string, string>
+): Promise<{ evidence_rejection_reasons: RejectionReasonOption[]; route_rejection_reasons: RejectionReasonOption[] }> {
+  return opsFetch("/admin/verification/taxonomies", undefined, authHeaders);
+}
+
+export async function fetchRoutingQualitySummary(
+  authHeaders?: Record<string, string>
+): Promise<RoutingQualitySummary> {
+  return opsFetch("/admin/routing/summary", undefined, authHeaders);
+}
+
+export async function fetchRoutingQueue(
+  params?: { verification_status?: string; q?: string; limit?: number },
+  authHeaders?: Record<string, string>
+): Promise<RoutingQueueItem[]> {
+  const qs = new URLSearchParams();
+  if (params?.verification_status) qs.append("verification_status", params.verification_status);
+  if (params?.q) qs.append("q", params.q);
+  if (params?.limit) qs.append("limit", String(params.limit));
+  return opsFetch(`/admin/routing/queue${qs.toString() ? `?${qs.toString()}` : ""}`, undefined, authHeaders);
+}
+
+export async function runBatchRoutingVerify(
+  authHeaders?: Record<string, string>
+): Promise<{
+  checked: number;
+  promoted_to_verified: number;
+  kept_needs_verification: number;
+  flagged_unverified: number;
+  by_method: Record<string, number>;
+  summary: RoutingQualitySummary;
+}> {
+  return opsFetch("/admin/routing/verify-batch", { method: "POST" }, authHeaders);
+}
+
+export async function reviewApplicationRoute(
+  routeId: string,
+  payload: {
+    decision: "verified" | "unverified" | "needs_verification";
+    rejection_reason_code?: string;
+    notes?: string;
+    corrected_url?: string;
+    international_instructions?: string;
+  },
+  authHeaders?: Record<string, string>
+): Promise<RoutingQueueItem> {
+  return opsFetch(
+    `/admin/routing/${routeId}/review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    authHeaders
+  );
+}
+
+export async function fetchEvidenceQueue(
+  reviewStatus: string = "pending",
+  authHeaders?: Record<string, string>
+): Promise<EvidenceQueueItem[]> {
+  return opsFetch(`/admin/evidence/queue?review_status=${encodeURIComponent(reviewStatus)}`, undefined, authHeaders);
+}
+
+export async function inspectEvidenceDocument(
+  evidenceId: string,
+  authHeaders?: Record<string, string>
+): Promise<EvidenceVaultPreview> {
+  return opsFetch(`/admin/evidence/${evidenceId}/document`, undefined, authHeaders);
+}
+
+export async function reviewEvidenceItem(
+  evidenceId: string,
+  payload: {
+    decision: "accepted" | "rejected";
+    rejection_reason_code?: string;
+    reviewer_notes?: string;
+  },
+  authHeaders?: Record<string, string>
+): Promise<EvidenceQueueItem> {
+  return opsFetch(
+    `/admin/evidence/${evidenceId}/review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    authHeaders
+  );
 }
 
 

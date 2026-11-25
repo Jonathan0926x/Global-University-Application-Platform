@@ -11,6 +11,7 @@ from app.api.v1.requirements import router as requirements_router
 from app.api.v1.transfer import router as transfer_router
 from app.api.v1.matching import router as matching_router
 from app.api.v1.routing import router as routing_router
+from app.api.v1.operations import router as operations_router
 
 api_router = APIRouter()
 
@@ -22,6 +23,7 @@ api_router.include_router(requirements_router)
 api_router.include_router(transfer_router)
 api_router.include_router(matching_router)
 api_router.include_router(routing_router)
+api_router.include_router(operations_router)
 api_router.include_router(applications_router)
 api_router.include_router(preferences_router)
 api_router.include_router(documents_router)

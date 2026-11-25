@@ -49,12 +49,60 @@ class ApplicationRoute(Base):
     # high | medium | low
 
     verified_at = Column(DateTime(timezone=True), nullable=True)
+    verified_by_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    verification_method = Column(String(60), nullable=True)
+    # curated_official | ipeds_domain_match | ipeds_state_system | manual_verifier | manual_rejected
+    verification_notes = Column(Text, nullable=True)
+
     last_checked_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     institution = relationship("Institution")
+    audits = relationship(
+        "ApplicationRouteAudit",
+        back_populates="route",
+        cascade="all, delete-orphan",
+        order_by="ApplicationRouteAudit.created_at.desc()",
+    )
+
+
+class ApplicationRouteAudit(Base):
+    """
+    Immutable audit log for every routing link verification / rejection action.
+    """
+    __tablename__ = "application_route_audits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    route_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("application_routes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_status = Column(String(30), nullable=True)
+    to_status = Column(String(30), nullable=False, index=True)
+    action = Column(String(50), nullable=False)
+    # auto_verified | verified | marked_needs_verification | rejected_unverified | url_updated
+
+    actor_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_role = Column(String(30), default="system", nullable=False)
+    actor_email = Column(String(255), nullable=True)
+    rejection_reason_code = Column(String(60), nullable=True)
+    notes = Column(Text, nullable=True)
+    checks_json = Column(JSONB, default=dict, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    route = relationship("ApplicationRoute", back_populates="audits")
 
 
 class ApplicationStatusHistory(Base):
@@ -120,6 +168,7 @@ class ApplicationSubmissionEvidence(Base):
     review_status = Column(String(30), default="pending", nullable=False, index=True)
     # pending | accepted | rejected
     reviewer_user_id = Column(UUID(as_uuid=True), nullable=True)
+    rejection_reason_code = Column(String(60), nullable=True)
     reviewer_notes = Column(Text, nullable=True)
 
     submitted_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
@@ -127,3 +176,47 @@ class ApplicationSubmissionEvidence(Base):
 
     application = relationship("Application", back_populates="submission_evidence")
     document = relationship("Document")
+    audits = relationship(
+        "EvidenceReviewAudit",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+        order_by="EvidenceReviewAudit.created_at.asc()",
+    )
+
+
+class EvidenceReviewAudit(Base):
+    """
+    Immutable chronological audit log of every confirmation evidence upload and reviewer decision.
+    """
+    __tablename__ = "evidence_review_audits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    evidence_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("application_submission_evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    application_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_review_status = Column(String(30), nullable=True)
+    to_review_status = Column(String(30), nullable=False, index=True)
+    action = Column(String(40), nullable=False)
+    # uploaded | accepted | rejected
+
+    actor_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_role = Column(String(30), default="student", nullable=False)
+    actor_email = Column(String(255), nullable=True)
+    rejection_reason_code = Column(String(60), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    evidence = relationship("ApplicationSubmissionEvidence", back_populates="audits")

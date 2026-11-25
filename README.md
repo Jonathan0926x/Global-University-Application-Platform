@@ -121,8 +121,8 @@ The platform tracks work across distinct verification states:
 | **1. Strategic & Technical Documentation** | ✅ **Complete (15/15)** | All 15 foundational specifications and deep-dive models completed. |
 | **2. Architecture Foundation (Phase 1)** | ✅ **Complete & Tested** | Turborepo monorepo, Next.js 15, FastAPI, PostgreSQL 17 + pgvector, Alembic. |
 | **3. Internationalization & Vault (Phase 2)** | ✅ **Complete & E2E Audited** | 36-language BCP 47 registry, 4 RTL layouts (ar, he, fa, ur), Multilingual Counselor, Document Vault with SHA-256 integrity, mobile drawer. |
-| **4. Global Intelligence, Matching, RAG Counselor & Routing (Phase 3 M1–M7)** | ✅ **Complete & Tested** | `6,699` institutions, `94` verified requirements, `33` Tier 1/2 equivalencies + `pgvector` Tier 3 matching, 4D Match Engine (`/matching`), Hybrid RAG Counselor (`/counselor`), and **428** seeded routes (`28` verified) + 6-state confirmation tracker (`/applications`). |
-| **5. Automated Test Verification** | ✅ **57 Tests Passing** | **47** backend `pytest` tests + **10** frontend `node:test` unit tests (100% pass) + live browser QA. |
+| **4. Global Intelligence, Matching, RAG Counselor & Routing (Phase 3 M1–M7)** | ✅ **Complete & Tested** | `6,699` institutions, `94` verified requirements, `33` Tier 1/2 equivalencies + `pgvector` Tier 3 matching, 4D Match Engine (`/matching`), Hybrid RAG Counselor (`/counselor`), **428** seeded routes (**414** verified / **14** CRM & cross-domain queued for manual review), 6-state confirmation tracker (`/applications`), and RBAC verifier console (`/operations`). |
+| **5. Automated Test Verification** | ✅ **59 Tests Passing** | **49** backend `pytest` tests + **10** frontend `node:test` unit tests (100% pass) + live browser QA. |
 | **6. Live Services** | ✅ **Operational & Verified** | Web at `http://localhost:3000` & API at `http://127.0.0.1:8000`. |
 
 

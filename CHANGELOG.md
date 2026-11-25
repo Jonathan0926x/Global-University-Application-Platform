@@ -13,6 +13,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.7.1-m7] - 2026-11-24
+
+### Added — Milestone 7.1: Routing Data Quality & Confirmation Verification Operations
+- **Routing Data Quality Verification Pipeline (`9b4f21c8e310`, `routing_verification.py`):**
+  - Audited all **400** NCES IPEDS `needs_verification` routes using deterministic provenance, strict HTTPS (`scheme_secure=True`), exact registrable-domain matching against verified institutional websites, and an allowlist of official state/centralized admission systems (`commonapp.org`, `calstate.edu`, `universityofcalifornia.edu`, `applytexas.org`, `opencccapply.net`, `laccd.edu`, `wisconsin.edu`, `cuny.edu`, `cfnc.org`, `gafutures.xap.com`).
+  - Promoted **385** IPEDS routes to `verified` (**317** `ipeds_domain_match`, **68** `ipeds_state_system`), lifting verified directory coverage from `28/428` to **`414/428` (96.7%)** after manual verifier promotion of Indiana University (`413` batch + `1` manual review), while holding the **14** third-party CRM (`force.com`, `elluciancrmrecruit.com`) and cross-domain candidates explicitly in `needs_verification` for human verifier inspection.
+  - Added immutable `application_route_audits` logging every automatic and manual verification/rejection decision.
+- **Confirmation Verification Operations (`evidence_ops.py`, `operations.py`, `/operations`):**
+  - Enabled `data_verifier` role alongside `admin` in `MockAuthProvider` (`mock_verifier_<email>`) and `require_admin_claims`; students receive `403 Forbidden` on all reviewer/routing queues and cannot inspect other students' Document Vault artifacts.
+  - Enforced standardized rejection taxonomies (`EVIDENCE_REJECTION_REASONS` & `ROUTE_REJECTION_REASONS`) requiring a valid `rejection_reason_code` plus actionable notes on every rejection (`400 Bad Request` if omitted).
+  - Added immutable `evidence_review_audits` tracking every upload, acceptance, and rejection (`actor_role`, `actor_email` scrubbed from student views while preserved for operations audits), Vault artifact inspection (`GET /api/v1/admin/evidence/{id}/document`), reviewer queues (`/api/v1/admin/evidence/queue`, `/api/v1/admin/routing/queue`), and `/operations` RBAC-gated Verifier Console alongside structured rejection badges + `Re-upload Proof` on `/applications`.
+  - Verified with **49** passing backend `pytest` tests (`tests/test_milestone7_application_routing.py`), **10** passing frontend unit tests, Next.js `pnpm build` (**14/14** routes), and live browser QA on `/operations` & `/applications`.
+
+---
+
 ## [0.7.0-m7] - 2026-11-24
 
 ### Added — Phase 3 Milestone 7: Official Application Routing Directory & External Confirmation Flow

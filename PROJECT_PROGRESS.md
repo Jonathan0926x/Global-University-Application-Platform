@@ -198,18 +198,18 @@
 * **Last Verified Date:** November 24, 2026
 * **Next Action:** Phase 3 Milestone 4: 3-Tier Transfer Articulation & Course Equivalency Engine.
 
-### 13. Application Management & Tracker (Phase 3 M7)
-* **Status:** ✅ **Tested** (Milestone 7 Complete — Official Application Routing Directory & External Confirmation Flow on `/applications`)
+### 13. Application Management & Tracker (Phase 3 M7 / M7.1 Verification Ops)
+* **Status:** ✅ **Tested** (Milestones 7 & 7.1 Complete — `/applications` + `/operations`)
 * **Priority:** P0
 * **Dependencies:** Universal Student Profile, University Discovery (M1–M3), Matching Engine (M5), Document Vault
 * **Relevant Files:**
   - [`docs/07_APPLICATION_REQUIREMENT_ENGINE.md`](docs/07_APPLICATION_REQUIREMENT_ENGINE.md)
-  - `apps/api/alembic/versions/61d97d129fb9_milestone_7_application_routing.py`
+  - `apps/api/alembic/versions/61d97d129fb9_milestone_7_application_routing.py`, `apps/api/alembic/versions/9b4f21c8e310_m7_verification_operations.py`
   - `apps/api/app/models/routing.py`, `apps/api/app/models/application.py`
-  - `apps/api/app/ingestion/routing_seed.py`, `apps/api/app/services/routing_engine.py`
-  - `apps/api/app/api/v1/routing.py`, `apps/api/app/api/v1/applications.py`
-  - `apps/web/src/app/applications/page.tsx`, `apps/web/src/app/first-year/page.tsx`
-* **Acceptance Criteria:** Seeded **428** `application_routes` (**28** verified centralized & institutional destinations + **400** IPEDS `needs_verification` entries), structural/SSRF-safe URL validator (`POST /routing/validate-url`), unverified-link exclusion & missing-URL honesty notices, strict 6-state honest lifecycle (`not_started` -> `preparing` -> `ready_to_apply` -> `redirected_to_external_portal` -> `student_reported_submitted` -> `submission_confirmed`), immutable `ApplicationStatusHistory`, private Document Vault confirmation evidence uploads (`POST /applications/{id}/evidence`), RBAC-restricted verifier confirmation (`POST /applications/evidence/{id}/review`), verified deadline countdowns, responsive `/applications` dashboard & Arabic RTL layout (`47` backend pytest + `10` frontend unit tests + live browser QA).
+  - `apps/api/app/ingestion/routing_seed.py`, `apps/api/app/services/routing_engine.py`, `apps/api/app/services/routing_verification.py`, `apps/api/app/services/evidence_ops.py`
+  - `apps/api/app/api/v1/routing.py`, `apps/api/app/api/v1/applications.py`, `apps/api/app/api/v1/operations.py`
+  - `apps/web/src/app/applications/page.tsx`, `apps/web/src/app/operations/page.tsx`, `apps/web/src/app/first-year/page.tsx`
+* **Acceptance Criteria:** **428** active routes with **414** verified (**317** IPEDS institutional domain matches, **68** verified public state/centralized admission systems, **28** curated official portals, **1** manual verifier promotion) and **14** CRM/cross-domain URLs explicitly queued for manual review; `application_route_audits`; strict 6-state honest lifecycle; private Document Vault confirmation evidence (`evidence_review_audits`); mandatory `rejection_reason_code` taxonomy & `data_verifier`/`admin` RBAC reviewer queue (`/operations` + `/applications`); `49` backend `pytest` + `10` frontend unit tests + Next.js `14/14` production build + live browser QA.
 * **Last Verified Date:** November 24, 2026
 * **Next Action:** Phase 4 Financial Affordability & Production Verifier Review Console.
 

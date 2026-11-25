@@ -24,7 +24,13 @@ from app.models.application import StandardizedTest, ExtracurricularActivity, Ap
 from app.models.document import Document, DocumentExtraction, DocumentTranslation
 from app.models.counselor import CounselorConversation, CounselorMessage
 from app.models.rag import ScholarshipProgram, RagKnowledgeChunk
-from app.models.routing import ApplicationRoute, ApplicationStatusHistory, ApplicationSubmissionEvidence
+from app.models.routing import (
+    ApplicationRoute,
+    ApplicationRouteAudit,
+    ApplicationStatusHistory,
+    ApplicationSubmissionEvidence,
+    EvidenceReviewAudit,
+)
 
 __all__ = [
     "Base",
@@ -65,6 +71,8 @@ __all__ = [
     "ScholarshipProgram",
     "RagKnowledgeChunk",
     "ApplicationRoute",
+    "ApplicationRouteAudit",
     "ApplicationStatusHistory",
     "ApplicationSubmissionEvidence",
+    "EvidenceReviewAudit",
 ]

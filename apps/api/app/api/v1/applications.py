@@ -27,9 +27,16 @@ from app.schemas.routing import (
     ApplicationRouteSchema,
     ApplicationStatusUpdateRequest,
     EvidenceReviewRequest,
+    RejectionReasonOptionSchema,
     SubmissionEvidenceSchema,
 )
 from app.services.document_vault import DocumentVaultService
+from app.services.evidence_ops import (
+    EVIDENCE_REJECTION_REASONS,
+    execute_evidence_review,
+    record_evidence_audit,
+    serialize_evidence,
+)
 from app.services.requirements_engine import evaluate_dynamic_checklist
 from app.services.routing_engine import (
     STUDENT_PREP_STATES,
@@ -127,12 +134,10 @@ def _serialize_application(db: Session, app: Application) -> ApplicationResponse
             res.append(s)
         return res
 
-    ev_items: List[SubmissionEvidenceSchema] = []
-    for ev in (app.submission_evidence or []):
-        item = SubmissionEvidenceSchema.model_validate(ev)
-        if ev.document:
-            item.original_filename = ev.document.original_filename
-        ev_items.append(item)
+    ev_items: List[SubmissionEvidenceSchema] = [
+        serialize_evidence(ev, include_actor_email=False)
+        for ev in (app.submission_evidence or [])
+    ]
 
     deadlines = compute_deadline_countdowns(db, app.institution_id, app.applicant_type) if app.institution_id else []
 
@@ -666,6 +671,18 @@ async def upload_or_attach_submission_evidence(
         review_status="pending",
     )
     db.add(ev)
+    db.flush()
+    record_evidence_audit(
+        db=db,
+        ev=ev,
+        action="uploaded",
+        from_review_status=None,
+        to_review_status="pending",
+        actor_user_id=current_user.id,
+        actor_role="student",
+        actor_email=current_user.email,
+        notes=submitted_note or "Uploaded submission confirmation proof to Document Vault.",
+    )
 
     if external_confirmation_number:
         app.external_confirmation_number = external_confirmation_number.strip()[:120]
@@ -683,9 +700,12 @@ async def upload_or_attach_submission_evidence(
 
     db.commit()
     db.refresh(ev)
-    out = SubmissionEvidenceSchema.model_validate(ev)
-    out.original_filename = attached_doc.original_filename
-    return out
+    return serialize_evidence(ev, include_actor_email=False)
+
+
+@router.get("/applications/evidence/rejection-reasons", response_model=List[RejectionReasonOptionSchema], tags=["Applications"])
+def list_evidence_rejection_reasons():
+    return [RejectionReasonOptionSchema(**r) for r in EVIDENCE_REJECTION_REASONS]
 
 
 @router.get("/applications/{application_id}/evidence", response_model=List[SubmissionEvidenceSchema], tags=["Applications"])
@@ -695,13 +715,7 @@ def list_application_evidence(
     db: Session = Depends(get_db),
 ):
     _, app = _get_owned_application(db, current_user, application_id)
-    out = []
-    for ev in (app.submission_evidence or []):
-        item = SubmissionEvidenceSchema.model_validate(ev)
-        if ev.document:
-            item.original_filename = ev.document.original_filename
-        out.append(item)
-    return out
+    return [serialize_evidence(ev, include_actor_email=False) for ev in (app.submission_evidence or [])]
 
 
 @router.post("/applications/evidence/{evidence_id}/review", response_model=SubmissionEvidenceSchema, tags=["Applications"])
@@ -714,62 +728,21 @@ def review_submission_evidence(
     """
     RBAC-restricted verifier/admin decision on student confirmation evidence.
     Only `accepted` review with linked supporting evidence promotes the application
-    to `submission_confirmed`.
+    to `submission_confirmed`. Rejections require a valid taxonomy code + notes.
     """
-    decision = (payload.decision or "").strip().lower()
-    if decision not in ("accepted", "rejected"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Decision must be 'accepted' or 'rejected'.")
-
     ev = db.query(ApplicationSubmissionEvidence).filter(ApplicationSubmissionEvidence.id == evidence_id).first()
     if not ev:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission evidence not found.")
 
-    if decision == "accepted" and not ev.document_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot confirm submission without an attached Document Vault confirmation artifact.",
-        )
-
-    now = datetime.now(timezone.utc)
-    ev.review_status = decision
-    ev.reviewer_notes = payload.reviewer_notes
-    ev.reviewed_at = now
-
-    reviewer = db.query(User).filter(User.external_auth_id == claims.user_id).first()
-    if reviewer:
-        ev.reviewer_user_id = reviewer.id
-
-    app = db.query(Application).filter(Application.id == ev.application_id).first()
-    if app:
-        if decision == "accepted":
-            app.submission_confirmed_at = now
-            app.submitted_at = app.student_reported_submitted_at or now
-            record_status_transition(
-                db=db,
-                app=app,
-                to_status="submission_confirmed",
-                actor_user_id=reviewer.id if reviewer else None,
-                actor_role=claims.role,
-                reason=payload.reviewer_notes or "Confirmation evidence verified and accepted.",
-                metadata={"evidence_id": str(ev.id), "document_id": str(ev.document_id)},
-            )
-        else:
-            record_status_transition(
-                db=db,
-                app=app,
-                to_status="student_reported_submitted",
-                actor_user_id=reviewer.id if reviewer else None,
-                actor_role=claims.role,
-                reason=payload.reviewer_notes or "Confirmation evidence rejected; please re-upload valid confirmation proof.",
-                metadata={"evidence_id": str(ev.id), "review_decision": "rejected"},
-            )
-
-    db.commit()
-    db.refresh(ev)
-    out = SubmissionEvidenceSchema.model_validate(ev)
-    if ev.document:
-        out.original_filename = ev.document.original_filename
-    return out
+    updated = execute_evidence_review(
+        db=db,
+        ev=ev,
+        decision=payload.decision,
+        claims=claims,
+        rejection_reason_code=payload.rejection_reason_code,
+        reviewer_notes=payload.reviewer_notes,
+    )
+    return serialize_evidence(updated, include_actor_email=True)
 
 
 @router.get("/applications/{application_id}", response_model=ApplicationResponse, tags=["Applications"])

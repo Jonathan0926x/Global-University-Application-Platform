@@ -44,6 +44,15 @@ class MockAuthProvider(IAuthProvider):
                 last_name="Admin",
                 role="admin"
             )
+        elif clean_token.startswith("mock_verifier_"):
+            email = clean_token.split("mock_verifier_", 1)[1] or "verifier@uniglobe.edu"
+            return UserClaims(
+                user_id=f"verifier_{email.replace('@', '_').replace('.', '_')}",
+                email=email,
+                first_name="Data",
+                last_name="Verifier",
+                role="data_verifier"
+            )
         elif clean_token.startswith("mock_"):
             parts = clean_token.split("_", 1)
             email = parts[1] if len(parts) > 1 else "student@example.com"

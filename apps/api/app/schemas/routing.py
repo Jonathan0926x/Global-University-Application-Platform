@@ -20,10 +20,68 @@ class ApplicationRouteSchema(BaseModel):
     verification_status: str
     confidence_level: str
     verified_at: Optional[datetime] = None
+    verified_by_user_id: Optional[UUID] = None
+    verification_method: Optional[str] = None
+    verification_notes: Optional[str] = None
     last_checked_at: datetime
     is_active: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RejectionReasonOptionSchema(BaseModel):
+    code: str
+    label: str
+    description: str
+
+
+class ApplicationRouteAuditSchema(BaseModel):
+    id: UUID
+    route_id: UUID
+    from_status: Optional[str] = None
+    to_status: str
+    action: str
+    actor_role: str
+    actor_email: Optional[str] = None
+    rejection_reason_code: Optional[str] = None
+    notes: Optional[str] = None
+    checks_json: Dict[str, Any] = {}
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RoutingQueueItemSchema(ApplicationRouteSchema):
+    institution_website: Optional[str] = None
+    trust_checks: Dict[str, Any] = {}
+    audits: List[ApplicationRouteAuditSchema] = []
+
+
+class RoutingQualitySummarySchema(BaseModel):
+    total_routes: int
+    verified: int
+    needs_verification: int
+    unverified: int
+    by_method: Dict[str, int] = {}
+    auto_verifiable_candidates: int = 0
+    manual_review_remaining: int = 0
+
+
+class RouteReviewRequest(BaseModel):
+    decision: str  # verified | unverified | needs_verification
+    rejection_reason_code: Optional[str] = None
+    notes: Optional[str] = None
+    corrected_url: Optional[str] = None
+    international_instructions: Optional[str] = None
+
+
+class BatchRouteVerifyResponse(BaseModel):
+    checked: int
+    promoted_to_verified: int
+    kept_needs_verification: int
+    flagged_unverified: int
+    by_method: Dict[str, int] = {}
+    summary: RoutingQualitySummarySchema
 
 
 class InstitutionRoutingResolutionSchema(BaseModel):
@@ -64,20 +122,52 @@ class StatusHistoryItemSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EvidenceReviewAuditSchema(BaseModel):
+    id: UUID
+    evidence_id: UUID
+    application_id: UUID
+    from_review_status: Optional[str] = None
+    to_review_status: str
+    action: str
+    actor_role: str
+    actor_email: Optional[str] = None
+    rejection_reason_code: Optional[str] = None
+    rejection_reason_label: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SubmissionEvidenceSchema(BaseModel):
     id: UUID
     application_id: UUID
     document_id: Optional[UUID] = None
     original_filename: Optional[str] = None
+    document_sha256: Optional[str] = None
     evidence_type: str
     external_confirmation_number: Optional[str] = None
     submitted_note: Optional[str] = None
     review_status: str  # pending | accepted | rejected
+    rejection_reason_code: Optional[str] = None
+    rejection_reason_label: Optional[str] = None
     reviewer_notes: Optional[str] = None
     submitted_at: datetime
     reviewed_at: Optional[datetime] = None
+    audit_history: List[EvidenceReviewAuditSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EvidenceQueueItemSchema(SubmissionEvidenceSchema):
+    institution_id: UUID
+    institution_name: str
+    applicant_type: str
+    application_status: str
+    student_email: Optional[str] = None
+    student_name: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    file_type: Optional[str] = None
 
 
 class ApplicationStatusUpdateRequest(BaseModel):
@@ -99,6 +189,7 @@ class ApplicationReportSubmissionRequest(BaseModel):
 
 class EvidenceReviewRequest(BaseModel):
     decision: str  # accepted | rejected
+    rejection_reason_code: Optional[str] = None
     reviewer_notes: Optional[str] = None
 
 

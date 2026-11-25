@@ -342,17 +342,36 @@ def test_full_six_state_lifecycle_evidence_vault_and_rbac_guardrails(client):
         )
         assert forbid_review.status_code == 403
 
-        # 8. Verifier/admin rejection leaves status at `student_reported_submitted`
+        # 8. Verifier/admin rejection requires valid rejection_reason_code and leaves status at `student_reported_submitted`
+        missing_code = client.post(
+            f"/api/v1/applications/evidence/{ev_id}/review",
+            json={"decision": "rejected", "reviewer_notes": "Missing reason code check"},
+            headers=admin_headers,
+        )
+        assert missing_code.status_code == 400
+
         rej_res = client.post(
             f"/api/v1/applications/evidence/{ev_id}/review",
-            json={"decision": "rejected", "reviewer_notes": "Image cropped; include full timestamp."},
+            json={
+                "decision": "rejected",
+                "rejection_reason_code": "illegible_screenshot",
+                "reviewer_notes": "Image cropped; include full timestamp.",
+            },
             headers=admin_headers,
         )
         assert rej_res.status_code == 200
         assert rej_res.json()["review_status"] == "rejected"
+        assert rej_res.json()["rejection_reason_code"] == "illegible_screenshot"
+        assert "Illegible Screenshot" in (rej_res.json()["rejection_reason_label"] or "")
+        assert len(rej_res.json()["audit_history"]) >= 2
+
         after_rej = client.get(f"/api/v1/applications/{app_id}", headers=student_headers).json()
         assert after_rej["status"] == "student_reported_submitted"
         assert after_rej["submission_confirmed_at"] is None
+        # Student view scrubs reviewer email for privacy while preserving audit role + rejection reason
+        ev_student_view = next(e for e in after_rej["submission_evidence"] if e["id"] == ev_id)
+        assert ev_student_view["rejection_reason_code"] == "illegible_screenshot"
+        assert all(a["actor_email"] is None for a in ev_student_view["audit_history"])
 
         # 9. Student uploads clear confirmation & verifier accepts -> `submission_confirmed`
         ev2_res = client.post(
@@ -391,6 +410,197 @@ def test_full_six_state_lifecycle_evidence_vault_and_rbac_guardrails(client):
         db = SessionLocal()
         try:
             db.query(Deadline).filter(Deadline.id == dl_id).delete()
+            db.commit()
+        finally:
+            db.close()
+
+
+def test_data_verifier_rbac_evidence_queue_and_audit_trail(client):
+    student_headers = _auth("student_ev_ops")
+    verifier_headers = {"Authorization": "Bearer mock_verifier_ops_qa@uniglobe.edu"}
+    _ensure_profile(client, student_headers, "first_year")
+
+    # Student cannot access verification operations queues (403)
+    assert client.get("/api/v1/admin/verification/taxonomies", headers=student_headers).status_code == 403
+    assert client.get("/api/v1/admin/evidence/queue", headers=student_headers).status_code == 403
+    assert client.get("/api/v1/admin/routing/queue", headers=student_headers).status_code == 403
+
+    # Data Verifier CAN read taxonomies & inspect uploaded vault artifacts
+    tax_res = client.get("/api/v1/admin/verification/taxonomies", headers=verifier_headers)
+    assert tax_res.status_code == 200
+    assert any(r["code"] == "missing_confirmation_id" for r in tax_res.json()["evidence_rejection_reasons"])
+
+    insts = client.get("/api/v1/institutions").json()
+    mit = next((i for i in insts if "Massachusetts Institute of Technology" in i["official_name"]), None)
+    assert mit is not None
+
+    app_id = client.post(
+        "/api/v1/applications",
+        json={"institution_id": mit["id"], "applicant_type": "first_year"},
+        headers=student_headers,
+    ).json()["id"]
+
+    ev_res = client.post(
+        f"/api/v1/applications/{app_id}/evidence",
+        data={"evidence_type": "confirmation_email", "external_confirmation_number": "MIT-OP-552"},
+        files={"file": ("ops_proof.txt", b"MIT Ops Proof Confirmation ID MIT-OP-552", "text/plain")},
+        headers=student_headers,
+    )
+    assert ev_res.status_code == 201
+    ev_id = ev_res.json()["id"]
+
+    # Queue lists pending item with document SHA-256 + uploaded audit event
+    q_res = client.get("/api/v1/admin/evidence/queue?review_status=pending", headers=verifier_headers)
+    assert q_res.status_code == 200
+    q_item = next((x for x in q_res.json() if x["id"] == ev_id), None)
+    assert q_item is not None
+    assert q_item["document_sha256"]
+    assert q_item["audit_history"][0]["action"] == "uploaded"
+
+    # Student blocked from verifier document inspection endpoint; verifier can inspect extracted text & SHA-256
+    assert client.get(f"/api/v1/admin/evidence/{ev_id}/document", headers=student_headers).status_code == 403
+    doc_meta = client.get(f"/api/v1/admin/evidence/{ev_id}/document", headers=verifier_headers)
+    assert doc_meta.status_code == 200
+    assert doc_meta.json()["reviewed_by_role"] == "data_verifier"
+    assert doc_meta.json()["file_sha256"] == q_item["document_sha256"]
+
+    # Data verifier accepts evidence -> immutable audit logs actor_role == data_verifier & promotes app
+    acc = client.post(
+        f"/api/v1/admin/evidence/{ev_id}/review",
+        json={"decision": "accepted", "reviewer_notes": "Verified SHA-256 confirmation artifact."},
+        headers=verifier_headers,
+    )
+    assert acc.status_code == 200
+    acc_body = acc.json()
+    assert acc_body["review_status"] == "accepted"
+    assert acc_body["application_status"] == "submission_confirmed"
+    assert [a["action"] for a in acc_body["audit_history"]] == ["uploaded", "accepted"]
+    assert acc_body["audit_history"][1]["actor_role"] == "data_verifier"
+    assert acc_body["audit_history"][1]["actor_email"] == "ops_qa@uniglobe.edu"
+
+
+def test_routing_data_quality_batch_and_manual_verifier_audit(client):
+    verifier_headers = {"Authorization": "Bearer mock_verifier_route_qa@uniglobe.edu"}
+    student_headers = _auth("student_route_qa")
+
+    summary_res = client.get("/api/v1/admin/routing/summary", headers=verifier_headers)
+    assert summary_res.status_code == 200
+    assert summary_res.json()["verified"] >= 400
+    assert summary_res.json()["needs_verification"] <= 20
+
+    # Seed one domain-matched IPEDS candidate and one CRM subdomain candidate cleanly
+    db = SessionLocal()
+    inst_dom_id = uuid.uuid4()
+    inst_crm_id = uuid.uuid4()
+    try:
+        db.add_all(
+            [
+                Institution(
+                    id=inst_dom_id,
+                    official_name=f"Synthetic Verified Domain Univ {inst_dom_id.hex[:6]}",
+                    ipeds_unit_id=f"99{inst_dom_id.hex[:4]}",
+                    country_code="US",
+                    institution_type="university",
+                    official_website="https://www.verifieddomainqa.edu/",
+                ),
+                Institution(
+                    id=inst_crm_id,
+                    official_name=f"Synthetic CRM Tenant College {inst_crm_id.hex[:6]}",
+                    ipeds_unit_id=f"98{inst_crm_id.hex[:4]}",
+                    country_code="US",
+                    institution_type="university",
+                    official_website="https://www.crmtenantqa.edu/",
+                ),
+            ]
+        )
+        db.flush()
+        rt_dom = ApplicationRoute(
+            institution_id=inst_dom_id,
+            platform_name="Verified Domain QA Portal",
+            platform_type="direct_portal",
+            country_code="US",
+            applicant_type="all",
+            official_url="https://apply.verifieddomainqa.edu/undergrad",
+            source_name="NCES IPEDS HD2023",
+            verification_status="needs_verification",
+            confidence_level="medium",
+            is_active=True,
+        )
+        rt_crm = ApplicationRoute(
+            institution_id=inst_crm_id,
+            platform_name="CRM Tenant QA Portal",
+            platform_type="direct_portal",
+            country_code="US",
+            applicant_type="all",
+            official_url="https://crmtenantqa.elluciancrmrecruit.com/Apply/Login",
+            source_name="NCES IPEDS HD2023",
+            verification_status="needs_verification",
+            confidence_level="medium",
+            is_active=True,
+        )
+        db.add_all([rt_dom, rt_crm])
+        db.commit()
+        dom_route_id = str(rt_dom.id)
+        crm_route_id = str(rt_crm.id)
+    finally:
+        db.close()
+
+    try:
+        # Student forbidden from batch verify or route review
+        assert client.post("/api/v1/admin/routing/verify-batch", headers=student_headers).status_code == 403
+        assert client.post(
+            f"/api/v1/admin/routing/{crm_route_id}/review",
+            json={"decision": "verified"},
+            headers=student_headers,
+        ).status_code == 403
+
+        # Batch verification promotes domain match -> `verified`, keeps CRM subdomain in `needs_verification`
+        batch = client.post("/api/v1/admin/routing/verify-batch", headers=verifier_headers)
+        assert batch.status_code == 200
+        assert batch.json()["promoted_to_verified"] >= 1
+
+        # Rejecting CRM link without rejection_reason_code -> 400
+        bad_rej = client.post(
+            f"/api/v1/admin/routing/{crm_route_id}/review",
+            json={"decision": "unverified", "notes": "Missing code"},
+            headers=verifier_headers,
+        )
+        assert bad_rej.status_code == 400
+
+        # Manually verifying CRM link with corrected HTTPS domain or verified tenant decision logs audit trail
+        ok_ver = client.post(
+            f"/api/v1/admin/routing/{crm_route_id}/review",
+            json={
+                "decision": "verified",
+                "notes": "Confirmed Ellucian CRM tenant matches crmtenantqa.edu.",
+                "international_instructions": "International applicants select Global Applicant portal track.",
+            },
+            headers=verifier_headers,
+        )
+        assert ok_ver.status_code == 200
+        assert ok_ver.json()["verification_status"] == "verified"
+        assert ok_ver.json()["verification_method"] == "manual_verifier"
+        assert ok_ver.json()["audits"][0]["actor_role"] == "data_verifier"
+
+        # Verify domain route was promoted by batch run with audit entry
+        q_dom = client.get(
+            "/api/v1/admin/routing/queue?verification_status=verified&q=Verified%20Domain%20QA",
+            headers=verifier_headers,
+        )
+        assert q_dom.status_code == 200
+        matched = next((x for x in q_dom.json() if x["id"] == dom_route_id), None)
+        assert matched is not None
+        assert matched["verification_method"] == "ipeds_domain_match"
+        assert matched["audits"][0]["action"] == "auto_verified"
+    finally:
+        db = SessionLocal()
+        try:
+            db.query(ApplicationRoute).filter(ApplicationRoute.institution_id.in_([inst_dom_id, inst_crm_id])).delete(
+                synchronize_session=False
+            )
+            db.query(Institution).filter(Institution.id.in_([inst_dom_id, inst_crm_id])).delete(
+                synchronize_session=False
+            )
             db.commit()
         finally:
             db.close()
