@@ -211,3 +211,16 @@ graph TD
 1. **US Federal Aid (FAFSA):** International students and non-citizens are ineligible for US federal grants (Pell) or direct loans. The platform guides eligible non-citizens (permanent residents, refugees, asylees) to complete FAFSA while ensuring international students do not waste effort on ineligible federal forms.
 2. **Transfer Aid Penalties:** Many four-year institutions offer less generous institutional need-based aid to transfer students than first-year students. The platform explicitly benchmarks transfer-specific scholarship programs (e.g., Phi Theta Kappa - PTK Transfer Scholarships).
 3. **Visa Proof of Funds (Form I-20 / DS-2019):** To secure an F-1 visa, international students must demonstrate liquid funds covering 100% of the first year's Cost of Attendance. The platform generates an **I-20 Readiness Summary** showing the gap between liquid family funds and university COA.
+
+---
+
+## 7. Provenance & Freshness Governance (Implemented `f1c9e4a2b870`)
+
+`ScholarshipProgram` includes native currency/amount tracking (`native_amount_min`, `native_amount_max`, `award_fixed_usd`, `covers_travel`, `funding_duration_years`, `max_funding_periods`, `renewal_conditions`), sponsoring institution/source provenance (`sponsoring_institution`, `source_type`, `source_version`, `academic_year`, `verification_method`, `verified_by`, `claim_provenance`, `conflict_notes`), and non-destructive freshness classification (`verification_expires_at`, `freshness_status`, `requires_manual_review`).
+
+- **Freshness Classifications (`freshness_governance.py`):** `current`, `approaching_expiration`, `expired`, `source_unavailable`, `conflicting_information`, `requires_manual_review`.
+- **Differentiated Expiration Policies:**
+  - Scholarship Deadlines: **90 days** (`approaching_window = 14 days`)
+  - Scholarship Award Amounts: **120 days** (`approaching_window = 21 days`)
+  - Scholarship Eligibility Rules: **180 days** (`approaching_window = 30 days`)
+- **Historical Retention:** Expired awards remain in PostgreSQL (`freshness_status = 'expired'`, `is_current = FALSE`) and are never deleted or recommended as active verified aid. Legacy rows lacking explicit expiry or reviewer metadata default honestly to `source_type = 'unknown'` / `freshness_status = 'requires_manual_review'` rather than fabricated dates or reviewers.

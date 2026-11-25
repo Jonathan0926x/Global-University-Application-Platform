@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -72,6 +73,26 @@ class ScholarshipProgram(Base):
     verified_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     is_verified = Column(Boolean, default=True, nullable=False)
     is_current = Column(Boolean, default=True, nullable=False)
+
+    # Step 1 Provenance, Native Financial & Data Freshness Governance
+    sponsoring_institution = Column(String(255), nullable=True)
+    source_type = Column(String(40), default="unknown", nullable=False)
+    source_version = Column(String(64), nullable=True)
+    academic_year = Column(String(20), nullable=True)
+    award_fixed_usd = Column(Numeric(12, 2), nullable=True)
+    native_amount_min = Column(Numeric(14, 2), nullable=True)
+    native_amount_max = Column(Numeric(14, 2), nullable=True)
+    covers_travel = Column(Boolean, default=False, nullable=False)
+    funding_duration_years = Column(Numeric(4, 2), nullable=True)
+    max_funding_periods = Column(Integer, nullable=True)
+    renewal_conditions = Column(Text, nullable=True)
+    verification_method = Column(String(60), default="unknown", nullable=False)
+    verified_by = Column(String(255), nullable=True)
+    verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    freshness_status = Column(String(40), default="requires_manual_review", nullable=False, index=True)
+    requires_manual_review = Column(Boolean, default=False, nullable=False)
+    claim_provenance = Column(JSONB, default=dict, nullable=False)
+    conflict_notes = Column(Text, nullable=True)
 
     institution = relationship("Institution")
     rules = relationship(

@@ -239,4 +239,17 @@ class CountryQualification(Base):
     verification_status = Column(String(30), nullable=False, default="verified")
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
+    # Step 1 Qualification Structure & Freshness Governance
+    issuing_authority = Column(String(255), nullable=True)
+    education_level = Column(String(40), nullable=False, default="secondary")
+    highest_grade = Column(String(60), nullable=True)
+    subject_structure = Column(Text, nullable=True)
+    exam_structure = Column(Text, nullable=True)
+    academic_duration = Column(String(60), nullable=True)
+    framework_version = Column(String(64), nullable=True)
+    equivalency_classification = Column(String(40), nullable=False, default="reference_benchmark")
+    verified_by = Column(String(255), nullable=True)
+    verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    freshness_status = Column(String(40), nullable=False, default="requires_manual_review", index=True)
+
     country = relationship("Country")

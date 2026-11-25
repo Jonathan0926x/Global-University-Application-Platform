@@ -20,6 +20,7 @@ from app.ingestion.phase4_seed import seed_phase4_financial_and_credentials
 from app.models.institution import Institution, InstitutionCost
 from app.models.profile import CitizenshipRecord, StudentProfile
 from app.models.rag import ScholarshipEligibilityRule, ScholarshipProgram
+from app.services.freshness_governance import evaluate_scholarship_freshness
 from app.services.matching_engine import _normalize_student_gpa_to_4
 
 FINANCIAL_DISCLAIMER = (
@@ -279,6 +280,7 @@ def evaluate_single_scholarship(
         elig_status = "eligible"
         score = 100 if sch.is_guaranteed_statutory else 90
 
+    freshness = evaluate_scholarship_freshness(sch)
     return {
         "id": sch.id,
         "institution_id": sch.institution_id,
@@ -317,6 +319,25 @@ def evaluate_single_scholarship(
         "source_name": sch.source_name,
         "source_url": sch.source_url,
         "verified_at": sch.verified_at,
+        "award_currency": str(sch.award_currency or "USD").strip(),
+        "award_fixed_usd": float(sch.award_fixed_usd) if sch.award_fixed_usd is not None else None,
+        "native_amount_min": float(sch.native_amount_min) if sch.native_amount_min is not None else None,
+        "native_amount_max": float(sch.native_amount_max) if sch.native_amount_max is not None else None,
+        "covers_travel": bool(sch.covers_travel),
+        "funding_duration_years": float(sch.funding_duration_years) if sch.funding_duration_years is not None else None,
+        "max_funding_periods": sch.max_funding_periods,
+        "renewal_conditions": sch.renewal_conditions,
+        "sponsoring_institution": sch.sponsoring_institution,
+        "source_type": sch.source_type or "unknown",
+        "source_version": sch.source_version,
+        "academic_year": sch.academic_year,
+        "verification_method": sch.verification_method or "unknown",
+        "verified_by": sch.verified_by,
+        "verification_expires_at": sch.verification_expires_at,
+        "freshness_status": freshness,
+        "requires_manual_review": bool(sch.requires_manual_review),
+        "claim_provenance": sch.claim_provenance or {},
+        "conflict_notes": sch.conflict_notes,
     }
 
 
@@ -343,6 +364,7 @@ def match_scholarships_deterministic(
         p
         for p in qry.all()
         if ctx["degree_level"] in [d.lower() for d in (p.degree_levels or ["bachelors"])]
+        and evaluate_scholarship_freshness(p) not in ("expired", "source_unavailable", "conflicting_information")
     ]
     evaluated = [evaluate_single_scholarship(p, ctx) for p in programs]
 

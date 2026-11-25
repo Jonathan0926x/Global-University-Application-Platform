@@ -192,6 +192,9 @@ def evaluate_credential(
             "methodology": matched_bracket.methodology,
             "methodology_citation": matched_bracket.methodology_citation,
             "percentile_note": matched_bracket.percentile_note,
+            "equivalency_classification": matched_bracket.equivalency_classification or "reference_benchmark",
+            "framework_version": matched_bracket.framework_version,
+            "freshness_status": matched_bracket.freshness_status or "requires_manual_review",
             "confidence_level": matched_bracket.confidence_level,
         }
     else:
@@ -244,11 +247,22 @@ def evaluate_credential(
                 "country_code": q.country_code,
                 "qualification_name": q.qualification_name,
                 "qualification_type": q.qualification_type,
+                "education_level": q.education_level,
+                "issuing_authority": q.issuing_authority,
                 "grading_scale": q.grading_scale,
+                "highest_grade": q.highest_grade,
                 "passing_threshold": q.passing_threshold,
+                "subject_structure": q.subject_structure,
+                "exam_structure": q.exam_structure,
+                "academic_duration": q.academic_duration,
+                "framework_version": q.framework_version,
+                "equivalency_classification": q.equivalency_classification,
                 "equivalency_notes": q.equivalency_notes,
                 "source_name": q.source_name,
                 "source_url": q.source_url,
+                "verified_at": q.verified_at.isoformat() if q.verified_at else None,
+                "verification_expires_at": q.verification_expires_at.isoformat() if q.verification_expires_at else None,
+                "freshness_status": q.freshness_status,
             }
             for q in quals
         ],

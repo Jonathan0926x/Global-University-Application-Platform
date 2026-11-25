@@ -50,6 +50,25 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     source_name: str
     source_url: str
     verified_at: datetime
+    award_currency: str = "USD"
+    award_fixed_usd: Optional[float] = None
+    native_amount_min: Optional[float] = None
+    native_amount_max: Optional[float] = None
+    covers_travel: bool = False
+    funding_duration_years: Optional[float] = None
+    max_funding_periods: Optional[int] = None
+    renewal_conditions: Optional[str] = None
+    sponsoring_institution: Optional[str] = None
+    source_type: str = "unknown"
+    source_version: Optional[str] = None
+    academic_year: Optional[str] = None
+    verification_method: str = "unknown"
+    verified_by: Optional[str] = None
+    verification_expires_at: Optional[datetime] = None
+    freshness_status: str = "requires_manual_review"
+    requires_manual_review: bool = False
+    claim_provenance: Dict[str, Any] = {}
+    conflict_notes: Optional[str] = None
 
 
 class ScholarshipMatchRequest(BaseModel):
@@ -186,6 +205,14 @@ class CredentialRecognitionRuleSchema(BaseModel):
     source_name: str
     source_url: str
     verified_at: datetime
+    issuing_authority: Optional[str] = None
+    education_level: str = "secondary"
+    exam_structure: Optional[str] = None
+    framework_version: Optional[str] = None
+    equivalency_classification: str = "official_equivalency"
+    verified_by: Optional[str] = None
+    verification_expires_at: Optional[datetime] = None
+    freshness_status: str = "requires_manual_review"
 
     model_config = ConfigDict(from_attributes=True)
 

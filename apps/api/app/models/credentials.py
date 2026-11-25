@@ -46,6 +46,17 @@ class GradeConversionRule(Base):
     confidence_level = Column(String(20), default="high", nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
+    # Step 1 Provenance, Structure & Freshness Governance
+    issuing_authority = Column(String(255), nullable=True)
+    grading_structure = Column(String(120), nullable=True)
+    framework_version = Column(String(64), nullable=True)
+    equivalency_classification = Column(String(40), default="reference_benchmark", nullable=False)
+    source_url = Column(String(500), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    verified_by = Column(String(255), nullable=True)
+    verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    freshness_status = Column(String(40), default="requires_manual_review", nullable=False, index=True)
+
 
 class CredentialRecognitionRule(Base):
     """
@@ -74,3 +85,13 @@ class CredentialRecognitionRule(Base):
     source_url = Column(String(500), nullable=False)
     verified_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     verification_status = Column(String(20), default="verified", nullable=False)
+
+    # Step 1 Provenance, Structure & Freshness Governance
+    issuing_authority = Column(String(255), nullable=True)
+    education_level = Column(String(40), default="secondary", nullable=False)
+    exam_structure = Column(String(200), nullable=True)
+    framework_version = Column(String(64), nullable=True)
+    equivalency_classification = Column(String(40), default="official_equivalency", nullable=False)
+    verified_by = Column(String(255), nullable=True)
+    verification_expires_at = Column(DateTime(timezone=True), nullable=True)
+    freshness_status = Column(String(40), default="requires_manual_review", nullable=False, index=True)

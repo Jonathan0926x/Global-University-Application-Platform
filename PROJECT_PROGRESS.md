@@ -273,14 +273,14 @@
 * **Dependencies:** University Discovery, Universal Student Profile
 * **Relevant Files:**
   - [`docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md`](docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md), [`docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md`](docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md)
-  - `apps/api/alembic/versions/e4a7c2d901b5_phase4_financial_and_credential_engines.py`
-  - `apps/api/app/models/rag.py`, `apps/api/app/models/credentials.py`, `apps/api/app/ingestion/phase4_seed.py`
-  - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`
+  - `apps/api/alembic/versions/e4a7c2d901b5_phase4_financial_and_credential_engines.py`, `apps/api/alembic/versions/f1c9e4a2b870_phase4_provenance_and_freshness_governance.py`
+  - `apps/api/app/models/rag.py`, `apps/api/app/models/credentials.py`, `apps/api/app/models/requirements.py`, `apps/api/app/ingestion/phase4_seed.py`
+  - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`, `apps/api/app/services/freshness_governance.py`
   - `apps/api/app/api/v1/financial.py`, `apps/api/app/api/v1/credentials.py`
   - `apps/web/src/app/financial/page.tsx`, `apps/web/src/app/credentials/page.tsx`
-* **Acceptance Criteria:** **27** total verified US & global scholarship programs in PostgreSQL (**26** evaluated under undergraduate `bachelors` plus graduate-only `Fulbright` filtered by `degree_level`), audited with deterministic `ScholarshipEligibilityRule` + `enrollment_context` US community college matching and conservative COA-bounded Net Price offsets (`guaranteed_aid` vs `competitive_aid`, distinguishing statutory/guaranteed policies from conditional need aid); Dual-View International Credential Evaluator (`11` grading scales incl. FR/HT 0–20, DE Bavarian inverted 1.0–6.0, UK A-Levels, IN % & CGPA, IB /45, NG WAEC, BR, AU + `12` recognition/gatekeeping corridors) connected directly to `StudentProfile` `EnrollmentRecord`s via `GET /api/v1/credentials/profile-evaluate`; **59** backend `pytest` + **12** frontend tests + **16/16** Next.js routes + live browser QA.
+* **Acceptance Criteria:** **27** total verified US & global scholarship programs in PostgreSQL (**26** evaluated under undergraduate `bachelors` plus graduate-only `Fulbright` filtered by `degree_level`), audited with deterministic `ScholarshipEligibilityRule` + `enrollment_context` US community college matching and conservative COA-bounded Net Price offsets; Dual-View International Credential Evaluator (`11` grading scales + `12` recognition corridors) connected directly to `StudentProfile` `EnrollmentRecord`s via `GET /api/v1/credentials/profile-evaluate`; **Step 1 Provenance & Freshness Governance (`f1c9e4a2b870`, `freshness_governance.py`)** extending scholarship and credential/qualification tables with **6** freshness classifications, differentiated expiry policies (`90d` deadlines, `120d` amounts, `180d` eligibility, `365d` qualifications, `730d` grade scales), non-destructive historical retention, and independent validation tests without fabricating legacy metadata; **63** backend `pytest` + **12** frontend tests + **16/16** Next.js routes.
 * **Last Verified Date:** November 25, 2026
-* **Next Action:** Deploy outbound worker firewall (`infra/firewall/`) as a prerequisite before production launch, and proceed to Phase 5 pilot preparation (Clerk production JWT verification).
+* **Next Action:** Proceed to Phase 4 Step 2 (Global Scholarship & Qualification Coverage Expansion + Eligibility/Net-Price & Transcript Engine upgrades), and deploy outbound worker firewall (`infra/firewall/`) before production launch.
 
 ### 18. Security & Privacy Hardening
 * **Status:** ✅ **Tested** (Audit Retention Triggers, DNS Pinning & Outbound Firewall Configs)
