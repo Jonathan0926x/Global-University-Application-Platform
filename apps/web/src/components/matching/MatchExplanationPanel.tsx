@@ -322,19 +322,25 @@ export function MatchExplanationPanel({
           >
             University Profile
           </Link>
+          <Link
+            href={`/applications?institution_id=${rec.institution_id}&pathway=${rec.applicant_type}`}
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 transition-colors"
+          >
+            Route &amp; Apply
+          </Link>
           {rec.applicant_type === "transfer" ? (
             <Link
               href={`/transfer?institution=${rec.institution_id}`}
-              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 transition-colors"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100 transition-colors"
             >
-              Transfer Portal & Credit Check
+              Transfer Credit Check
             </Link>
           ) : (
             <Link
               href={`/first-year?institution=${rec.institution_id}`}
-              className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 transition-colors"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-100 transition-colors"
             >
-              First-Year Application
+              First-Year Checklist
             </Link>
           )}
         </div>

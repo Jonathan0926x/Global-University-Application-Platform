@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Menu,
   X,
-  Sparkles
+  Sparkles,
+  Send
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 import { LanguageModal } from "@/components/i18n/LanguageModal";
@@ -31,6 +32,7 @@ export function Header() {
     { href: "/matching", label: t("nav.matching", "Match Engine"), icon: Sparkles },
     { href: "/first-year", label: t("nav.first_year", "First-Year Portal"), icon: GraduationCap },
     { href: "/transfer", label: t("nav.transfer", "Transfer Portal"), icon: ArrowRightLeft },
+    { href: "/applications", label: t("nav.applications", "Applications"), icon: Send },
     { href: "/counselor", label: t("nav.counselor", "AI Counselor"), icon: Bot },
     { href: "/documents", label: t("nav.documents", "Document Vault"), icon: FileText },
     { href: "/universities", label: t("nav.universities", "Universities"), icon: Compass },

@@ -33,8 +33,10 @@ def test_institutions_and_application_workspaces(client):
     assert app_res.status_code == 201
     transfer_app = app_res.json()
     assert transfer_app["applicant_type"] == "transfer"
-    assert transfer_app["status"] == "planning"
+    assert transfer_app["status"] == "not_started"
     assert len(transfer_app["requirements_status"]) > 0
+    assert len(transfer_app["status_history"]) >= 1
+    assert transfer_app["status_history"][0]["to_status"] == "not_started"
 
     # Verify Transfer checklist items
     titles = [req["title"] for req in transfer_app["requirements_status"]]

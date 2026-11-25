@@ -120,6 +120,15 @@ test("Milestone 6 RAG counselor keys translate across Haitian Creole, French, Sp
   assert.equal(translate("counselor.new_chat", "ar-SA"), "محادثة جديدة");
 });
 
+test("Milestone 7 routing and application lifecycle keys translate cleanly across LTR and RTL", () => {
+  assert.equal(translate("nav.applications", "en-US"), "Applications & Routing");
+  assert.equal(translate("nav.applications", "fr-FR"), "Candidatures et Portails");
+  assert.equal(translate("nav.applications", "ar-SA"), "الطلبات والتوجيه الرسمي");
+  assert.ok(translate("applications.launch_portal", "ht-HT").includes("Pòtay Ofisyèl"));
+  assert.ok(translate("applications.report_submitted", "es-419").includes("Externamente"));
+  assert.ok(translate("applications.title", "ar-SA").includes("التقديم"));
+});
+
 
 
 

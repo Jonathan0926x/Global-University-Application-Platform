@@ -266,20 +266,27 @@ export default function FirstYearPortalPage() {
                   </div>
                 </div>
 
-                {/* Official Routing Notice */}
-                <div className="mt-5 rounded-lg bg-zinc-50 border border-zinc-200/80 p-3 text-xs flex items-center justify-between">
+                {/* Official Routing Notice (Milestone 7 Honest External Destination) */}
+                <div className="mt-5 rounded-lg bg-zinc-50 border border-zinc-200/80 p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-zinc-600">
-                    <Building2 className="h-4 w-4 text-zinc-400" />
-                    <span>Official Portal: Common App / UC Direct Application</span>
+                    <Building2 className="h-4 w-4 text-zinc-400 shrink-0" />
+                    {app.verified_routes && app.verified_routes.length > 0 ? (
+                      <span>
+                        Verified Official Destination:{" "}
+                        <strong className="text-zinc-900">{app.verified_routes[0].platform_name}</strong>
+                      </span>
+                    ) : (
+                      <span>
+                        {app.routing_notice || "Verify the institution's official destination in the Application Routing Tracker."}
+                      </span>
+                    )}
                   </div>
-                  <a
-                    href="https://admission.universityofcalifornia.edu"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700"
+                  <Link
+                    href={`/applications?pathway=first_year&institution_id=${app.institution_id}`}
+                    className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700 shrink-0"
                   >
-                    Launch Official System <Send className="h-3 w-3" />
-                  </a>
+                    Open Routing & External Portal <Send className="h-3 w-3" />
+                  </Link>
                 </div>
               </div>
             ))

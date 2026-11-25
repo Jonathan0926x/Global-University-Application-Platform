@@ -48,8 +48,9 @@ class Application(Base):
     institution_id = Column(UUID(as_uuid=True), ForeignKey("institutions.id"), nullable=False, index=True)
 
     applicant_type = Column(String(30), nullable=False, index=True) # first_year, transfer
-    status = Column(String(30), default="exploring", nullable=False, index=True)
-    # exploring, planning, in_progress, awaiting_documents, ready_to_submit, submitted, under_review, accepted, rejected, waitlisted
+    status = Column(String(40), default="not_started", nullable=False, index=True)
+    # Milestone 7 honest external lifecycle:
+    # not_started | preparing | ready_to_apply | redirected_to_external_portal | student_reported_submitted | submission_confirmed
 
     intended_major = Column(String(200), nullable=True)
     intended_term = Column(String(20), nullable=True)
@@ -58,15 +59,26 @@ class Application(Base):
     readiness_pct = Column(SmallInteger, default=0)
     notes = Column(Text, nullable=True)
 
+    selected_route_id = Column(UUID(as_uuid=True), ForeignKey("application_routes.id", ondelete="SET NULL"), nullable=True)
+    external_portal_url = Column(Text, nullable=True)
+    external_platform_name = Column(String(160), nullable=True)
+    redirected_at = Column(DateTime(timezone=True), nullable=True)
+    student_reported_submitted_at = Column(DateTime(timezone=True), nullable=True)
+    submission_confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    external_confirmation_number = Column(String(120), nullable=True)
+
     submitted_at = Column(DateTime(timezone=True), nullable=True)
-    submitted_via = Column(String(100), nullable=True) # Common App, Direct Portal, UC Application, ApplyTexas
+    submitted_via = Column(String(100), nullable=True) # Common App, Direct Portal, UC Application, UCAS, OUAC
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     profile = relationship("StudentProfile", back_populates="applications")
     institution = relationship("Institution", back_populates="applications")
+    selected_route = relationship("ApplicationRoute")
     requirements_status = relationship("ApplicationRequirementStatus", back_populates="application", cascade="all, delete-orphan")
+    status_history = relationship("ApplicationStatusHistory", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationStatusHistory.changed_at.desc()")
+    submission_evidence = relationship("ApplicationSubmissionEvidence", back_populates="application", cascade="all, delete-orphan", order_by="ApplicationSubmissionEvidence.submitted_at.desc()")
 
 
 class ApplicationRequirementStatus(Base):

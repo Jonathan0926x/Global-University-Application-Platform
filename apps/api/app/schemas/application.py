@@ -3,6 +3,13 @@ from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
+from app.schemas.routing import (
+    ApplicationRouteSchema,
+    DeadlineCountdownSchema,
+    StatusHistoryItemSchema,
+    SubmissionEvidenceSchema,
+)
+
 
 class RequirementStatusSchema(BaseModel):
     id: UUID
@@ -29,6 +36,8 @@ class InstitutionSummarySchema(BaseModel):
     state_province: Optional[str] = None
     city: Optional[str] = None
     institution_type: str
+    admissions_website: Optional[str] = None
+    application_portal_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +48,7 @@ class ApplicationCreate(BaseModel):
     intended_major: Optional[str] = None
     intended_term: Optional[str] = None
     academic_year: Optional[str] = None
+    route_id: Optional[UUID] = None
 
 
 class ApplicationResponse(BaseModel):
@@ -52,10 +62,25 @@ class ApplicationResponse(BaseModel):
     academic_year: Optional[str] = None
     readiness_pct: int
     notes: Optional[str] = None
+
+    selected_route_id: Optional[UUID] = None
+    external_portal_url: Optional[str] = None
+    external_platform_name: Optional[str] = None
+    redirected_at: Optional[datetime] = None
+    student_reported_submitted_at: Optional[datetime] = None
+    submission_confirmed_at: Optional[datetime] = None
+    external_confirmation_number: Optional[str] = None
+    submitted_via: Optional[str] = None
+
     created_at: datetime
     updated_at: datetime
     institution: Optional[InstitutionSummarySchema] = None
     requirements_status: List[RequirementStatusSchema] = []
+    status_history: List[StatusHistoryItemSchema] = []
+    submission_evidence: List[SubmissionEvidenceSchema] = []
+    verified_routes: List[ApplicationRouteSchema] = []
+    needs_verification_routes: List[ApplicationRouteSchema] = []
+    routing_notice: Optional[str] = None
+    deadlines: List[DeadlineCountdownSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
-

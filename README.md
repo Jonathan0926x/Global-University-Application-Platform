@@ -79,7 +79,7 @@ flowchart TD
 ## 🛠️ Technology Architecture
 
 > [!NOTE]
-> **Active Engineering Build (Phase 3, Milestone 6 Live):** UniGlobe runs Next.js 15 App Router, FastAPI + SQLAlchemy 2.0, PostgreSQL 16 + `pgvector` (`6,699` global/US institutions, `94` verified requirements, `3-Tier` transfer articulation, the `4-Dimensional` matching engine at `/matching`, and the hybrid `pgvector` + FTS RAG Multilingual AI Counselor at `/counselor`). Follow [Development Roadmap](docs/15_DEVELOPMENT_ROADMAP.md) and [`PROJECT_PROGRESS.md`](PROJECT_PROGRESS.md) for current milestone status.
+> **Active Engineering Build (Phase 3, Milestones 1–7 Complete):** UniGlobe runs Next.js 15 App Router, FastAPI + SQLAlchemy 2.0, PostgreSQL + `pgvector` (`6,699` global/US institutions, `94` verified requirements, `3-Tier` transfer articulation, `4-Dimensional` matching at `/matching`, hybrid `pgvector` + FTS RAG Multilingual AI Counselor at `/counselor`, and the Official Application Routing Directory & 6-state Honest External Confirmation Tracker at `/applications`). Follow [Development Roadmap](docs/15_DEVELOPMENT_ROADMAP.md) and [`PROJECT_PROGRESS.md`](PROJECT_PROGRESS.md) for current milestone status.
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -121,8 +121,8 @@ The platform tracks work across distinct verification states:
 | **1. Strategic & Technical Documentation** | ✅ **Complete (15/15)** | All 15 foundational specifications and deep-dive models completed. |
 | **2. Architecture Foundation (Phase 1)** | ✅ **Complete & Tested** | Turborepo monorepo, Next.js 15, FastAPI, PostgreSQL 17 + pgvector, Alembic. |
 | **3. Internationalization & Vault (Phase 2)** | ✅ **Complete & E2E Audited** | 36-language BCP 47 registry, 4 RTL layouts (ar, he, fa, ur), Multilingual Counselor, Document Vault with SHA-256 integrity, mobile drawer. |
-| **4. Global University, Requirements & Transfer Engine (Phase 3 M1–M4)** | ✅ **Complete & Tested** | `6,699` institutions, `94` verified requirements (`21` universities / `9` countries), `52` catalog courses, `33` Tier 1/2 equivalencies, Tier 3 `pgvector` content matching, `/universities/[id]` & `/transfer`. |
-| **5. Automated Test Verification** | ✅ **39 Tests Passing** | 32 pytest tests in backend + 7 node tests in frontend (100% pass). |
+| **4. Global Intelligence, Matching, RAG Counselor & Routing (Phase 3 M1–M7)** | ✅ **Complete & Tested** | `6,699` institutions, `94` verified requirements, `33` Tier 1/2 equivalencies + `pgvector` Tier 3 matching, 4D Match Engine (`/matching`), Hybrid RAG Counselor (`/counselor`), and **428** seeded routes (`28` verified) + 6-state confirmation tracker (`/applications`). |
+| **5. Automated Test Verification** | ✅ **57 Tests Passing** | **47** backend `pytest` tests + **10** frontend `node:test` unit tests (100% pass) + live browser QA. |
 | **6. Live Services** | ✅ **Operational & Verified** | Web at `http://localhost:3000` & API at `http://127.0.0.1:8000`. |
 
 

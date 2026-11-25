@@ -62,16 +62,105 @@ export interface ApplicationRequirement {
   source_url?: string;
 }
 
+export interface ApplicationRouteItem {
+  id: string;
+  institution_id?: string | null;
+  institution_name?: string | null;
+  platform_name: string;
+  platform_type: string;
+  country_code: string;
+  applicant_type: string;
+  official_url: string;
+  international_instructions?: string | null;
+  notes?: string | null;
+  source_name: string;
+  source_url?: string | null;
+  verification_status: string;
+  confidence_level: string;
+  verified_at?: string | null;
+  last_checked_at: string;
+  is_active: boolean;
+}
+
+export interface InstitutionRoutingResolution {
+  institution_id: string;
+  institution_name: string;
+  applicant_type: string;
+  routing_status: "verified_available" | "needs_verification_only" | "no_verified_destination" | string;
+  has_verified_destination: boolean;
+  verified_routes: ApplicationRouteItem[];
+  needs_verification_routes: ApplicationRouteItem[];
+  excluded_unverified: Array<{ platform_name: string; reason: string; verification_status: string }>;
+  notice?: string | null;
+}
+
+export interface DeadlineCountdownItem {
+  id: string;
+  intake_term: string;
+  deadline_type: string;
+  deadline_date?: string | null;
+  days_remaining?: number | null;
+  is_passed: boolean;
+  is_urgent: boolean;
+  verification_status: string;
+  source_name: string;
+  source_url?: string | null;
+  notes?: string | null;
+}
+
+export interface StatusHistoryItem {
+  id: string;
+  from_status?: string | null;
+  to_status: string;
+  actor_role: string;
+  reason?: string | null;
+  metadata_json: Record<string, unknown>;
+  changed_at: string;
+}
+
+export interface SubmissionEvidenceItem {
+  id: string;
+  application_id: string;
+  document_id?: string | null;
+  original_filename?: string | null;
+  evidence_type: string;
+  external_confirmation_number?: string | null;
+  submitted_note?: string | null;
+  review_status: "pending" | "accepted" | "rejected" | string;
+  reviewer_notes?: string | null;
+  submitted_at: string;
+  reviewed_at?: string | null;
+}
+
 export interface ApplicationWorkspace {
   id: string;
+  profile_id?: string;
   institution_id: string;
   applicant_type: "first_year" | "transfer";
   status: string;
   intended_major?: string;
   intended_term?: string;
+  academic_year?: string;
   readiness_pct: number;
+  notes?: string;
+  selected_route_id?: string | null;
+  external_portal_url?: string | null;
+  external_platform_name?: string | null;
+  redirected_at?: string | null;
+  student_reported_submitted_at?: string | null;
+  submission_confirmed_at?: string | null;
+  external_confirmation_number?: string | null;
+  submitted_via?: string | null;
+  created_at?: string;
+  updated_at?: string;
   institution?: Institution;
   requirements_status: ApplicationRequirement[];
+  status_history?: StatusHistoryItem[];
+  submission_evidence?: SubmissionEvidenceItem[];
+  verified_routes?: ApplicationRouteItem[];
+  needs_verification_routes?: ApplicationRouteItem[];
+  routing_notice?: string | null;
+  deadlines?: DeadlineCountdownItem[];
 }
 
 export async function fetchHealth() {
@@ -182,7 +271,9 @@ export async function fetchApplications(applicantType?: string): Promise<Applica
 export async function createApplication(
   institutionId: string,
   applicantType: "first_year" | "transfer",
-  intendedMajor?: string
+  intendedMajor?: string,
+  intendedTerm?: string,
+  routeId?: string
 ): Promise<ApplicationWorkspace> {
   const res = await fetch(`${API_BASE_URL}/applications`, {
     method: "POST",
@@ -194,6 +285,8 @@ export async function createApplication(
       institution_id: institutionId,
       applicant_type: applicantType,
       intended_major: intendedMajor,
+      intended_term: intendedTerm,
+      route_id: routeId,
     }),
   });
   if (!res.ok) throw new Error("Failed to create application workspace");
@@ -1154,6 +1247,166 @@ export async function compareInstitutions(payload: {
   });
   if (!res.ok) throw new Error("Failed to compare institutions");
   return res.json();
+}
+
+// ============================================================================
+// Phase 3 Milestone 7: Official Application Routing & External Confirmation Flow
+// ============================================================================
+
+export async function fetchRoutingDirectory(params?: {
+  q?: string;
+  country?: string;
+  applicant_type?: string;
+  platform_type?: string;
+  verified_only?: boolean;
+  limit?: number;
+}): Promise<ApplicationRouteItem[]> {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.append("q", params.q);
+  if (params?.country) qs.append("country", params.country);
+  if (params?.applicant_type && params.applicant_type !== "all") qs.append("applicant_type", params.applicant_type);
+  if (params?.platform_type) qs.append("platform_type", params.platform_type);
+  if (params?.verified_only) qs.append("verified_only", "true");
+  if (params?.limit) qs.append("limit", String(params.limit));
+
+  const res = await fetch(`${API_BASE_URL}/routing/directory${qs.toString() ? `?${qs.toString()}` : ""}`);
+  if (!res.ok) throw new Error("Failed to fetch application routing directory");
+  return res.json();
+}
+
+export async function fetchInstitutionRouting(
+  institutionId: string,
+  applicantType: "first_year" | "transfer" = "first_year"
+): Promise<InstitutionRoutingResolution | null> {
+  const res = await fetch(
+    `${API_BASE_URL}/routing/institutions/${institutionId}?applicant_type=${applicantType}`
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function updateRequirementItemStatus(
+  applicationId: string,
+  requirementStatusId: string,
+  itemStatus: "pending" | "in_progress" | "completed"
+): Promise<ApplicationWorkspace> {
+  const res = await fetch(
+    `${API_BASE_URL}/applications/${applicationId}/requirements/${requirementStatusId}?item_status=${itemStatus}`,
+    {
+      method: "POST",
+      headers: { ...auth.getAuthHeader() },
+    }
+  );
+  if (!res.ok) throw new Error("Failed to update checklist item");
+  return res.json();
+}
+
+export async function updateApplicationStatus(
+  applicationId: string,
+  status: string,
+  reason?: string
+): Promise<ApplicationWorkspace> {
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/status`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify({ status, reason }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to update application status");
+  }
+  return res.json();
+}
+
+export async function recordExternalRedirect(
+  applicationId: string,
+  payload: { route_id?: string; target_url?: string; acknowledge_unverified?: boolean }
+): Promise<{
+  application: ApplicationWorkspace;
+  redirect_url: string;
+  verified_route: boolean;
+  notice: string;
+}> {
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/redirect`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to record external portal redirect");
+  }
+  return res.json();
+}
+
+export async function reportExternalSubmission(
+  applicationId: string,
+  payload: { external_confirmation_number?: string; submitted_via?: string; note?: string }
+): Promise<ApplicationWorkspace> {
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/report-submission`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...auth.getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to report external submission");
+  }
+  return res.json();
+}
+
+export async function uploadSubmissionEvidence(
+  applicationId: string,
+  params: {
+    file?: File;
+    document_id?: string;
+    evidence_type?: string;
+    external_confirmation_number?: string;
+    submitted_note?: string;
+  }
+): Promise<SubmissionEvidenceItem> {
+  const formData = new FormData();
+  formData.append("evidence_type", params.evidence_type || "portal_screenshot");
+  if (params.external_confirmation_number) {
+    formData.append("external_confirmation_number", params.external_confirmation_number);
+  }
+  if (params.submitted_note) {
+    formData.append("submitted_note", params.submitted_note);
+  }
+  if (params.document_id) {
+    formData.append("document_id", params.document_id);
+  }
+  if (params.file) {
+    formData.append("file", params.file);
+  }
+
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}/evidence`, {
+    method: "POST",
+    headers: { ...auth.getAuthHeader() },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to upload submission evidence");
+  }
+  return res.json();
+}
+
+export async function deleteApplicationWorkspace(applicationId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/applications/${applicationId}`, {
+    method: "DELETE",
+    headers: { ...auth.getAuthHeader() },
+  });
+  if (!res.ok) throw new Error("Failed to remove application workspace");
 }
 
 

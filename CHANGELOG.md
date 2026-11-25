@@ -6,10 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 In Progress (Milestone 7)
+## [Unreleased] - Phase 3 Complete / Phase 4 Planning
 
 ### Planned
-- Milestone 7: Application Routing directory, link verification, and honest external confirmation flow.
+- Phase 4: Financial Affordability Engine & Production Verifier Console.
+
+---
+
+## [0.7.0-m7] - 2026-11-24
+
+### Added — Phase 3 Milestone 7: Official Application Routing Directory & External Confirmation Flow
+- **Routing & Confirmation Lifecycle Schema (`61d97d129fb9`):**
+  - Added `application_routes` (curated institutional portals and centralized platforms with `verification_status`, `confidence_level`, `source_name`, `verified_at`, `last_checked_at`, and international applicant guidance), `application_status_history` (immutable actor/role audit trail), and `application_submission_evidence` (Document Vault proof linkage and verifier review state `pending` / `accepted` / `rejected`).
+  - Extended `applications` (`selected_route_id`, `external_portal_url`, `external_platform_name`, `redirected_at`, `student_reported_submitted_at`, `submission_confirmed_at`, `external_confirmation_number`).
+- **Official Application Routing Directory & URL Safety (`routing_seed.py`, `routing.py`):**
+  - Seeded **428** routing rows (**8** centralized platforms including `Common App`, `Common App for Transfer`, `UC Application`, `UCAS`, `OUAC`, `Études en France`, `uni-assist`, `Cal State Apply`; **20** curated institutional portals; **400** IPEDS `needs_verification` candidates flagged separately from verified routes).
+  - Enforced structural URL validation (`validate_routing_url` / `POST /api/v1/routing/validate-url`) rejecting empty strings, `javascript:`/`file:`/`ftp:` schemes, whitespace, localhost, and raw IP literals, while excluding unverified links from `verified_routes`.
+- **Honest 6-State External Lifecycle, Document Vault Evidence & RBAC (`routing_engine.py`, `applications.py`):**
+  - Enforced transitions across `not_started`, `preparing`, `ready_to_apply`, `redirected_to_external_portal`, `student_reported_submitted`, and `submission_confirmed`.
+  - Clicking external launch (`POST /api/v1/applications/{id}/redirect`) records only `redirected_to_external_portal` and blocks unverified redirects without explicit `acknowledge_unverified=true`.
+  - Student submission self-reporting (`POST /api/v1/applications/{id}/report-submission`) and Document Vault confirmation uploads (`POST /api/v1/applications/{id}/evidence`) move strictly to `student_reported_submitted` (`pending` evidence) — student attempts to self-confirm `submission_confirmed` or review evidence return `403 Forbidden` via `require_admin_claims`.
+- **Student UI (`/applications`, Header, `/first-year`, `/matching`) & Verification:**
+  - Built `/applications` dual-tab UI (`My Applications Tracker` + `Official Routing Directory`), replaced the hardcoded UC portal link in `/first-year`, wired `/matching` `Route & Apply` quick links, and added `nav.applications` / `applications.*` keys across all 10 languages including Arabic RTL (`ar-SA`).
+  - Verified with **47** passing backend `pytest` tests (`4` new in `test_milestone7_application_routing.py`), **10** passing frontend unit tests, Next.js `pnpm build`, and 5 live browser scenarios (0 console errors, 0 HTTP >= 400).
 
 ---
 

@@ -174,7 +174,12 @@ backend/
 | `POST` | `/api/v1/transfer/check-equivalencies` | Compare completed courses to target institution catalog |
 | `GET` | `/api/v1/applications` | List active application workspaces |
 | `POST` | `/api/v1/applications` | Initialize application workspace and generate dynamic checklist |
-| `GET` | `/api/v1/applications/{id}/checklist` | Fetch live application requirements status |
+| `POST` | `/api/v1/applications/{id}/redirect` | Record honest external portal redirect (`redirected_to_external_portal`, never submitted) |
+| `POST` | `/api/v1/applications/{id}/report-submission` | Record self-reported submission (`student_reported_submitted`) |
+| `POST` | `/api/v1/applications/{id}/evidence` | Attach Document Vault confirmation artifact (`pending` review) |
+| `POST` | `/api/v1/applications/evidence/{id}/review` | RBAC-restricted verifier approval promoting to `submission_confirmed` |
+| `GET` | `/api/v1/routing/directory` | Search verified institutional & centralized application portals |
+| `POST` | `/api/v1/routing/validate-url` | Structural & SSRF safety validation for external application URLs |
 | `POST` | `/api/v1/documents/upload-intent` | Issue time-limited presigned S3 upload URL |
 | `GET` | `/api/v1/scholarships/matched` | Retrieve personalized matched scholarship portfolio |
 | `POST` | `/api/v1/matching/recommendations` | Execute 4-dimensional compatibility matching |
