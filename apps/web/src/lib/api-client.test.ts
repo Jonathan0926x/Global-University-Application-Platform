@@ -139,6 +139,13 @@ test("Operations console keys translate cleanly across Arabic RTL, French, Spani
   assert.ok(translate("ops.forbidden_title", "ar-SA").includes("403"));
 });
 
+test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL", () => {
+  assert.equal(translate("nav.financial", "en-US"), "Financial & Aid");
+  assert.equal(translate("nav.financial", "ar-SA"), "المنح والتكلفة الصافية");
+  assert.equal(translate("nav.credentials", "ht-HT"), "Ekivalans Diplòm");
+  assert.equal(translate("cred.title", "fr-FR"), "Intelligence des Diplômes Internationaux & Équivalences");
+});
+
 
 
 

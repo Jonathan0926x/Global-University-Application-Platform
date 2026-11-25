@@ -23,7 +23,8 @@ from app.models.matching import MatchingPreference, UniversityRecommendation
 from app.models.application import StandardizedTest, ExtracurricularActivity, Application, ApplicationRequirementStatus
 from app.models.document import Document, DocumentExtraction, DocumentTranslation
 from app.models.counselor import CounselorConversation, CounselorMessage
-from app.models.rag import ScholarshipProgram, RagKnowledgeChunk
+from app.models.rag import ScholarshipProgram, ScholarshipEligibilityRule, RagKnowledgeChunk
+from app.models.credentials import GradeConversionRule, CredentialRecognitionRule
 from app.models.routing import (
     ApplicationRoute,
     ApplicationRouteAudit,
@@ -69,6 +70,9 @@ __all__ = [
     "CounselorConversation",
     "CounselorMessage",
     "ScholarshipProgram",
+    "ScholarshipEligibilityRule",
+    "GradeConversionRule",
+    "CredentialRecognitionRule",
     "RagKnowledgeChunk",
     "ApplicationRoute",
     "ApplicationRouteAudit",

@@ -2,10 +2,13 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Boolean,
+    CHAR,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
 )
@@ -37,6 +40,33 @@ class ScholarshipProgram(Base):
     covers_international = Column(Boolean, default=False, nullable=False)
     max_award_info = Column(String(255), nullable=True)
     eligibility_summary = Column(Text, nullable=False)
+
+    # Phase 4 structured financial & eligibility metadata
+    provider_type = Column(String(40), default="university", nullable=False)
+    award_type = Column(String(40), default="fixed_amount", nullable=False)
+    award_amount_min_usd = Column(Numeric(12, 2), nullable=True)
+    award_amount_max_usd = Column(Numeric(12, 2), nullable=True)
+    award_currency = Column(CHAR(3), default="USD", nullable=False)
+    is_renewable = Column(Boolean, default=True, nullable=False)
+
+    covers_tuition = Column(Boolean, default=True, nullable=False)
+    covers_fees = Column(Boolean, default=False, nullable=False)
+    covers_housing = Column(Boolean, default=False, nullable=False)
+    covers_meals = Column(Boolean, default=False, nullable=False)
+    covers_health_insurance = Column(Boolean, default=False, nullable=False)
+    provides_living_stipend = Column(Boolean, default=False, nullable=False)
+
+    application_deadline_date = Column(Date, nullable=True)
+    is_deadline_rolling = Column(Boolean, default=False, nullable=False)
+    min_gpa_4 = Column(Numeric(4, 2), nullable=True)
+    requires_financial_need = Column(Boolean, default=False, nullable=False)
+
+    eligible_citizenships = Column(JSONB, default=list, nullable=False)
+    eligible_residency_states = Column(JSONB, default=list, nullable=False)
+    eligible_destination_countries = Column(JSONB, default=list, nullable=False)
+    degree_levels = Column(JSONB, default=lambda: ["bachelors"], nullable=False)
+    is_guaranteed_statutory = Column(Boolean, default=False, nullable=False)
+
     source_name = Column(String(255), nullable=False)
     source_url = Column(String(500), nullable=False)
     verified_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
@@ -44,6 +74,34 @@ class ScholarshipProgram(Base):
     is_current = Column(Boolean, default=True, nullable=False)
 
     institution = relationship("Institution")
+    rules = relationship(
+        "ScholarshipEligibilityRule",
+        back_populates="scholarship",
+        cascade="all, delete-orphan",
+    )
+
+
+class ScholarshipEligibilityRule(Base):
+    """
+    Deterministic eligibility rule attached to a verified ScholarshipProgram.
+    """
+    __tablename__ = "scholarship_eligibility_rules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scholarship_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("scholarship_programs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rule_dimension = Column(String(50), nullable=False, index=True)
+    rule_operator = Column(String(30), nullable=False)
+    rule_value = Column(JSONB, default=dict, nullable=False)
+    human_label = Column(String(255), nullable=False)
+    is_mandatory = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    scholarship = relationship("ScholarshipProgram", back_populates="rules")
 
 
 class RagKnowledgeChunk(Base):

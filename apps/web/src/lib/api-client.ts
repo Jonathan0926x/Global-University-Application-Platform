@@ -1699,3 +1699,252 @@ export async function reviewEvidenceItem(
 
 
 
+
+
+// ---------------------------------------------------------------------------
+// Phase 4: Verified Scholarships, Net Price Calculator & Credential Evaluation
+// ---------------------------------------------------------------------------
+export interface ScholarshipRuleEvaluation {
+  dimension: string;
+  human_label: string;
+  status: "pass" | "fail" | "missing_data" | string;
+  detail: string;
+  is_mandatory: boolean;
+}
+
+export interface ScholarshipEligibilityResult {
+  id: string;
+  institution_id?: string | null;
+  institution_name?: string | null;
+  country_code: string;
+  title: string;
+  provider_type: string;
+  award_type: string;
+  applicant_type: string;
+  funding_type: string;
+  covers_international: boolean;
+  award_amount_min_usd?: number | null;
+  award_amount_max_usd?: number | null;
+  max_award_info?: string | null;
+  eligibility_summary: string;
+  covers_tuition: boolean;
+  covers_fees: boolean;
+  covers_housing: boolean;
+  covers_meals: boolean;
+  covers_health_insurance: boolean;
+  provides_living_stipend: boolean;
+  is_renewable: boolean;
+  is_guaranteed_statutory: boolean;
+  application_deadline_date?: string | null;
+  is_deadline_rolling: boolean;
+  min_gpa_4?: number | null;
+  requires_financial_need: boolean;
+  eligible_citizenships: string[];
+  eligible_residency_states: string[];
+  eligible_destination_countries: string[];
+  eligibility_status: "eligible" | "conditionally_eligible" | "ineligible" | string;
+  match_score: number;
+  rule_evaluations: ScholarshipRuleEvaluation[];
+  missing_requirements: string[];
+  failed_reasons: string[];
+  source_name: string;
+  source_url: string;
+  verified_at: string;
+}
+
+export interface ScholarshipMatchResponse {
+  evaluated_profile: Record<string, unknown>;
+  total_scholarships: number;
+  eligible_count: number;
+  conditionally_eligible_count: number;
+  ineligible_count: number;
+  results: ScholarshipEligibilityResult[];
+  disclaimer: string;
+}
+
+export interface CostLineItem {
+  key: string;
+  label: string;
+  category: string;
+  amount_usd?: number | null;
+  is_published: boolean;
+  notes?: string | null;
+}
+
+export interface AidOffsetItem {
+  scholarship_id: string;
+  title: string;
+  provider_type: string;
+  eligibility_status: string;
+  is_guaranteed_statutory: boolean;
+  estimated_min_usd: number;
+  estimated_max_usd: number;
+  source_url: string;
+}
+
+export interface NetPriceCalculationResponse {
+  institution_id: string;
+  institution_name: string;
+  country_code: string;
+  residency_classification: string;
+  housing_preference: string;
+  applicant_type: string;
+  academic_year?: string | null;
+  currency: string;
+  direct_billable_items: CostLineItem[];
+  indirect_living_items: CostLineItem[];
+  gross_direct_cost_usd?: number | null;
+  gross_indirect_cost_usd?: number | null;
+  total_coa_usd?: number | null;
+  guaranteed_aid_min_usd: number;
+  guaranteed_aid_max_usd: number;
+  competitive_aid_min_usd: number;
+  competitive_aid_max_usd: number;
+  eligible_aid_min_usd: number;
+  eligible_aid_max_usd: number;
+  estimated_net_price_min_usd?: number | null;
+  estimated_net_price_max_usd?: number | null;
+  multi_year_net_min_usd?: number | null;
+  multi_year_net_max_usd?: number | null;
+  annual_budget_usd?: number | null;
+  budget_gap_min_usd?: number | null;
+  budget_gap_max_usd?: number | null;
+  affordability_status: string;
+  aid_offsets: AidOffsetItem[];
+  data_confidence: string;
+  warnings: string[];
+  sources: Array<{ name?: string | null; url?: string | null }>;
+  disclaimer: string;
+}
+
+export interface GradingSystemOption {
+  source_country_code: string;
+  grading_system_key: string;
+  scale_name: string;
+  academic_level: string;
+  is_inverted_scale: boolean;
+  methodology: string;
+  sample_values: string[];
+}
+
+export interface CredentialRecognitionRule {
+  id: string;
+  source_country_code: string;
+  destination_country_code: string;
+  source_credential_name: string;
+  is_directly_recognized: boolean;
+  requires_external_evaluation: boolean;
+  accepted_evaluation_agencies: string[];
+  requires_official_translation: boolean;
+  translation_requirements?: string | null;
+  requires_apostille_or_legalization: boolean;
+  requires_direct_institutional_dispatch: boolean;
+  english_waiver_policy?: string | null;
+  pathway_notes: string;
+  source_name: string;
+  source_url: string;
+  verified_at: string;
+}
+
+export interface CredentialEvaluationResponse {
+  conversion: {
+    native_record: {
+      country_code: string;
+      grading_system_key: string;
+      scale_name: string;
+      raw_input: string;
+      classification: string;
+      is_passing?: boolean | null;
+      is_inverted_scale: boolean;
+      academic_level: string;
+    };
+    informational_equivalency: {
+      us_4_0_point?: number | null;
+      us_4_0_low?: number | null;
+      us_4_0_high?: number | null;
+      us_letter_equivalent: string;
+      german_bavarian_equivalent?: number | null;
+      methodology: string;
+      methodology_citation: string;
+      percentile_note?: string | null;
+      confidence_level: string;
+    };
+  };
+  recognition_rules: CredentialRecognitionRule[];
+  country_qualifications: Array<{
+    country_code: string;
+    qualification_name: string;
+    qualification_type: string;
+    grading_scale: string;
+    passing_threshold: string;
+    equivalency_notes: string;
+    source_name: string;
+    source_url: string;
+  }>;
+  advisory_disclaimer: string;
+}
+
+export async function matchScholarships(payload: {
+  citizenship_country?: string;
+  residency_state?: string;
+  applicant_type?: string;
+  gpa_4?: number;
+  financial_need_level?: string;
+  household_income_usd?: number;
+  destination_country?: string;
+  institution_id?: string;
+  include_ineligible?: boolean;
+}): Promise<ScholarshipMatchResponse> {
+  const res = await fetch(`${API_BASE_URL}/financial/scholarships/match`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...auth.getAuthHeader() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to evaluate scholarship eligibility");
+  return res.json();
+}
+
+export async function calculateNetPrice(payload: {
+  institution_id: string;
+  residency_classification: string;
+  housing_preference: string;
+  applicant_type: string;
+  citizenship_country?: string;
+  residency_state?: string;
+  gpa_4?: number;
+  financial_need_level?: string;
+  household_income_usd?: number;
+  annual_budget_usd?: number;
+  program_years?: number;
+  include_competitive_aid?: boolean;
+}): Promise<NetPriceCalculationResponse> {
+  const res = await fetch(`${API_BASE_URL}/financial/net-price`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...auth.getAuthHeader() },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to calculate institutional net price");
+  return res.json();
+}
+
+export async function fetchGradingSystems(): Promise<GradingSystemOption[]> {
+  const res = await fetch(`${API_BASE_URL}/credentials/systems`);
+  if (!res.ok) throw new Error("Failed to fetch international grading systems");
+  return res.json();
+}
+
+export async function evaluateInternationalCredential(payload: {
+  source_country_code: string;
+  grading_system_key: string;
+  raw_grade: string;
+  destination_country_code: string;
+  academic_level?: string;
+}): Promise<CredentialEvaluationResponse> {
+  const res = await fetch(`${API_BASE_URL}/credentials/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to evaluate international credential");
+  return res.json();
+}

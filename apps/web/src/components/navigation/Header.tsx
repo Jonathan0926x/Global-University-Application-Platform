@@ -16,7 +16,9 @@ import {
   Menu,
   X,
   Sparkles,
-  Send
+  Send,
+  Coins,
+  Award
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 import { LanguageModal } from "@/components/i18n/LanguageModal";
@@ -30,6 +32,8 @@ export function Header() {
   const navLinks = [
     { href: "/dashboard", label: t("nav.student_os", "Student OS"), icon: LayoutDashboard },
     { href: "/matching", label: t("nav.matching", "Match Engine"), icon: Sparkles },
+    { href: "/financial", label: t("nav.financial", "Financial & Aid"), icon: Coins },
+    { href: "/credentials", label: t("nav.credentials", "Credentials"), icon: Award },
     { href: "/first-year", label: t("nav.first_year", "First-Year Portal"), icon: GraduationCap },
     { href: "/transfer", label: t("nav.transfer", "Transfer Portal"), icon: ArrowRightLeft },
     { href: "/applications", label: t("nav.applications", "Applications"), icon: Send },

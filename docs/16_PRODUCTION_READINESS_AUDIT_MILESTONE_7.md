@@ -29,6 +29,6 @@ The evidence review endpoints use `admin`/`data_verifier` role checks. Student e
 
 ## Remaining / Follow-On Operations Hardening
 
-- Configure production outbound network egress rules (`iptables` / cloud security groups blocking RFC1918 & `169.254.169.254` from API workers) as defense-in-depth alongside `_PinnedPublicIPBackend`, then resume Phase 4 financial and international expansion.
+- Configured production outbound firewall artifacts in `infra/firewall/` (`egress-iptables.sh`, `k8s-api-worker-egress-networkpolicy.yaml`, `docker-compose.prod.yml`) blocking RFC1918 private ranges, loopback, CGNAT, link-local, IPv6 private/mapped ranges, and cloud metadata `169.254.169.254/32` as infrastructure defense-in-depth alongside `_PinnedPublicIPBackend`. Apply the script/NetworkPolicy to target production clusters during deployment.
 
 The fixes in this audit preserve the rule that an external redirect is not proof of submission. Only accepted supporting evidence can produce `submission_confirmed`.

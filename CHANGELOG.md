@@ -6,10 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [Unreleased] - Phase 3 Complete / Phase 4 Planning
+## [Unreleased] - Phase 4 Active
 
-### Planned
-- Phase 4: Financial Affordability Engine & Production Verifier Console.
+### Added — Outbound Worker Firewall & Phase 4 Foundation (Scholarships, Net Price & Credentials)
+- **Production API Worker Outbound Firewall (`infra/firewall/`):**
+  - Added Linux `iptables`/`ip6tables` defense-in-depth egress rules (`egress-iptables.sh`) and Kubernetes `NetworkPolicy` (`k8s-api-worker-egress-networkpolicy.yaml`) plus hardened compose network segmentation (`docker-compose.prod.yml`) blocking RFC1918 private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback, CGNAT, link-local, IPv6 ULA/link-local/mapped ranges, and cloud metadata `169.254.169.254`.
+- **Phase 4 Schema & Verified Global Seed Catalog (`e4a7c2d901b5`, `phase4_seed.py`):**
+  - Extended `scholarship_programs` with structured award min/max amounts, coverage flags, statutory/guaranteed indicators, GPA floors, and citizenship/residency/destination targets alongside `scholarship_eligibility_rules`; added `grade_conversion_rules` and `credential_recognition_rules`.
+  - Seeded **16** verified US & global scholarships (institutional need/merit, UC/UMich/CCPG state programs, Federal Pell Grant, Jack Kent Cooke Transfer, Fulbright, OAS/Rowe Fund, Pearson UofT, McGill Mastercard, Reach Oxford, TUM, Sorbonne/Campus France, UTokyo PEAK), **11** native grading scales (`FR 0–20`, `HT 0–20`, `DE 1.0–6.0`, `GB A-Levels`, `IN %` & `10-pt CGPA`, `IB /45`, `CA %`, `NG WAEC`, `BR 0–10`, `AU ATAR`), and **12** bilateral credential recognition gatekeeping records.
+- **Deterministic Engines, APIs & Multilingual UI (`/financial`, `/credentials`):**
+  - Implemented `match_scholarships_deterministic` and `calculate_net_price` (`app/services/financial_engine.py`, `app/api/v1/financial.py`), plus dual-view grade & recognition evaluator `evaluate_credential` (`app/services/credential_engine.py`, `app/api/v1/credentials.py`).
+  - Built `/financial` (Scholarship Matcher + Net Price Calculator) and `/credentials` (Dual-View International Credential Evaluator) wired into `Header.tsx` across all 10 languages including Arabic RTL (`ar-SA`).
+- **Verification:** **58 / 58** backend `pytest` (`test_phase4_financial_and_credentials.py`), **12 / 12** frontend unit tests, **16 / 16** Next.js build routes, and live browser QA.
 
 ---
 

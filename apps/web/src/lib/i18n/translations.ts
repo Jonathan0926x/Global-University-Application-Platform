@@ -15,6 +15,7 @@
  */
 
 import { OPERATIONS_TRANSLATIONS } from "./operations-translations.ts";
+import { PHASE4_TRANSLATIONS } from "./phase4-translations.ts";
 
 export const UI_TRANSLATIONS: Record<string, Record<string, string>> = {
   // Brand & Master Statement
@@ -1077,6 +1078,7 @@ export const UI_TRANSLATIONS: Record<string, Record<string, string>> = {
     "de-DE": "Externe Einreichung melden",
   },
   ...OPERATIONS_TRANSLATIONS,
+  ...PHASE4_TRANSLATIONS,
 };
 
 /**

@@ -43,8 +43,8 @@
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
 | **AI College Counselor** | ✅ **Tested** (Milestone 6 Live: Hybrid pgvector RAG) | P0 | Phase 3 M6 | Nov 24, 2026 | AI / Backend |
-| **Scholarship & Net Price** | 🚀 **Implemented (Verified Aid Seeds)** / Expanding | P1 | Phase 3 M6 / Phase 4 | Phase 4 (M5) | Backend / Full Stack |
-| **Security & Privacy Testing**| ⏳ **In Progress** | P0 | Phase 1–5 | Continuous | Security / QA |
+| **Scholarship & Net Price** | ✅ **Tested** (Phase 4: Scholarships, Net Price & Credentials Live) | P1 | Phase 4 | Nov 25, 2026 | Backend / Full Stack |
+| **Security & Privacy Testing**| ✅ **Tested** (DB Audit Triggers + DNS Pinning + Outbound Firewall) | P0 | Phase 1–5 | Nov 25, 2026 | Security / QA |
 | **Beta Release (Pilot)** | ⭕ **Not Started** | P0 | Phase 5 | Phase 5 (M6) | Entire Team |
 
 ---
@@ -267,26 +267,32 @@
 * **Last Verified Date:** November 24, 2026
 * **Next Action:** Milestone 7 external application routing directory and link verification.
 
-### 17. Scholarship & Financial Affordability Engine
-* **Status:** ⭕ **Not Started**
+### 17. Scholarship, Net Price & International Credential Engines (Phase 4)
+* **Status:** ✅ **Tested** (`/financial` + `/credentials` Live)
 * **Priority:** P1
 * **Dependencies:** University Discovery, Universal Student Profile
-* **Relevant Files:** [`docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md`](docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md)
-* **Acceptance Criteria:** Net Price calculation engine; institutional scholarship database; I-20 financial proof-of-funds readiness summary for international students.
-* **Last Verified Date:** November 23, 2026
-* **Next Action:** Phase 4 institutional financial aid formula models.
+* **Relevant Files:**
+  - [`docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md`](docs/12_GLOBAL_SCHOLARSHIP_AND_FINANCIAL_ENGINE.md), [`docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md`](docs/09_INTERNATIONAL_EDUCATION_INTELLIGENCE.md)
+  - `apps/api/alembic/versions/e4a7c2d901b5_phase4_financial_and_credential_engines.py`
+  - `apps/api/app/models/rag.py`, `apps/api/app/models/credentials.py`, `apps/api/app/ingestion/phase4_seed.py`
+  - `apps/api/app/services/financial_engine.py`, `apps/api/app/services/credential_engine.py`
+  - `apps/api/app/api/v1/financial.py`, `apps/api/app/api/v1/credentials.py`
+  - `apps/web/src/app/financial/page.tsx`, `apps/web/src/app/credentials/page.tsx`
+* **Acceptance Criteria:** **16** verified US & global scholarships with deterministic `ScholarshipEligibilityRule` matching (`eligible`, `conditionally_eligible`, `ineligible` with rule-level provenance); itemized Direct/Indirect COA & Net Price Calculator distinguishing guaranteed statutory vs. competitive aid offsets and international health insurance advisories; Dual-View International Credential Evaluator (`11` grading systems incl. FR/HT 0–20, DE Bavarian inverted 1.0–6.0, UK A-Levels, IN % & CGPA, IB /45, NG WAEC, BR, AU + `12` recognition/gatekeeping corridors); `58` backend `pytest` + `12` frontend tests + `16/16` Next.js routes.
+* **Last Verified Date:** November 25, 2026
+* **Next Action:** Expand institution-specific scholarship coverage and integrate student-profile credential auto-evaluation workflows.
 
 ### 18. Security & Privacy Hardening
-* **Status:** ⏳ **In Progress** (Phase 2 Audited)
+* **Status:** ✅ **Tested** (Audit Retention Triggers, DNS Pinning & Outbound Firewall Configs)
 * **Priority:** P0
 * **Dependencies:** All Software Workstreams
 * **Relevant Files:**
-  - `apps/api/app/core/auth_provider.py`
-  - `apps/web/src/lib/auth/index.ts`
+  - `apps/api/app/core/auth_provider.py`, `apps/api/app/services/routing_health.py`
+  - `infra/firewall/egress-iptables.sh`, `infra/firewall/k8s-api-worker-egress-networkpolicy.yaml`, `infra/firewall/docker-compose.prod.yml`
   - [`docs/13_SECURITY_AND_PRIVACY_ARCHITECTURE.md`](docs/13_SECURITY_AND_PRIVACY_ARCHITECTURE.md)
-* **Acceptance Criteria:** Automated dependency vulnerability scans; penetration testing; FERPA/GDPR compliance audit; database encryption at rest verified. Current status: Development MockAuthProvider active for local dev/testing; production Clerk JWKS verification and interactive logout/login UI scheduled for Phase 3.
-* **Last Verified Date:** November 24, 2026
-* **Next Action:** Phase 3 Clerk production JWT verification and auth redirect UI.
+* **Acceptance Criteria:** Database-enforced append-only audit triggers (`d8f2a9b41e03`), connection-time IP pinning (`_PinnedPublicIPBackend`), production API worker outbound firewall blocking RFC1918 + `169.254.169.254`, cross-profile Vault/evidence isolation tests; Clerk JWKS production auth swap queued for Pilot deployment.
+* **Last Verified Date:** November 25, 2026
+* **Next Action:** Phase 5 Clerk production JWT verification and host firewall deployment.
 
 ### 19. Beta Release & Pilot
 * **Status:** ⭕ **Not Started**

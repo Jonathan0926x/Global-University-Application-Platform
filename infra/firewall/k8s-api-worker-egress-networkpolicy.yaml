@@ -1,0 +1,80 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: uniglobe-api-worker-egress
+  namespace: uniglobe-prod
+  labels:
+    app: uniglobe-api-worker
+    security-tier: ssrf-defense-in-depth
+spec:
+  podSelector:
+    matchLabels:
+      app: uniglobe-api-worker
+  policyTypes:
+    - Egress
+  egress:
+    # 1. Allow cluster DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # 2. Allow internal PostgreSQL (5432) and Redis (6379) pods strictly within namespace
+    - to:
+        - podSelector:
+            matchLabels:
+              app: uniglobe-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: uniglobe-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+
+    # 3. Allow outbound public HTTPS/HTTP only — strictly blocking RFC1918, loopback,
+    #    CGNAT, link-local, and cloud instance metadata (169.254.169.254/32)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+              - 169.254.0.0/16
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 127.0.0.0/8
+              - 100.64.0.0/10
+              - 0.0.0.0/8
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fe80::/10
+              - fc00::/7
+              - ff00::/8
+              - ::ffff:169.254.169.254/128
+              - ::ffff:169.254.0.0/112
+              - ::ffff:10.0.0.0/104
+              - ::ffff:172.16.0.0/108
+              - ::ffff:192.168.0.0/112
+              - ::ffff:127.0.0.0/104
+              - ::ffff:100.64.0.0/106
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
