@@ -27,6 +27,7 @@ import {
   matchScholarships,
 } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
+import { formatStructuredReason, localizeRuleDimension } from "@/lib/i18n/phase4-reason-codes";
 
 function fmtMoney(val?: number | null, currency = "USD"): string {
   if (val === null || val === undefined) return "—";
@@ -96,6 +97,13 @@ export default function FinancialIntelligencePage() {
   const cycleLabel = (st?: string): string => {
     const key = st || "unspecified";
     const fallbacks: Record<string, string> = {
+      confirmed_open: "Confirmed Open",
+      confirmed_upcoming: "Confirmed Upcoming",
+      previous_cycle_only: "Previous Cycle Only (Deadline Passed)",
+      next_cycle_unannounced: "Next Cycle Unannounced",
+      deadline_expired: "Deadline Expired",
+      source_unavailable: "Source Unavailable / WAF Blocked",
+      requires_manual_verification: "Manual Verification Required",
       open: "Open",
       closed: "Cycle Closed",
       rolling: "Rolling",
@@ -844,16 +852,23 @@ export default function FinancialIntelligencePage() {
                         <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
                           {t("fin.freshness_label", "Freshness")}: {freshnessLabel(s.freshness_status)}
                         </span>
-                        {s.application_cycle_status && s.application_cycle_status !== "unspecified" && (
+                        {(s.cycle_verification_state || (s.application_cycle_status && s.application_cycle_status !== "unspecified")) && (
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              s.application_cycle_status === "closed"
+                              ["previous_cycle_only", "deadline_expired", "closed"].includes(
+                                s.cycle_verification_state || s.application_cycle_status || ""
+                              )
                                 ? "bg-rose-50 border border-rose-200 text-rose-800"
-                                : "bg-sky-50 border border-sky-200 text-sky-800"
+                                : ["next_cycle_unannounced", "source_unavailable", "requires_manual_verification"].includes(
+                                      s.cycle_verification_state || ""
+                                    )
+                                  ? "bg-amber-50 border border-amber-200 text-amber-900"
+                                  : "bg-sky-50 border border-sky-200 text-sky-800"
                             }`}
                           >
                             {t("fin.cycle_label", "Cycle")}
-                            {s.academic_year ? ` (${s.academic_year})` : ""}: {cycleLabel(s.application_cycle_status)}
+                            {s.academic_year ? ` (${s.academic_year})` : ""}:{" "}
+                            {cycleLabel(s.cycle_verification_state || s.application_cycle_status)}
                           </span>
                         )}
                         {s.covers_international && (
@@ -912,13 +927,26 @@ export default function FinancialIntelligencePage() {
                         </div>
                       )}
                       <p className="text-xs text-zinc-600 mt-1">{s.eligibility_summary}</p>
-                      {(s.freshness_status !== "current" || (s.freshness_warnings && s.freshness_warnings.length > 0)) && (
+                      {(s.freshness_status !== "current" ||
+                        (s.freshness_warning_items && s.freshness_warning_items.length > 0) ||
+                        (s.freshness_warnings && s.freshness_warnings.length > 0)) && (
                         <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-900">
                           <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-700" aria-hidden="true" />
                           <span>
-                            {s.freshness_warnings && s.freshness_warnings.length > 0
-                              ? s.freshness_warnings.join(" • ")
-                              : s.conflict_notes || `${t("fin.freshness_label", "Freshness")}: ${freshnessLabel(s.freshness_status)}`}
+                            {s.freshness_warning_items && s.freshness_warning_items.length > 0
+                              ? s.freshness_warning_items
+                                  .map((item) =>
+                                    formatStructuredReason(
+                                      item.reason_code,
+                                      item.params,
+                                      language.tag,
+                                      item.fallback_detail
+                                    )
+                                  )
+                                  .join(" • ")
+                              : s.freshness_warnings && s.freshness_warnings.length > 0
+                                ? s.freshness_warnings.join(" • ")
+                                : s.conflict_notes || `${t("fin.freshness_label", "Freshness")}: ${freshnessLabel(s.freshness_status)}`}
                           </span>
                         </div>
                       )}
@@ -972,46 +1000,82 @@ export default function FinancialIntelligencePage() {
                           </span>
                         </div>
                       )}
-                      {s.cycle_status_detail && (
+                      {(s.cycle_reason_code || s.cycle_status_detail) && (
                         <div className="text-[10px] text-zinc-500 max-w-xs md:ms-auto">
-                          {s.cycle_status_detail}
+                          {formatStructuredReason(
+                            s.cycle_reason_code,
+                            s.cycle_params,
+                            language.tag,
+                            s.cycle_status_detail || ""
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Structured Eligibility Explanation Summary */}
-                  {((s.satisfied_reasons && s.satisfied_reasons.length > 0) ||
+                  {/* Structured Eligibility Explanation Summary (10-Locale Reason Codes) */}
+                  {((s.satisfied_items && s.satisfied_items.length > 0) ||
+                    (s.satisfied_reasons && s.satisfied_reasons.length > 0) ||
+                    (s.failed_items && s.failed_items.length > 0) ||
                     s.failed_reasons.length > 0 ||
+                    (s.missing_items && s.missing_items.length > 0) ||
                     s.missing_requirements.length > 0) && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
-                      {s.satisfied_reasons && s.satisfied_reasons.length > 0 && (
+                      {((s.satisfied_items && s.satisfied_items.length > 0) ||
+                        (s.satisfied_reasons && s.satisfied_reasons.length > 0)) && (
                         <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-emerald-900">
                           <div className="font-bold mb-1">{t("fin.why_matched_heading", "Conditions Satisfied")}</div>
                           <ul className="space-y-0.5 list-disc list-inside">
-                            {s.satisfied_reasons.slice(0, 4).map((reason, ridx) => (
-                              <li key={ridx}>{reason}</li>
-                            ))}
+                            {s.satisfied_items && s.satisfied_items.length > 0
+                              ? s.satisfied_items.slice(0, 4).map((item, ridx) => (
+                                  <li key={ridx}>
+                                    {formatStructuredReason(
+                                      item.reason_code,
+                                      item.params,
+                                      language.tag,
+                                      item.fallback_detail
+                                    )}
+                                  </li>
+                                ))
+                              : s.satisfied_reasons!.slice(0, 4).map((reason, ridx) => <li key={ridx}>{reason}</li>)}
                           </ul>
                         </div>
                       )}
-                      {s.failed_reasons.length > 0 && (
+                      {((s.failed_items && s.failed_items.length > 0) || s.failed_reasons.length > 0) && (
                         <div className="rounded-lg border border-red-200 bg-red-50/40 p-2.5 text-red-900">
                           <div className="font-bold mb-1">{t("fin.why_failed_heading", "Failed Reasons")}</div>
                           <ul className="space-y-0.5 list-disc list-inside">
-                            {s.failed_reasons.map((reason, ridx) => (
-                              <li key={ridx}>{reason}</li>
-                            ))}
+                            {s.failed_items && s.failed_items.length > 0
+                              ? s.failed_items.map((item, ridx) => (
+                                  <li key={ridx}>
+                                    {formatStructuredReason(
+                                      item.reason_code,
+                                      item.params,
+                                      language.tag,
+                                      item.fallback_detail
+                                    )}
+                                  </li>
+                                ))
+                              : s.failed_reasons.map((reason, ridx) => <li key={ridx}>{reason}</li>)}
                           </ul>
                         </div>
                       )}
-                      {s.missing_requirements.length > 0 && (
+                      {((s.missing_items && s.missing_items.length > 0) || s.missing_requirements.length > 0) && (
                         <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-2.5 text-sky-900">
                           <div className="font-bold mb-1">{t("fin.missing_info_heading", "Missing Student Evidence")}</div>
                           <ul className="space-y-0.5 list-disc list-inside">
-                            {s.missing_requirements.map((reason, ridx) => (
-                              <li key={ridx}>{reason}</li>
-                            ))}
+                            {s.missing_items && s.missing_items.length > 0
+                              ? s.missing_items.map((item, ridx) => (
+                                  <li key={ridx}>
+                                    {formatStructuredReason(
+                                      item.reason_code,
+                                      item.params,
+                                      language.tag,
+                                      item.fallback_detail
+                                    )}
+                                  </li>
+                                ))
+                              : s.missing_requirements.map((reason, ridx) => <li key={ridx}>{reason}</li>)}
                           </ul>
                         </div>
                       )}
@@ -1036,17 +1100,31 @@ export default function FinancialIntelligencePage() {
                             <HelpCircle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
                           )}
                           <span>
-                            <strong>{r.human_label}:</strong> {r.detail}
+                            <strong>{localizeRuleDimension(r.dimension, language.tag, r.human_label)}:</strong>{" "}
+                            {formatStructuredReason(r.reason_code, r.params, language.tag, r.detail)}
                           </span>
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="text-[10px] text-zinc-500">
-                    {t(
-                      "fin.not_admission_notice",
-                      "Eligibility reflects published award criteria only — not admission probability or guaranteed funding."
-                    )}
+                  <div className="text-[10px] text-zinc-500 space-y-0.5">
+                    <div>
+                      {t(
+                        "fin.not_admission_notice",
+                        "Eligibility reflects published award criteria only — not admission probability or guaranteed funding."
+                      )}
+                    </div>
+                    <div>
+                      {t(
+                        "fin.official_source_preserved_note",
+                        "Official scholarship name & source URL preserved in original language; eligibility explanations localized."
+                      )}{" "}
+                      {s.official_source_language && (
+                        <span dir="ltr" className="font-mono text-zinc-400">
+                          [{s.official_source_language}]
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </article>
               ))}
@@ -1142,6 +1220,31 @@ export default function FinancialIntelligencePage() {
                     <div dir="ltr" className="text-[10px] text-amber-800">HTTP 403 / timeout</div>
                   </div>
                 </div>
+
+                {/* Phase 4.2: 8-State Cycle Verification Breakdown */}
+                {auditData.cycle_verification_breakdown && (
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 space-y-2.5">
+                    <div className="text-xs font-extrabold text-zinc-900">
+                      {t(
+                        "fin.cycle_breakdown_title",
+                        "8-State Application Cycle & Verification Breakdown (69 Catalog Programs)"
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {Object.entries(auditData.cycle_verification_breakdown).map(([stateKey, cnt]) => (
+                        <div
+                          key={stateKey}
+                          className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 flex items-center gap-2"
+                        >
+                          <span className="font-semibold text-zinc-800">{cycleLabel(stateKey)}</span>
+                          <span dir="ltr" className="rounded-full bg-white border border-zinc-200 px-2 py-0.5 font-mono font-bold text-zinc-900">
+                            {cnt}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Pathway Breakdown + Curated Reference Intersections */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1330,13 +1433,30 @@ export default function FinancialIntelligencePage() {
                       <div className="space-y-2 pt-2 border-t border-zinc-200">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
                           {auditData.deferred_research_queue.map((q) => (
-                            <div key={q.queue_id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 space-y-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <span dir="ltr" className="font-mono font-bold text-indigo-800">{q.queue_id} ({q.priority})</span>
-                                <span className="text-[10px] font-mono text-zinc-500">{q.target_gap}</span>
+                            <div key={q.queue_id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 space-y-1.5">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span dir="ltr" className="font-mono font-bold text-indigo-800">
+                                  {q.queue_id} ({q.verification_priority || q.priority})
+                                </span>
+                                <span className="rounded-full bg-white border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-700">
+                                  {q.resolution_mode === "human_review_required"
+                                    ? t("fin.resolution_human", "Human Review Required")
+                                    : t("fin.resolution_allowlist", "Semi-Automated Official Allowlist Only")}
+                                </span>
                               </div>
                               <div className="font-bold text-zinc-900">{q.focus}</div>
+                              {q.research_objective && (
+                                <p className="text-[11px] text-zinc-700">
+                                  <strong>{t("fin.research_objective_label", "Research Objective")}:</strong>{" "}
+                                  {q.research_objective}
+                                </p>
+                              )}
                               <p className="text-[11px] text-zinc-600">{q.why_deferred}</p>
+                              {q.official_sources_required && q.official_sources_required.length > 0 && (
+                                <div className="text-[10px] text-zinc-500">
+                                  {q.official_sources_required.slice(0, 2).join(" • ")}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

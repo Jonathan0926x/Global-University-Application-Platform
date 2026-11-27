@@ -266,3 +266,31 @@ Evaluates 18 rule types against verified `StudentProfile`, `CitizenshipRecord`, 
 - **Batch 3 (`phase4_batch3_seed.py`):** Added **11** primary-source-verified Asia & Southeast Asia scholarships (`59` total catalog entries across `CN, IN, KR, SG, MY, ID, PK, BD, VN, PH` and `CNY, INR, KRW, SGD, MYR, IDR, PKR, BDT, VND, PHP`): `CAS-ANSO 2027 Call`, `USTC UG Fellowship` (enforcing `CSCA` + `HSK Level 5` rather than Gaokao), `DST INSPIRE-SHE` (restricted to Basic/Natural Sciences excluding Engineering/CS/Medicine), `2027 GKS-U` (`dual_citizenship` Korean restriction + foreign HS GPA without CSAT), `A*STAR AGS PhD`, `MIS Malaysia` (`asean` + `commonwealth` + designated states), `KNB Indonesia`, `HEC / BISP UG Pakistan`, `UGC PhD Bangladesh`, `VNU Hanoi Partner Scholarships`, and `CHED-UniFAST TES (RA 10931)`.
 - **Batch 4 (`phase4_batch4_seed.py`):** Added **10** primary-source-verified Europe & Erasmus+ programs (`69` total catalog entries across `NL, CH, SE, NO, FI, IT, ES, BE/EU` preserving `EUR, CHF, SEK, NOK`): `NL Scholarship` (non-EEA first-year grant), `Swiss Government Excellence Scholarships` (PhD/research excl. `CH` citizens & >1-yr `CH` residents), `ETH Zurich ESOP` (Master's `CHF 27,000/yr` HS27 open Nov 1–30, 2026), `SI SISGP` (strictly 34 partner states citizen-only in `SEK`), `BI Presidential` (`NOK` MSc merit), `University of Turku Tuition Waiver` (50% tuition-only waiver excl. EU/EEA/CH), `Polimi DSU` (`EUR` closed 2025/2026), `Spain MEFD Beca General` (statutory `EUR` grant enforcing independent `ES` residency under RD 179/2026), `Erasmus Mundus Joint Masters (EMJM)` (`16,800 EUR/yr` full Master's consortium), and `Erasmus+ Student Mobility Grant` (`exchange_mobility` 2–12 month non-degree exchange surfaced distinctly via `fin.badge_exchange_only`).
 - **Claim-Level Freshness Separation, Student Coverage Intelligence & Gap Engine (`freshness_governance.py`, `coverage_analytics.py`, `/financial`):** Separately classifies `program_existence`, `eligibility_rules`, `award_amounts`, and `deadlines` (`evaluate_scholarship_claim_breakdown`) so expired cycle deadlines surface transparently (`application_cycle_status = "closed"`) without erasing program visibility or conflating deadlines with expired award amounts. Computes **`verified_funding_coverage` (`25 / 69` = `36.2%`)** vs. **`actionable_coverage` (`18 / 69` = `26.1%`)** vs. **`confirmed_open_verified_programs` (`7 / 69`)** across `69 / 69` audited entries (`0` invented USD conversions on non-USD awards, `MA` vs `MR` separated). Phase 4.1 adds 7-way `classify_transfer_pathway` (never inferring transfer from generic `'all'` UG status), 8-way `classify_aid_type` keeping CSS Profile/variable awards (`$0` guaranteed deduction) distinct from fixed funding, `POST /api/v1/financial/student-coverage` separated student counters, `18`-archetype gap ranking, and deferred official-source research queues (`DRQ-01`..`DRQ-04`) at `GET /api/v1/financial/coverage-audit`.
+
+---
+
+## 10. Phase 4.2 Multilingual Explainability & Pilot Readiness Architecture
+
+### 10.1 Structured Reason Codes Across 10 Locales
+To eliminate raw English explanation prose in localized UIs (especially Arabic RTL `ar-SA`), Phase 4.2 replaces free-form detail strings with structured tuples:
+- `reason_code`: Standardized key (e.g., `rule.gpa.below`, `cycle.previous_cycle_only`, `fresh.approaching_expiration`).
+- `params`: Typed parameters (e.g., `gpa`, `min_gpa`, `date`, `allowed`).
+- `official_source_language`: Original ISO language of the official scholarship announcement.
+
+The frontend (`phase4-reason-codes.ts`) formats these reason codes into natural, idiomatic localized sentences across all 10 platform languages (`en-US`, `es-419`, `fr-FR`, `ht-HT`, `ar-SA`, `zh-Hans`, `hi-IN`, `pt-BR`, `ja-JP`, `de-DE`). Official scholarship names and sponsor URLs are kept verbatim in their authentic source language with a dedicated explanatory note.
+
+### 10.2 8-State Application Cycle Verification
+Programs are categorized into 8 mutually exclusive cycle verification states:
+1. `confirmed_open`: Open with a verified future cutoff date or confirmed open application window.
+2. `confirmed_upcoming`: Officially published future opening date.
+3. `rolling`: Rolling admissions accepted continuously per published policy.
+4. `previous_cycle_only`: Specific published deadline has passed; next cycle window is unannounced.
+5. `next_cycle_unannounced`: Recurring annual cycle whose upcoming window is not yet officially published.
+6. `deadline_expired`: Stale single-year cycle requiring sponsor confirmation.
+7. `source_unavailable`: Automated verification blocked by official server (HTTP 403 / WAF / timeout).
+8. `requires_manual_verification`: Conflicting published dates requiring human review.
+
+### 10.3 Pre-Pilot Security Governance & Blocker Tracking
+- **SSRF Network Protection:** `_PinnedPublicIPBackend` resolves DNS hostnames, drops private IP ranges (RFC1918, CGNAT, loopback, and `169.254.169.254/32` IMDS), and binds HTTP sockets directly to verified public addresses.
+- **Outbound Worker Firewall:** Pre-production `infra/firewall/egress-iptables.sh` kernel-level DROP rules verified via `--dry-run`.
+- **Clerk Auth Provider Status:** Documented as an explicit critical blocker — live pilot onboarding requires implementing cryptographic RS256 JWKS validation in `auth_provider.py` to replace the local mock stub.

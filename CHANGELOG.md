@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Added & Verified — Phase 4.2: Global Scholarship Intelligence, Multilingual Explainability & Pilot Readiness
+- **Multilingual Explainability Engine across 10 Locales (`financial_engine.py`, `phase4-reason-codes.ts`, `api-client.ts`, `/financial`):**
+  - Replaced unstructured English detail strings with structured `reason_code` (`rule.*`, `cycle.*`, `fresh.*`, `intl_policy.*`) + `params` across all 99 evaluated criteria in `evaluate_single_scholarship` and `classify_cycle_verification_state`.
+  - Implemented `PHASE4_REASON_TEMPLATES` in TypeScript covering all 10 platform locales (`en-US`, `es-419`, `fr-FR`, `ht-HT`, `ar-SA`, `zh-Hans`, `hi-IN`, `pt-BR`, `ja-JP`, `de-DE`) and `formatStructuredReason` formatting, achieving zero English-only rule explanation prose in Arabic RTL (`ar-SA`) cards.
+  - Preserved authentic official scholarship titles and official source URLs verbatim in their original languages with an ISO language badge (`[en]`, `[es]`, `[de]`) and localized guidance advisory.
+- **8-State Application Cycle Verification Breakdown (`financial_engine.py`, `coverage_analytics.py`, `/financial`):**
+  - Added `classify_cycle_verification_state` separating active opportunities into 8 honest states without assuming cyclical recurring awards or WAF-blocked portals are open: `confirmed_open` (22), `confirmed_upcoming` (0), `rolling` (2), `previous_cycle_only` (2), `next_cycle_unannounced` (19), `deadline_expired` (16), `source_unavailable` (7), `requires_manual_verification` (1) across the 69-program baseline.
+  - Audited and verified `ht_ca_first_year_ug` scenario: Lester B. Pearson and UBC International both evaluate as `eligible` academically, but past November deadlines (`2026-11-08` and `2026-11-15`) place them honestly into `previous_cycle_only` (status: `closed`), while McGill remains `requires_manual_verification` (`conflicting_information`).
+- **6-Field Deferred Research Queue Schema (`coverage_analytics.py`, `api-client.ts`, `/financial`):**
+  - Upgraded `DRQ-01` through `DRQ-04` with full metadata: `research_objective`, `official_sources_required`, `existing_evidence`, `missing_evidence`, `verification_priority`, and `resolution_mode` (`human_review_required` vs `semi_automated_allowlist`).
+- **Multilingual Counselor Integration & External Application Routing (`counselor.py`):**
+  - Grounded `MultilingualCounselorService` in deterministic scholarship match results, surfacing verified citations, `/financial` and `/applications` suggested workflows, and explicit non-submission advisories clarifying that UniGlobe never submits applications on behalf of students.
+- **Security & Pre-Pilot Governance Audit (`routing_health.py`, `infra/firewall/`, `auth_provider.py`):**
+  - Verified `_PinnedPublicIPBackend` SSRF mitigation and `infra/firewall/egress-iptables.sh` cloud metadata blocking (`169.254.169.254/32`). Documented the `ClerkAuthProvider` mock placeholder as an explicit critical pre-pilot blocker.
+- **Verification Matrix:** Passed **101 / 101** backend `pytest` tests (`test_phase4_2_multilingual_explainability_and_pilot_readiness.py`), **13 / 13** frontend unit tests (`api-client.test.ts`), **16 / 16** static Next.js production routes, and live Chromium QA (0 console errors, 0 HTTP `>= 500`, zero horizontal overflow in `ar-SA` RTL).
+
 ### Improved — Phase 4.1: Student-Level Scholarship Eligibility Intelligence & Coverage Optimization
 - **Non-Inference Transfer & Destination Hardening (`financial_engine.py`, `schemas/phase4.py`):**
   - Added 7-way `classify_transfer_pathway` (`explicitly_accepts_transfer`, `ug_transfer_unconfirmed`, `first_year_only`, `community_college_required`, `transfer_restricted_by_institution_or_country`, `graduate_only`, `exchange_only`) and enforced strict manual-review flagging (`requires_manual_review`) when `transfer` applicants evaluate `ug_transfer_unconfirmed` awards (`12` broad `'all'` UG records) rather than inferring transfer eligibility.

@@ -206,6 +206,18 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
     "fin.gaps_panel_title",
     "fin.not_admission_notice",
     "fin.audit_gaps_title",
+    "fin.cycle_confirmed_open",
+    "fin.cycle_confirmed_upcoming",
+    "fin.cycle_previous_cycle_only",
+    "fin.cycle_next_cycle_unannounced",
+    "fin.cycle_deadline_expired",
+    "fin.cycle_source_unavailable",
+    "fin.cycle_requires_manual_verification",
+    "fin.official_source_preserved_note",
+    "fin.cycle_breakdown_title",
+    "fin.research_objective_label",
+    "fin.resolution_human",
+    "fin.resolution_allowlist",
   ] as const;
   for (const locale of ALL_10_LOCALES) {
     for (const key of BATCH2_REQUIRED_KEYS) {
@@ -213,6 +225,56 @@ test("Phase 4 Financial & Credential keys translate cleanly across LTR and RTL",
       assert.ok(value && value.trim().length > 0 && value !== key, `Missing ${key} for ${locale}`);
     }
   }
+});
+
+test("Phase 4.2 structured eligibility reason codes and rule dimensions cover all 10 locales", async () => {
+  const {
+    PHASE4_REASON_TEMPLATES,
+    PHASE4_RULE_DIMENSION_LABELS,
+    formatStructuredReason,
+    localizeRuleDimension,
+  } = await import("./i18n/phase4-reason-codes.ts");
+
+  const ALL_10_LOCALES = [
+    "en-US",
+    "es-419",
+    "fr-FR",
+    "ht-HT",
+    "ar-SA",
+    "zh-Hans",
+    "hi-IN",
+    "pt-BR",
+    "ja-JP",
+    "de-DE",
+  ] as const;
+
+  for (const [code, perLocale] of Object.entries(PHASE4_REASON_TEMPLATES)) {
+    for (const locale of ALL_10_LOCALES) {
+      const tpl = perLocale[locale];
+      assert.ok(tpl && tpl.trim().length > 0, `Empty reason template ${code} for ${locale}`);
+    }
+  }
+  for (const [dim, perLocale] of Object.entries(PHASE4_RULE_DIMENSION_LABELS)) {
+    for (const locale of ALL_10_LOCALES) {
+      const label = perLocale[locale];
+      assert.ok(label && label.trim().length > 0, `Empty dimension label ${dim} for ${locale}`);
+    }
+  }
+
+  const arGpa = formatStructuredReason("rule.gpa.below", { gpa: "3.20", min_gpa: "3.80" }, "ar-SA", "fallback");
+  assert.ok(arGpa.includes("3.20") && arGpa.includes("3.80") && !arGpa.includes("{gpa}"));
+  assert.notEqual(arGpa, "fallback");
+
+  const frPrevCycle = formatStructuredReason(
+    "cycle.previous_cycle_only",
+    { date: "2026-11-08" },
+    "fr-FR",
+    "fallback"
+  );
+  assert.ok(frPrevCycle.includes("2026-11-08") && !frPrevCycle.includes("{date}"));
+
+  const arCitLabel = localizeRuleDimension("citizenship", "ar-SA", "Citizenship");
+  assert.equal(arCitLabel, "الجنسية");
 });
 
 

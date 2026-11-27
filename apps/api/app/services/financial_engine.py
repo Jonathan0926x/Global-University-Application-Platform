@@ -391,8 +391,139 @@ def _derive_student_context(
     }
 
 
-def _outcome(status: str, detail: str, category: str = "eligibility") -> Dict[str, Any]:
-    return {"outcome": status, "status": status, "detail": detail, "category": category}
+def _outcome(
+    status: str,
+    detail: str,
+    category: str = "eligibility",
+    reason_code: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return {
+        "outcome": status,
+        "status": status,
+        "detail": detail,
+        "category": category,
+        "reason_code": reason_code or f"rule.generic.{status}",
+        "params": params or {},
+    }
+
+
+def _infer_official_source_language(sch: ScholarshipProgram) -> str:
+    url = (sch.source_url or "").lower()
+    cc = (sch.country_code or "US").strip().upper()
+    if "/en/" in url or "/english/" in url:
+        return "en"
+    lang_map = {
+        "AR": "es", "CL": "es", "CO": "es", "DO": "es", "ES": "es", "MX": "es", "PE": "es",
+        "BR": "pt", "FR": "fr", "DE": "de", "IT": "it",
+    }
+    return lang_map.get(cc, "en")
+
+
+def classify_cycle_verification_state(
+    sch: ScholarshipProgram,
+    claim_breakdown: Dict[str, Any],
+    freshness: str,
+    ref_now: Optional[datetime] = None,
+) -> Tuple[str, str, bool, str, Dict[str, Any], str]:
+    """
+    Distinguishes 8 honest application cycle states without ever labeling unannounced
+    cyclical deadlines or WAF-blocked portals as confirmed open:
+      confirmed_open | confirmed_upcoming | rolling | previous_cycle_only |
+      next_cycle_unannounced | deadline_expired | source_unavailable |
+      requires_manual_verification
+    Returns (cycle_state, app_cycle_status, is_open, reason_code, params, detail).
+    """
+    now_dt = ref_now or _utcnow(None)
+    today_d = now_dt.date()
+    audit_meta = (sch.claim_provenance or {}).get("audit_metadata") if isinstance(sch.claim_provenance, dict) else {}
+    audit_meta = audit_meta if isinstance(audit_meta, dict) else {}
+    http_status = audit_meta.get("http_status")
+    next_cycle = str(audit_meta.get("next_cycle_status") or "").strip().lower()
+    dl_str = sch.application_deadline_date.isoformat() if sch.application_deadline_date else ""
+
+    if freshness == "conflicting_information" or next_cycle == "conflicting_information":
+        return (
+            "requires_manual_verification",
+            "requires_manual_verification",
+            False,
+            "cycle.requires_manual_verification",
+            {"date": dl_str} if dl_str else {},
+            "Conflicting published application cycle metadata requires manual verification.",
+        )
+
+    if claim_breakdown.get("deadline_date_passed") and claim_breakdown["claims"].get("deadlines") != "expired":
+        return (
+            "previous_cycle_only",
+            "closed",
+            False,
+            "cycle.previous_cycle_only",
+            {"date": dl_str},
+            f"Published cycle deadline ({dl_str}) has already passed; next cycle window is unannounced.",
+        )
+
+    if claim_breakdown.get("deadline_expired"):
+        return (
+            "deadline_expired",
+            "closed",
+            False,
+            "cycle.deadline_expired",
+            {"date": dl_str} if dl_str else {},
+            (
+                f"Cycle deadline ({dl_str}) has passed; confirm next cycle opening dates on official sponsor portal."
+                if dl_str
+                else "Recorded cycle deadline has expired; verify next application window on official sponsor portal."
+            ),
+        )
+
+    if freshness == "source_unavailable" or http_status in (403, 0) or next_cycle in ("source_unavailable", "waf_blocked_manual_review"):
+        return (
+            "source_unavailable",
+            "source_unavailable",
+            False,
+            "cycle.source_unavailable",
+            {"http_status": str(http_status or "blocked"), "date": dl_str},
+            "Official portal blocked automated verification (HTTP 403/timeout); check sponsor portal manually before relying on deadlines.",
+        )
+
+    if next_cycle == "upcoming":
+        return (
+            "confirmed_upcoming",
+            "upcoming",
+            False,
+            "cycle.confirmed_upcoming",
+            {"date": dl_str} if dl_str else {},
+            "Verified upcoming application cycle (not yet open; check official opening date).",
+        )
+
+    if sch.application_deadline_date and sch.application_deadline_date >= today_d:
+        return (
+            "confirmed_open",
+            "open",
+            True,
+            "cycle.confirmed_open",
+            {"date": dl_str},
+            f"Confirmed open cycle (published deadline: {dl_str}).",
+        )
+
+    if sch.is_deadline_rolling:
+        return (
+            "rolling",
+            "rolling",
+            True,
+            "cycle.rolling",
+            {},
+            "Rolling application cycle accepted continuously per official policy.",
+        )
+
+    return (
+        "next_cycle_unannounced",
+        "cyclical_check_official",
+        False,
+        "cycle.next_cycle_unannounced",
+        {},
+        "Recurring annual program; next cycle opening and deadline dates are unannounced — do not assume open.",
+    )
 
 
 def _eval_rule(
@@ -404,31 +535,32 @@ def _eval_rule(
     val = rule.rule_value or {}
 
     if not isinstance(val, dict):
-        return _outcome("requires_manual_review", f"Malformed rule payload for '{dim}'.")
+        return _outcome("requires_manual_review", f"Malformed rule payload for '{dim}'.", reason_code="rule.malformed", params={"dim": dim})
 
     if dim == "citizenship":
         allowed = [str(c).strip().upper()[:2] for c in val.get("countries", []) if str(c).strip()]
         excluded = [str(c).strip().upper()[:2] for c in val.get("excluded_countries", []) if str(c).strip()]
         if set(allowed) & set(excluded):
-            return _outcome("requires_manual_review", "Conflicting allowed and excluded citizenship lists.")
+            return _outcome("requires_manual_review", "Conflicting allowed and excluded citizenship lists.", reason_code="rule.citizenship.conflict")
         stud_cits = ctx["citizenships"]
+        cits_str = ", ".join(stud_cits)
         if not stud_cits:
-            return _outcome("insufficient_information", "Citizenship country is required and has not been reported.")
+            return _outcome("insufficient_information", "Citizenship country is required and has not been reported.", reason_code="rule.citizenship.missing")
         if any(c in excluded for c in stud_cits):
-            return _outcome("ineligible", f"Citizenship {stud_cits[0]} is explicitly excluded by program rules.")
+            return _outcome("ineligible", f"Citizenship {stud_cits[0]} is explicitly excluded by program rules.", reason_code="rule.citizenship.excluded", params={"citizenship": stud_cits[0]})
         if allowed and not any(c in allowed for c in stud_cits):
-            return _outcome("ineligible", f"Citizenship {stud_cits} is outside eligible countries {allowed}.")
-        return _outcome("eligible", f"Citizenship {stud_cits} satisfies eligibility criteria.")
+            return _outcome("ineligible", f"Citizenship {stud_cits} is outside eligible countries {allowed}.", reason_code="rule.citizenship.outside_allowed", params={"citizenships": cits_str, "allowed": ", ".join(allowed[:8])})
+        return _outcome("eligible", f"Citizenship {stud_cits} satisfies eligibility criteria.", reason_code="rule.citizenship.eligible", params={"citizenships": cits_str})
 
     if dim == "excluded_citizenships":
         excluded = [str(c).strip().upper()[:2] for c in val.get("countries", []) if str(c).strip()]
         stud_cits = ctx["citizenships"]
         if not stud_cits:
-            return _outcome("insufficient_information", "Citizenship country needed to check exclusion restrictions.")
+            return _outcome("insufficient_information", "Citizenship country needed to check exclusion restrictions.", reason_code="rule.citizenship.missing")
         blocked = [c for c in stud_cits if c in excluded]
         if blocked:
-            return _outcome("ineligible", f"Citizenship {blocked[0]} is explicitly excluded from this scholarship.")
-        return _outcome("eligible", f"Citizenship {stud_cits} is not in excluded list.")
+            return _outcome("ineligible", f"Citizenship {blocked[0]} is explicitly excluded from this scholarship.", reason_code="rule.citizenship.excluded", params={"citizenship": blocked[0]})
+        return _outcome("eligible", f"Citizenship {stud_cits} is not in excluded list.", reason_code="rule.excluded_citizenships.eligible", params={"citizenships": ", ".join(stud_cits)})
 
     if dim == "dual_citizenship":
         policy = str(val.get("policy", "")).strip().lower()
@@ -437,168 +569,168 @@ def _eval_rule(
         if policy in ("prohibited", "restricted"):
             restricted_countries = {str(c).strip().upper()[:2] for c in val.get("restricted_countries", []) if str(c).strip()}
             if dual is None:
-                return _outcome("insufficient_information", "Dual citizenship status must be reported for this restriction.")
+                return _outcome("insufficient_information", "Dual citizenship status must be reported for this restriction.", reason_code="rule.dual_citizenship.missing")
             if restricted_countries:
                 if dual and (cits & restricted_countries):
-                    return _outcome("ineligible", f"Holding dual citizenship with {sorted(cits & restricted_countries)} is restricted.")
-                return _outcome("eligible", "Dual citizenship restriction satisfied.")
+                    return _outcome("ineligible", f"Holding dual citizenship with {sorted(cits & restricted_countries)} is restricted.", reason_code="rule.dual_citizenship.restricted_country", params={"countries": ", ".join(sorted(cits & restricted_countries))})
+                return _outcome("eligible", "Dual citizenship restriction satisfied.", reason_code="rule.dual_citizenship.eligible")
             if dual:
-                return _outcome("ineligible", "Applicants holding dual citizenship are restricted under program rules.")
-            return _outcome("eligible", "Single citizenship satisfies dual-citizenship restriction.")
+                return _outcome("ineligible", "Applicants holding dual citizenship are restricted under program rules.", reason_code="rule.dual_citizenship.prohibited")
+            return _outcome("eligible", "Single citizenship satisfies dual-citizenship restriction.", reason_code="rule.dual_citizenship.eligible")
         if policy == "required":
             req_countries = {str(c).strip().upper()[:2] for c in val.get("required_countries", []) if str(c).strip()}
             if dual is None:
-                return _outcome("insufficient_information", "Dual citizenship records required.")
+                return _outcome("insufficient_information", "Dual citizenship records required.", reason_code="rule.dual_citizenship.missing")
             if not dual or (req_countries and not req_countries.issubset(cits)):
-                return _outcome("ineligible", f"Requires dual citizenship including {sorted(req_countries)}.")
-            return _outcome("eligible", "Dual citizenship requirement satisfied.")
+                return _outcome("ineligible", f"Requires dual citizenship including {sorted(req_countries)}.", reason_code="rule.dual_citizenship.required_failed", params={"countries": ", ".join(sorted(req_countries))})
+            return _outcome("eligible", "Dual citizenship requirement satisfied.", reason_code="rule.dual_citizenship.eligible")
         if policy == "permitted":
             if not ctx["citizenships"]:
-                return _outcome("insufficient_information", "Citizenship required to evaluate dual-citizenship allowance.")
-            return _outcome("eligible", "Dual citizenship is explicitly permitted.")
-        return _outcome("requires_manual_review", f"Unsupported dual_citizenship policy '{policy or 'unspecified'}'.")
+                return _outcome("insufficient_information", "Citizenship required to evaluate dual-citizenship allowance.", reason_code="rule.citizenship.missing")
+            return _outcome("eligible", "Dual citizenship is explicitly permitted.", reason_code="rule.dual_citizenship.permitted")
+        return _outcome("requires_manual_review", f"Unsupported dual_citizenship policy '{policy or 'unspecified'}'.", reason_code="rule.unsupported", params={"dim": dim})
 
     if dim == "country_of_residence":
         allowed = [str(c).strip().upper()[:2] for c in val.get("countries", []) if str(c).strip()]
         excluded = [str(c).strip().upper()[:2] for c in val.get("excluded_countries", []) if str(c).strip()]
         if set(allowed) & set(excluded):
-            return _outcome("requires_manual_review", "Conflicting allowed and excluded countries of residence.")
+            return _outcome("requires_manual_review", "Conflicting allowed and excluded countries of residence.", reason_code="rule.residence.conflict")
         res_cc = ctx.get("country_of_residence")
         if not res_cc:
-            return _outcome("insufficient_information", "Actual country of residence is required (never inferred from citizenship).")
+            return _outcome("insufficient_information", "Actual country of residence is required (never inferred from citizenship).", reason_code="rule.residence.missing")
         if res_cc in excluded:
-            return _outcome("ineligible", f"Country of residence '{res_cc}' is excluded.")
+            return _outcome("ineligible", f"Country of residence '{res_cc}' is excluded.", reason_code="rule.residence.excluded", params={"country": res_cc})
         if allowed and res_cc not in allowed:
-            return _outcome("ineligible", f"Country of residence '{res_cc}' is outside eligible list {allowed}.")
-        return _outcome("eligible", f"Country of residence '{res_cc}' satisfies criteria.")
+            return _outcome("ineligible", f"Country of residence '{res_cc}' is outside eligible list {allowed}.", reason_code="rule.residence.outside_allowed", params={"country": res_cc, "allowed": ", ".join(allowed[:8])})
+        return _outcome("eligible", f"Country of residence '{res_cc}' satisfies criteria.", reason_code="rule.residence.eligible", params={"country": res_cc})
 
     if dim == "residency_state":
         allowed = [str(s).strip().upper() for s in val.get("states", []) if str(s).strip()]
         st = ctx.get("residency_state")
-        if ctx["primary_citizenship"] and ctx["primary_citizenship"] != "US" and not sch.covers_international:
-            return _outcome("ineligible", "International citizens are ineligible for state-resident need programs.")
+        if ctx["primary_citizenship"] and ctx["primary_citizenship"] != "US" and not sch.covers_international and ctx.get("residency_status") != "permanent_resident":
+            return _outcome("ineligible", "International citizens are ineligible for state-resident need programs.", reason_code="rule.state.intl_ineligible")
         if not st:
-            return _outcome("insufficient_information", f"State/province residency required ({'/'.join(allowed)}).")
+            return _outcome("insufficient_information", f"State/province residency required ({'/'.join(allowed)}).", reason_code="rule.state.missing", params={"allowed": "/".join(allowed)})
         if st in allowed:
-            return _outcome("eligible", f"State residency '{st}' matches {allowed}.")
-        return _outcome("ineligible", f"Residency '{st}' does not match required {allowed}.")
+            return _outcome("eligible", f"State residency '{st}' matches {allowed}.", reason_code="rule.state.eligible", params={"state": st, "allowed": ", ".join(allowed)})
+        return _outcome("ineligible", f"Residency '{st}' does not match required {allowed}.", reason_code="rule.state.outside_allowed", params={"state": st, "allowed": ", ".join(allowed)})
 
     if dim == "destination_country":
         allowed = [str(c).strip().upper()[:2] for c in val.get("countries", []) if str(c).strip()]
         dest = ctx.get("destination_country")
         if not dest:
             if val.get("strict"):
-                return _outcome("insufficient_information", f"Destination study country must match {', '.join(allowed)}.")
-            return _outcome("eligible", f"Applicable for destination {', '.join(allowed)}.")
+                return _outcome("insufficient_information", f"Destination study country must match {', '.join(allowed)}.", reason_code="rule.destination.missing", params={"allowed": ", ".join(allowed)})
+            return _outcome("eligible", f"Applicable for destination {', '.join(allowed)}.", reason_code="rule.destination.open_target", params={"allowed": ", ".join(allowed)})
         if dest in allowed:
-            return _outcome("eligible", f"Destination '{dest}' matches scholarship target.")
-        return _outcome("ineligible", f"Scholarship applies to {', '.join(allowed)}, not '{dest}'.")
+            return _outcome("eligible", f"Destination '{dest}' matches scholarship target.", reason_code="rule.destination.eligible", params={"destination": dest})
+        return _outcome("ineligible", f"Scholarship applies to {', '.join(allowed)}, not '{dest}'.", reason_code="rule.destination.mismatch", params={"allowed": ", ".join(allowed), "destination": dest})
 
     if dim == "degree_level":
         allowed = [str(x).strip().lower() for x in val.get("levels", []) if str(x).strip()]
         if not allowed or any(x not in SUPPORTED_DEGREE_LEVELS for x in allowed):
-            return _outcome("requires_manual_review", "Degree-level restriction contains unsupported or empty degree levels.")
+            return _outcome("requires_manual_review", "Degree-level restriction contains unsupported or empty degree levels.", reason_code="rule.degree.unsupported")
         dl = ctx.get("degree_level")
         if not dl:
-            return _outcome("insufficient_information", f"Intended degree level required ({', '.join(allowed)}).")
+            return _outcome("insufficient_information", f"Intended degree level required ({', '.join(allowed)}).", reason_code="rule.degree.missing", params={"allowed": ", ".join(allowed)})
         if dl in allowed:
-            return _outcome("eligible", f"Degree level '{dl}' matches allowed levels {allowed}.")
-        return _outcome("ineligible", f"Restricted to degree levels {allowed} (applicant: '{dl}').")
+            return _outcome("eligible", f"Degree level '{dl}' matches allowed levels {allowed}.", reason_code="rule.degree.eligible", params={"degree": dl})
+        return _outcome("ineligible", f"Restricted to degree levels {allowed} (applicant: '{dl}').", reason_code="rule.degree.mismatch", params={"allowed": ", ".join(allowed), "degree": dl})
 
     if dim == "applicant_type":
         allowed = [str(t).strip().lower() for t in val.get("types", []) if str(t).strip()]
         app_t = ctx.get("applicant_type")
         if not app_t:
-            return _outcome("insufficient_information", f"Applicant pathway ({'/'.join(allowed)}) not reported.")
+            return _outcome("insufficient_information", f"Applicant pathway ({'/'.join(allowed)}) not reported.", reason_code="rule.pathway.missing", params={"allowed": "/".join(allowed)})
         if app_t in allowed:
-            return _outcome("eligible", f"Applicant pathway '{app_t}' qualifies.")
+            return _outcome("eligible", f"Applicant pathway '{app_t}' qualifies.", reason_code="rule.pathway.eligible", params={"pathway": app_t})
         if app_t == "both" and any(x in ("first_year", "transfer", "both") for x in allowed):
-            return _outcome("eligible", "Applicant supports eligible undergraduate pathway.")
-        return _outcome("ineligible", f"Restricted to {', '.join(allowed)} applicants (student: '{app_t}').")
+            return _outcome("eligible", "Applicant supports eligible undergraduate pathway.", reason_code="rule.pathway.eligible", params={"pathway": app_t})
+        return _outcome("ineligible", f"Restricted to {', '.join(allowed)} applicants (student: '{app_t}').", reason_code="rule.pathway.mismatch", params={"allowed": ", ".join(allowed), "pathway": app_t})
 
     if dim == "minimum_gpa":
         req_gpa = _safe_float(val.get("min_gpa"))
         if req_gpa is None or req_gpa < 0 or req_gpa > 4.0:
-            return _outcome("requires_manual_review", "Invalid or non-normalized GPA threshold requires manual review.")
+            return _outcome("requires_manual_review", "Invalid or non-normalized GPA threshold requires manual review.", reason_code="rule.gpa.invalid")
         stud_gpa = ctx.get("gpa_4")
         if stud_gpa is None:
-            return _outcome("insufficient_information", f"Academic GPA needed to verify {req_gpa:.2f} minimum.")
+            return _outcome("insufficient_information", f"Academic GPA needed to verify {req_gpa:.2f} minimum.", reason_code="rule.gpa.missing", params={"min_gpa": f"{req_gpa:.2f}"})
         if stud_gpa >= req_gpa:
-            return _outcome("eligible", f"GPA {stud_gpa:.2f} meets >= {req_gpa:.2f} requirement.")
-        return _outcome("ineligible", f"GPA {stud_gpa:.2f} is below {req_gpa:.2f} minimum.")
+            return _outcome("eligible", f"GPA {stud_gpa:.2f} meets >= {req_gpa:.2f} requirement.", reason_code="rule.gpa.eligible", params={"gpa": f"{stud_gpa:.2f}", "min_gpa": f"{req_gpa:.2f}"})
+        return _outcome("ineligible", f"GPA {stud_gpa:.2f} is below {req_gpa:.2f} minimum.", reason_code="rule.gpa.below", params={"gpa": f"{stud_gpa:.2f}", "min_gpa": f"{req_gpa:.2f}"})
 
     if dim == "financial_need_level":
         allowed_levels = [str(lvl).strip().lower() for lvl in val.get("levels", []) if str(lvl).strip()]
         max_inc = _safe_float(val.get("max_income_usd"))
         if val.get("max_income_usd") is not None and (max_inc is None or max_inc < 0):
-            return _outcome("requires_manual_review", "Conflicting or invalid household income cap.")
+            return _outcome("requires_manual_review", "Conflicting or invalid household income cap.", reason_code="rule.need.conflict")
         inc = ctx.get("household_income_usd")
         need = ctx.get("financial_need_level")
         if max_inc is not None:
             if inc is None:
-                return _outcome("insufficient_information", f"Household income needed to verify ${max_inc:,.0f} threshold.")
+                return _outcome("insufficient_information", f"Household income needed to verify ${max_inc:,.0f} threshold.", reason_code="rule.need.income_missing", params={"max_income": f"{max_inc:,.0f}"})
             if inc <= max_inc:
-                return _outcome("eligible", f"Household income ${inc:,.0f} is within ${max_inc:,.0f} cap.")
-            return _outcome("ineligible", f"Household income ${inc:,.0f} exceeds ${max_inc:,.0f} cap.")
+                return _outcome("eligible", f"Household income ${inc:,.0f} is within ${max_inc:,.0f} cap.", reason_code="rule.need.income_eligible", params={"income": f"{inc:,.0f}", "max_income": f"{max_inc:,.0f}"})
+            return _outcome("ineligible", f"Household income ${inc:,.0f} exceeds ${max_inc:,.0f} cap.", reason_code="rule.need.income_exceeds", params={"income": f"{inc:,.0f}", "max_income": f"{max_inc:,.0f}"})
         if not need:
-            return _outcome("insufficient_information", "Financial need level required to evaluate need-based criteria.")
+            return _outcome("insufficient_information", "Financial need level required to evaluate need-based criteria.", reason_code="rule.need.level_missing")
         if need in allowed_levels:
-            return _outcome("eligible", f"Financial need level '{need}' aligns with program criteria.")
-        return _outcome("ineligible", f"Requires {'/'.join(allowed_levels)} financial need (reported '{need}').")
+            return _outcome("eligible", f"Financial need level '{need}' aligns with program criteria.", reason_code="rule.need.level_eligible", params={"need": need})
+        return _outcome("ineligible", f"Requires {'/'.join(allowed_levels)} financial need (reported '{need}').", reason_code="rule.need.level_mismatch", params={"allowed": "/".join(allowed_levels), "need": need})
 
     if dim == "enrollment_context":
         if val.get("is_future_condition"):
             desc = str(val.get("condition_text") or rule.human_label or "Future enrollment verification required upon matriculation.")
-            return _outcome("conditionally_eligible", desc)
+            return _outcome("conditionally_eligible", desc, reason_code="rule.enrollment.future_condition", params={"condition": desc})
         if val.get("requires_us_community_college"):
             if ctx.get("has_us_community_college"):
-                return _outcome("eligible", "Active U.S. community college enrollment verified on student profile.")
+                return _outcome("eligible", "Active U.S. community college enrollment verified on student profile.", reason_code="rule.enrollment.cc_verified")
             if ctx.get("has_enrollment_history"):
-                return _outcome("ineligible", "Requires current enrollment at an accredited U.S. 2-year community college.")
-            return _outcome("insufficient_information", "Enrollment records required to confirm U.S. 2-year community college status.")
+                return _outcome("ineligible", "Requires current enrollment at an accredited U.S. 2-year community college.", reason_code="rule.enrollment.cc_failed")
+            return _outcome("insufficient_information", "Enrollment records required to confirm U.S. 2-year community college status.", reason_code="rule.enrollment.cc_missing")
         req_contexts = [str(c).strip().lower() for c in val.get("required_contexts", []) if str(c).strip()]
         for rc in req_contexts:
             if rc == "currently_enrolled":
                 if ctx.get("currently_enrolled") is None:
-                    return _outcome("insufficient_information", "Current enrollment status has not been reported.")
+                    return _outcome("insufficient_information", "Current enrollment status has not been reported.", reason_code="rule.enrollment.current_missing")
                 if not ctx["currently_enrolled"]:
-                    return _outcome("ineligible", "Requires currently active institutional enrollment.")
+                    return _outcome("ineligible", "Requires currently active institutional enrollment.", reason_code="rule.enrollment.current_failed")
             elif rc == "final_year_undergraduate":
                 if ctx.get("final_year_undergraduate") is None:
-                    return _outcome("insufficient_information", "Final-year undergraduate status is not yet confirmed.")
+                    return _outcome("insufficient_information", "Final-year undergraduate status is not yet confirmed.", reason_code="rule.enrollment.final_ug_missing")
                 if not ctx["final_year_undergraduate"]:
-                    return _outcome("ineligible", "Restricted to final-year undergraduate applicants.")
+                    return _outcome("ineligible", "Restricted to final-year undergraduate applicants.", reason_code="rule.enrollment.final_ug_failed")
             elif rc == "full_time":
                 if ctx.get("is_full_time") is None:
-                    return _outcome("insufficient_information", "Full-time enrollment commitment is not confirmed.")
+                    return _outcome("insufficient_information", "Full-time enrollment commitment is not confirmed.", reason_code="rule.enrollment.full_time_missing")
                 if not ctx["is_full_time"]:
-                    return _outcome("ineligible", "Requires full-time student enrollment.")
+                    return _outcome("ineligible", "Requires full-time student enrollment.", reason_code="rule.enrollment.full_time_failed")
             elif rc in ("first_year", "transfer"):
                 at = ctx.get("applicant_type")
                 if not at:
-                    return _outcome("insufficient_information", f"Enrollment pathway '{rc}' not reported.")
+                    return _outcome("insufficient_information", f"Enrollment pathway '{rc}' not reported.", reason_code="rule.pathway.missing", params={"allowed": rc})
                 if at != rc and at != "both":
-                    return _outcome("ineligible", f"Enrollment context requires '{rc}' (applicant: '{at}').")
+                    return _outcome("ineligible", f"Enrollment context requires '{rc}' (applicant: '{at}').", reason_code="rule.pathway.mismatch", params={"allowed": rc, "pathway": at})
             elif rc == "graduate":
                 dl = ctx.get("degree_level")
                 if not dl:
-                    return _outcome("insufficient_information", "Graduate degree level not specified.")
+                    return _outcome("insufficient_information", "Graduate degree level not specified.", reason_code="rule.degree.missing", params={"allowed": "masters, doctoral"})
                 if dl not in ("masters", "doctoral", "research"):
-                    return _outcome("ineligible", f"Enrollment context restricted to graduate programs (applicant: '{dl}').")
+                    return _outcome("ineligible", f"Enrollment context restricted to graduate programs (applicant: '{dl}').", reason_code="rule.degree.mismatch", params={"allowed": "masters, doctoral", "degree": dl})
             else:
-                return _outcome("requires_manual_review", f"Unsupported enrollment_context '{rc}'.")
-        return _outcome("eligible", "Enrollment context criteria satisfied.")
+                return _outcome("requires_manual_review", f"Unsupported enrollment_context '{rc}'.", reason_code="rule.unsupported", params={"dim": rc})
+        return _outcome("eligible", "Enrollment context criteria satisfied.", reason_code="rule.enrollment.eligible")
 
     if dim == "required_qualifications":
         req_quals = [str(q).strip().lower() for q in val.get("qualifications", []) if str(q).strip()]
         if not req_quals:
-            return _outcome("requires_manual_review", "Qualification requirement list is empty or ambiguous.")
+            return _outcome("requires_manual_review", "Qualification requirement list is empty or ambiguous.", reason_code="rule.unsupported", params={"dim": dim})
         stud_quals = ctx.get("qualifications", [])
         if not stud_quals:
-            return _outcome("insufficient_information", f"Completed academic qualification record needed ({', '.join(req_quals)}).")
+            return _outcome("insufficient_information", f"Completed academic qualification record needed ({', '.join(req_quals)}).", reason_code="rule.qualifications.missing", params={"allowed": ", ".join(req_quals)})
         if any(q in req_quals for q in stud_quals):
-            return _outcome("eligible", f"Completed qualification matches required {req_quals}.")
-        return _outcome("ineligible", f"Requires one of {req_quals} (student holds {stud_quals}).")
+            return _outcome("eligible", f"Completed qualification matches required {req_quals}.", reason_code="rule.qualifications.eligible", params={"allowed": ", ".join(req_quals)})
+        return _outcome("ineligible", f"Requires one of {req_quals} (student holds {stud_quals}).", reason_code="rule.qualifications.mismatch", params={"allowed": ", ".join(req_quals)})
 
     if dim == "language_proficiency":
         lang = str(val.get("language", "en")).strip().lower()[:2]
@@ -607,68 +739,68 @@ def _eval_rule(
         profs = ctx.get("language_proficiencies", {})
         ev = profs.get(lang)
         if not ev:
-            return _outcome("insufficient_information", f"Certified {lang.upper()} language proficiency evidence required.")
+            return _outcome("insufficient_information", f"Certified {lang.upper()} language proficiency evidence required.", reason_code="rule.language.missing", params={"lang": lang.upper()})
         if isinstance(ev, dict):
             fmt = str(ev.get("format", "")).strip().lower()
             if not fmt or fmt not in accepted:
-                return _outcome("requires_manual_review", f"Submitted language evidence format '{fmt or 'unknown'}' requires manual verification.")
+                return _outcome("requires_manual_review", f"Submitted language evidence format '{fmt or 'unknown'}' requires manual verification.", reason_code="rule.language.manual", params={"format": fmt or "unknown"})
             test_name = str(ev.get("test_type", fmt)).strip().upper()
             score = _safe_float(ev.get("score"))
             if test_name in tests_map and tests_map[test_name] is not None:
                 if score is None:
-                    return _outcome("insufficient_information", f"{test_name} numeric score required.")
+                    return _outcome("insufficient_information", f"{test_name} numeric score required.", reason_code="rule.exam.missing", params={"exam": test_name})
                 if score < tests_map[test_name]:
-                    return _outcome("ineligible", f"{test_name} score {score} is below minimum {tests_map[test_name]}.")
-            return _outcome("eligible", f"Language proficiency in '{lang}' verified via {fmt}.")
-        return _outcome("requires_manual_review", "Language evidence format is unstructured and requires manual review.")
+                    return _outcome("ineligible", f"{test_name} score {score} is below minimum {tests_map[test_name]}.", reason_code="rule.exam.below", params={"exam": test_name, "score": str(score), "min_score": str(tests_map[test_name])})
+            return _outcome("eligible", f"Language proficiency in '{lang}' verified via {fmt}.", reason_code="rule.language.eligible", params={"lang": lang.upper(), "format": fmt})
+        return _outcome("requires_manual_review", "Language evidence format is unstructured and requires manual review.", reason_code="rule.language.manual", params={"format": "unstructured"})
 
     if dim == "required_exams":
         exams_req = val.get("exams") or ({val["exam"]: val.get("min_score")} if val.get("exam") else {})
         if not exams_req:
-            return _outcome("requires_manual_review", "Exam requirement has no specified examination.")
+            return _outcome("requires_manual_review", "Exam requirement has no specified examination.", reason_code="rule.unsupported", params={"dim": dim})
         stud_exams = ctx.get("exam_scores", {})
         for ex_name, min_sc_raw in exams_req.items():
             ex_key = str(ex_name).strip().upper()
             if ex_key not in stud_exams or stud_exams[ex_key] is None:
-                return _outcome("insufficient_information", f"Required {ex_key} score is not yet submitted (absent score is never treated as zero).")
+                return _outcome("insufficient_information", f"Required {ex_key} score is not yet submitted (absent score is never treated as zero).", reason_code="rule.exam.missing", params={"exam": ex_key})
             min_sc = _safe_float(min_sc_raw)
             actual = _safe_float(stud_exams[ex_key])
             if actual is None:
-                return _outcome("requires_manual_review", f"Submitted {ex_key} score '{stud_exams[ex_key]}' requires manual evaluation.")
+                return _outcome("requires_manual_review", f"Submitted {ex_key} score '{stud_exams[ex_key]}' requires manual evaluation.", reason_code="rule.exam.manual", params={"exam": ex_key})
             if min_sc is not None and actual < min_sc:
-                return _outcome("ineligible", f"{ex_key} score {actual:g} is below minimum {min_sc:g}.")
-        return _outcome("eligible", "Required examination thresholds satisfied.")
+                return _outcome("ineligible", f"{ex_key} score {actual:g} is below minimum {min_sc:g}.", reason_code="rule.exam.below", params={"exam": ex_key, "score": f"{actual:g}", "min_score": f"{min_sc:g}"})
+        return _outcome("eligible", "Required examination thresholds satisfied.", reason_code="rule.exam.eligible")
 
     if dim == "age_limit":
         min_age = val.get("min_age")
         max_age = val.get("max_age")
         if min_age is not None and max_age is not None and float(min_age) > float(max_age):
-            return _outcome("requires_manual_review", "Conflicting age_limit rule: min_age exceeds max_age.")
+            return _outcome("requires_manual_review", "Conflicting age_limit rule: min_age exceeds max_age.", reason_code="rule.age.conflict")
         dob_str = ctx.get("date_of_birth")
         dob = _parse_optional_date(dob_str)
         if not dob:
-            return _outcome("insufficient_information", "Date of birth required to verify age eligibility.")
+            return _outcome("insufficient_information", "Date of birth required to verify age eligibility.", reason_code="rule.age.missing")
         ref_date = _parse_optional_date(val.get("reference_date")) or sch.application_deadline_date or date.today()
         age_years = ref_date.year - dob.year - ((ref_date.month, ref_date.day) < (dob.month, dob.day))
         if min_age is not None and age_years < int(min_age):
-            return _outcome("ineligible", f"Applicant age ({age_years}) as of {ref_date.isoformat()} is below minimum {min_age}.")
+            return _outcome("ineligible", f"Applicant age ({age_years}) as of {ref_date.isoformat()} is below minimum {min_age}.", reason_code="rule.age.below", params={"age": str(age_years), "min_age": str(min_age), "date": ref_date.isoformat()})
         if max_age is not None and age_years > int(max_age):
-            return _outcome("ineligible", f"Applicant age ({age_years}) as of {ref_date.isoformat()} exceeds maximum {max_age}.")
-        return _outcome("eligible", f"Applicant age ({age_years}) as of {ref_date.isoformat()} satisfies age limits.")
+            return _outcome("ineligible", f"Applicant age ({age_years}) as of {ref_date.isoformat()} exceeds maximum {max_age}.", reason_code="rule.age.exceeds", params={"age": str(age_years), "max_age": str(max_age), "date": ref_date.isoformat()})
+        return _outcome("eligible", f"Applicant age ({age_years}) as of {ref_date.isoformat()} satisfies age limits.", reason_code="rule.age.eligible", params={"age": str(age_years), "date": ref_date.isoformat()})
 
     if dim == "field_of_study":
         allowed = [str(f).strip().lower() for f in val.get("allowed_fields", []) if str(f).strip()]
         excluded = [str(f).strip().lower() for f in val.get("excluded_fields", []) if str(f).strip()]
         if set(allowed) & set(excluded):
-            return _outcome("requires_manual_review", "Conflicting allowed and excluded fields of study.")
+            return _outcome("requires_manual_review", "Conflicting allowed and excluded fields of study.", reason_code="rule.field.conflict")
         fos = (ctx.get("field_of_study") or "").strip().lower()
         if not fos:
-            return _outcome("insufficient_information", "Intended field of study required.")
+            return _outcome("insufficient_information", "Intended field of study required.", reason_code="rule.field.missing")
         if any(ex in fos or fos == ex for ex in excluded):
-            return _outcome("ineligible", f"Field of study '{ctx['field_of_study']}' is excluded by program terms.")
+            return _outcome("ineligible", f"Field of study '{ctx['field_of_study']}' is excluded by program terms.", reason_code="rule.field.excluded", params={"field": str(ctx["field_of_study"])})
         if allowed and not any(al in fos or fos in al for al in allowed):
-            return _outcome("ineligible", f"Field of study '{ctx['field_of_study']}' is outside eligible disciplines {allowed}.")
-        return _outcome("eligible", f"Field of study '{ctx['field_of_study']}' matches eligible disciplines.")
+            return _outcome("ineligible", f"Field of study '{ctx['field_of_study']}' is outside eligible disciplines {allowed}.", reason_code="rule.field.outside_allowed", params={"field": str(ctx["field_of_study"])})
+        return _outcome("eligible", f"Field of study '{ctx['field_of_study']}' matches eligible disciplines.", reason_code="rule.field.eligible", params={"field": str(ctx["field_of_study"])})
 
     if dim == "geographic_region":
         regions = [str(r).strip().lower() for r in val.get("regions", []) if str(r).strip()]
@@ -676,31 +808,33 @@ def _eval_rule(
         allowed_codes = {str(c).strip().upper()[:2] for c in val.get("countries", []) if str(c).strip()}
         for reg in regions:
             if reg not in REGION_COUNTRIES:
-                return _outcome("requires_manual_review", f"Unmapped geographic region '{reg}' requires manual verification.")
+                return _outcome("requires_manual_review", f"Unmapped geographic region '{reg}' requires manual verification.", reason_code="rule.unsupported", params={"dim": reg})
             allowed_codes |= REGION_COUNTRIES[reg]
+        reg_str = ", ".join(regions)
         if scope == "residence":
             res_cc = ctx.get("country_of_residence")
             if not res_cc:
-                return _outcome("insufficient_information", "Country of residence needed to check regional eligibility.")
+                return _outcome("insufficient_information", "Country of residence needed to check regional eligibility.", reason_code="rule.residence.missing")
             if res_cc in allowed_codes:
-                return _outcome("eligible", f"Residence country '{res_cc}' belongs to eligible region {regions}.")
-            return _outcome("ineligible", f"Residence country '{res_cc}' falls outside eligible regions {regions}.")
+                return _outcome("eligible", f"Residence country '{res_cc}' belongs to eligible region {regions}.", reason_code="rule.region.residence_eligible", params={"country": res_cc, "regions": reg_str})
+            return _outcome("ineligible", f"Residence country '{res_cc}' falls outside eligible regions {regions}.", reason_code="rule.region.residence_outside", params={"country": res_cc, "regions": reg_str})
         stud_cits = ctx["citizenships"]
         if not stud_cits:
-            return _outcome("insufficient_information", "Citizenship country needed to check regional eligibility.")
+            return _outcome("insufficient_information", "Citizenship country needed to check regional eligibility.", reason_code="rule.citizenship.missing")
+        cits_str = ", ".join(stud_cits)
         if any(c in allowed_codes for c in stud_cits):
-            return _outcome("eligible", f"Citizenship {stud_cits} falls within eligible region {regions}.")
-        return _outcome("ineligible", f"Citizenship {stud_cits} is outside eligible regions {regions}.")
+            return _outcome("eligible", f"Citizenship {stud_cits} falls within eligible region {regions}.", reason_code="rule.region.citizenship_eligible", params={"citizenships": cits_str, "regions": reg_str})
+        return _outcome("ineligible", f"Citizenship {stud_cits} is outside eligible regions {regions}.", reason_code="rule.region.citizenship_outside", params={"citizenships": cits_str, "regions": reg_str})
 
     if dim == "renewal":
         # Evaluated separately from initial-award eligibility
         min_ren_gpa = _safe_float(val.get("min_renewal_gpa"))
         req_ft = val.get("requires_full_time")
         cond_text = str(val.get("condition_text") or rule.human_label or "Maintain satisfactory academic progress for renewal.")
-        return _outcome("conditionally_eligible", f"Renewal criterion: {cond_text}" + (f" (min GPA {min_ren_gpa:.2f})" if min_ren_gpa else "") + (" [full-time required]" if req_ft else ""), category="renewal")
+        return _outcome("conditionally_eligible", f"Renewal criterion: {cond_text}" + (f" (min GPA {min_ren_gpa:.2f})" if min_ren_gpa else "") + (" [full-time required]" if req_ft else ""), category="renewal", reason_code="rule.renewal.condition", params={"condition": cond_text})
 
     # Never silently ignore unsupported rule dimensions
-    return _outcome("requires_manual_review", f"Unsupported rule dimension '{dim}' requires human verification.")
+    return _outcome("requires_manual_review", f"Unsupported rule dimension '{dim}' requires human verification.", reason_code="rule.unsupported", params={"dim": dim})
 
 
 def _derive_funding_scope(sch: ScholarshipProgram) -> List[str]:
@@ -884,6 +1018,13 @@ def evaluate_single_scholarship(
     manual_reasons: List[str] = []
     freshness_warnings: List[str] = []
 
+    satisfied_items: List[Dict[str, Any]] = []
+    failed_items: List[Dict[str, Any]] = []
+    missing_items: List[Dict[str, Any]] = []
+    conditional_items: List[Dict[str, Any]] = []
+    manual_review_items: List[Dict[str, Any]] = []
+    freshness_warning_items: List[Dict[str, Any]] = []
+
     def _record(dim: str, label: str, outcome_dict: Dict[str, Any], mandatory: bool = True) -> None:
         item = {
             "dimension": dim,
@@ -892,7 +1033,14 @@ def evaluate_single_scholarship(
             "outcome": outcome_dict["outcome"],
             "category": outcome_dict["category"],
             "detail": outcome_dict["detail"],
+            "reason_code": outcome_dict.get("reason_code") or f"rule.generic.{outcome_dict['outcome']}",
+            "params": outcome_dict.get("params") or {},
             "is_mandatory": mandatory,
+        }
+        structured_entry = {
+            "reason_code": item["reason_code"],
+            "params": item["params"],
+            "fallback_detail": outcome_dict["detail"],
         }
         if outcome_dict["category"] == "renewal":
             renewal_evals.append(item)
@@ -903,77 +1051,94 @@ def evaluate_single_scholarship(
         st = outcome_dict["outcome"]
         if st == "eligible":
             satisfied_reasons.append(f"{label}: {outcome_dict['detail']}")
+            satisfied_items.append(structured_entry)
         elif st == "ineligible":
             failed_reasons.append(outcome_dict["detail"])
+            failed_items.append(structured_entry)
         elif st == "requires_manual_review":
             manual_reasons.append(outcome_dict["detail"])
+            manual_review_items.append(structured_entry)
         elif st == "insufficient_information":
             missing_reqs.append(outcome_dict["detail"])
+            missing_items.append(structured_entry)
         elif st == "conditionally_eligible":
             conditional_reqs.append(outcome_dict["detail"])
+            conditional_items.append(structured_entry)
 
     freshness = evaluate_scholarship_freshness(sch)
     claim_breakdown = evaluate_scholarship_claim_breakdown(sch)
-    if claim_breakdown["deadline_expired"]:
-        app_cycle_status = "closed"
-        cycle_status_detail = (
-            f"Cycle deadline ({sch.application_deadline_date.isoformat()}) has passed; confirm next cycle on official sponsor portal."
-            if sch.application_deadline_date
-            else "Recorded cycle deadline has expired; verify next application window on official sponsor portal."
-        )
-        freshness_warnings.append("Current cycle application deadline has passed; confirm next cycle opening dates on official sponsor site.")
-    elif sch.application_deadline_date and sch.application_deadline_date >= date.today():
-        app_cycle_status = "open"
-        cycle_status_detail = f"Open cycle (published deadline: {sch.application_deadline_date.isoformat()})."
-    elif sch.is_deadline_rolling:
-        app_cycle_status = "rolling"
-        cycle_status_detail = "Rolling application cycle accepted continuously per official policy."
-    else:
-        app_cycle_status = "cyclical_check_official"
-        cycle_status_detail = "Annual application cycle; exact current deadline not verified in catalog — verify on official portal."
+    (
+        cycle_verification_state,
+        app_cycle_status,
+        is_cycle_open,
+        cycle_reason_code,
+        cycle_params,
+        cycle_status_detail,
+    ) = classify_cycle_verification_state(sch, claim_breakdown, freshness)
 
-    is_cycle_open = app_cycle_status in ("open", "rolling")
+    if cycle_verification_state in ("previous_cycle_only", "deadline_expired"):
+        freshness_warnings.append("Current cycle application deadline has passed; confirm next cycle opening dates on official sponsor site.")
+        freshness_warning_items.append({"reason_code": cycle_reason_code, "params": cycle_params, "fallback_detail": cycle_status_detail})
 
     if freshness == "approaching_expiration":
         exp_str = sch.verification_expires_at.date().isoformat() if sch.verification_expires_at else "soon"
-        freshness_warnings.append(f"Verification approaching expiration ({exp_str}). Confirm latest terms on official site.")
+        msg = f"Verification approaching expiration ({exp_str}). Confirm latest terms on official site."
+        freshness_warnings.append(msg)
+        freshness_warning_items.append({"reason_code": "fresh.approaching_expiration", "params": {"date": exp_str}, "fallback_detail": msg})
     elif freshness == "expired":
         if claim_breakdown["amount_expired"]:
-            freshness_warnings.append("Award amount claim expired; excluded from verified dollar discounts.")
+            msg = "Award amount claim expired; excluded from verified dollar discounts."
+            freshness_warnings.append(msg)
+            freshness_warning_items.append({"reason_code": "fresh.amount_expired", "params": {}, "fallback_detail": msg})
         elif claim_breakdown["existence_current"] and claim_breakdown["deadline_expired"]:
             # Existence & amount are verified; only application deadline is closed
             freshness = claim_breakdown["record_state"]
         else:
-            freshness_warnings.append("Source verification expired; excluded from verified funding.")
+            msg = "Source verification expired; excluded from verified funding."
+            freshness_warnings.append(msg)
+            freshness_warning_items.append({"reason_code": "fresh.record_expired", "params": {}, "fallback_detail": msg})
     elif freshness == "conflicting_information":
-        manual_reasons.append(sch.conflict_notes or "Conflicting published scholarship terms require manual review.")
+        msg = sch.conflict_notes or "Conflicting published scholarship terms require manual review."
+        manual_reasons.append(msg)
+        manual_review_items.append({"reason_code": "fresh.conflicting", "params": {}, "fallback_detail": msg})
         freshness_warnings.append("Conflicting award metadata detected.")
+        freshness_warning_items.append({"reason_code": "fresh.conflicting", "params": {}, "fallback_detail": msg})
     elif freshness == "source_unavailable":
-        manual_reasons.append("Official source URL unavailable or invalid.")
+        msg = "Official source URL unavailable or blocked automated HTTP check (403/timeout)."
+        manual_reasons.append(msg)
+        manual_review_items.append({"reason_code": "fresh.source_unavailable", "params": {}, "fallback_detail": msg})
         freshness_warnings.append("Official verification source unavailable.")
+        freshness_warning_items.append({"reason_code": "fresh.source_unavailable", "params": {}, "fallback_detail": msg})
     elif freshness == "requires_manual_review":
-        freshness_warnings.append("Missing verified cycle expiry or reviewer sign-off; excluded from guaranteed aid calculations.")
+        msg = "Missing verified cycle expiry or award amount confirmation; excluded from guaranteed aid calculations."
+        freshness_warnings.append(msg)
+        freshness_warning_items.append({"reason_code": "fresh.requires_manual_review", "params": {}, "fallback_detail": msg})
 
     if bool(sch.requires_manual_review):
-        manual_reasons.append("Scholarship is explicitly flagged for manual verifier review.")
+        msg = "Scholarship is explicitly flagged for manual verifier review."
+        manual_reasons.append(msg)
+        manual_review_items.append({"reason_code": "fresh.manual_flag", "params": {}, "fallback_detail": msg})
     if not sch.is_verified:
-        manual_reasons.append("Scholarship lacks primary-source verification.")
+        msg = "Scholarship lacks primary-source verification."
+        manual_reasons.append(msg)
+        manual_review_items.append({"reason_code": "fresh.unverified", "params": {}, "fallback_detail": msg})
 
     tx_pathway_cls, tx_pathway_detail = classify_transfer_pathway(sch)
     aid_cls, is_variable_aid, is_amt_verified = classify_aid_type(sch, claim_breakdown)
+    official_src_lang = _infer_official_source_language(sch)
 
     # Degree-level implicit check whenever no explicit degree_level rule is attached
     has_degree_rule = any(r.rule_dimension == "degree_level" for r in (sch.rules or []))
     if not has_degree_rule:
         allowed_dl = [str(d).strip().lower() for d in (sch.degree_levels or []) if str(d).strip()]
         if not allowed_dl or any(d not in SUPPORTED_DEGREE_LEVELS for d in allowed_dl):
-            _record("degree_level", "Eligible degree levels", _outcome("requires_manual_review", "Unknown or unsupported scholarship degree_levels metadata."), mandatory=True)
+            _record("degree_level", "Eligible degree levels", _outcome("requires_manual_review", "Unknown or unsupported scholarship degree_levels metadata.", reason_code="rule.degree.unsupported"), mandatory=True)
         elif not ctx.get("degree_level"):
-            _record("degree_level", "Eligible degree levels", _outcome("insufficient_information", f"Intended degree level required ({', '.join(allowed_dl)})."), mandatory=True)
+            _record("degree_level", "Eligible degree levels", _outcome("insufficient_information", f"Intended degree level required ({', '.join(allowed_dl)}).", reason_code="rule.degree.missing", params={"allowed": ", ".join(allowed_dl)}), mandatory=True)
         elif ctx["degree_level"] not in allowed_dl:
-            _record("degree_level", "Eligible degree levels", _outcome("ineligible", f"Restricted to degree levels {allowed_dl} (applicant: '{ctx['degree_level']}')."), mandatory=True)
+            _record("degree_level", "Eligible degree levels", _outcome("ineligible", f"Restricted to degree levels {allowed_dl} (applicant: '{ctx['degree_level']}').", reason_code="rule.degree.mismatch", params={"allowed": ", ".join(allowed_dl), "degree": ctx["degree_level"]}), mandatory=True)
         else:
-            _record("degree_level", "Eligible degree levels", _outcome("eligible", f"Degree level '{ctx['degree_level']}' qualifies."), mandatory=True)
+            _record("degree_level", "Eligible degree levels", _outcome("eligible", f"Degree level '{ctx['degree_level']}' qualifies.", reason_code="rule.degree.eligible", params={"degree": ctx["degree_level"]}), mandatory=True)
 
     # Destination-country implicit check whenever no explicit destination_country rule is attached
     has_dest_rule = any(r.rule_dimension == "destination_country" for r in (sch.rules or []))
@@ -990,6 +1155,8 @@ def evaluate_single_scholarship(
                 _outcome(
                     "ineligible",
                     f"Scholarship applies to study in {', '.join(allowed_dests)} (selected destination: '{ctx['destination_country']}').",
+                    reason_code="rule.destination.mismatch",
+                    params={"allowed": ", ".join(allowed_dests), "destination": ctx["destination_country"]},
                 ),
                 mandatory=True,
             )
@@ -1000,11 +1167,11 @@ def evaluate_single_scholarship(
         if not has_app_rule:
             app_t = ctx.get("applicant_type")
             if not app_t:
-                _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("insufficient_information", f"Applicant pathway ({sch.applicant_type}) not selected."), mandatory=True)
+                _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("insufficient_information", f"Applicant pathway ({sch.applicant_type}) not selected.", reason_code="rule.pathway.missing", params={"allowed": sch.applicant_type}), mandatory=True)
             elif app_t not in (sch.applicant_type, "both"):
-                _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("ineligible", f"Restricted to {sch.applicant_type} applicants (student: '{app_t}')."), mandatory=True)
+                _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("ineligible", f"Restricted to {sch.applicant_type} applicants (student: '{app_t}').", reason_code="rule.pathway.mismatch", params={"allowed": sch.applicant_type, "pathway": app_t}), mandatory=True)
             else:
-                _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("eligible", f"Applicant pathway '{app_t}' matches."), mandatory=True)
+                _record("applicant_type", f"Pathway: {sch.applicant_type}", _outcome("eligible", f"Applicant pathway '{app_t}' matches.", reason_code="rule.pathway.eligible", params={"pathway": app_t}), mandatory=True)
     elif ctx.get("applicant_type") == "transfer" and tx_pathway_cls == "ug_transfer_unconfirmed":
         # Section 3 safeguard: NEVER infer transfer eligibility from general applicant_type='all' UG status!
         _record(
@@ -1013,6 +1180,7 @@ def evaluate_single_scholarship(
             _outcome(
                 "requires_manual_review",
                 "Program covers undergraduates broadly ('all'), but transfer student eligibility is unconfirmed in official source documentation — manual verification required.",
+                reason_code="rule.transfer.unconfirmed",
             ),
             mandatory=True,
         )
@@ -1025,7 +1193,7 @@ def evaluate_single_scholarship(
             _record(
                 "international_policy",
                 "International student coverage",
-                _outcome("insufficient_information", "Citizenship status is required to verify domestic/eligible non-citizen funding rules."),
+                _outcome("insufficient_information", "Citizenship status is required to verify domestic/eligible non-citizen funding rules.", reason_code="rule.citizenship.missing"),
                 mandatory=True,
             )
         elif not is_us_lpr:
@@ -1034,7 +1202,12 @@ def evaluate_single_scholarship(
                 _record(
                     "international_policy",
                     "International student coverage",
-                    _outcome("ineligible", f"Award is restricted to {', '.join(dom_allowed)} domestic/eligible non-citizen students (excludes temporary/international {stud_cits[0]} applicants)."),
+                    _outcome(
+                        "ineligible",
+                        f"Award is restricted to {', '.join(dom_allowed)} domestic/eligible non-citizen students (excludes temporary/international {stud_cits[0]} applicants).",
+                        reason_code="rule.intl_policy.domestic_only",
+                        params={"allowed": ", ".join(dom_allowed), "citizenship": stud_cits[0]},
+                    ),
                     mandatory=True,
                 )
 
@@ -1141,12 +1314,19 @@ def evaluate_single_scholarship(
         "conditional_requirements": conditional_reqs,
         "manual_review_reasons": manual_reasons,
         "failed_reasons": failed_reasons,
+        "satisfied_items": satisfied_items,
+        "failed_items": failed_items,
+        "missing_items": missing_items,
+        "conditional_items": conditional_items,
+        "manual_review_items": manual_review_items,
+        "freshness_warning_items": freshness_warning_items,
         "student_evidence_used": evidence_used,
         "funding_scope": _derive_funding_scope(sch),
         "duration_renewal_summary": _format_duration_renewal(sch),
         "freshness_warnings": freshness_warnings,
         "source_name": sch.source_name,
         "source_url": sch.source_url,
+        "official_source_language": official_src_lang,
         "verified_at": sch.verified_at,
         "award_currency": str(sch.award_currency or "USD").strip().upper(),
         "award_fixed_usd": float(sch.award_fixed_usd) if sch.award_fixed_usd is not None else None,
@@ -1165,6 +1345,9 @@ def evaluate_single_scholarship(
         "verification_expires_at": sch.verification_expires_at,
         "freshness_status": freshness,
         "application_cycle_status": app_cycle_status,
+        "cycle_verification_state": cycle_verification_state,
+        "cycle_reason_code": cycle_reason_code,
+        "cycle_params": cycle_params,
         "cycle_status_detail": cycle_status_detail,
         "is_cycle_open": is_cycle_open,
         "is_amount_verified": is_amt_verified,

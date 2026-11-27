@@ -1,5 +1,5 @@
 {
-  "audited_at": "2026-11-25T21:20:10.891818+00:00",
+  "audited_at": "2026-11-26T01:37:40.777041+00:00",
   "total_catalog_programs": 69,
   "total_active_programs": 69,
   "programs_reviewed": 69,
@@ -16,7 +16,7 @@
   "confirmed_open_verified_programs": 7,
   "unknown_eligibility_count": 1,
   "requires_manual_review_count": 18,
-  "expired_claim_count": 16,
+  "expired_claim_count": 18,
   "source_unavailable_count": 8,
   "conflicting_count": 1,
   "dual_citizenship_restricted_programs": 1,
@@ -50,6 +50,16 @@
     "variable_merit": 5,
     "exchange_only": 1,
     "unpublished_or_manual_review": 15
+  },
+  "cycle_verification_breakdown": {
+    "confirmed_open": 22,
+    "confirmed_upcoming": 0,
+    "rolling": 2,
+    "previous_cycle_only": 2,
+    "next_cycle_unannounced": 19,
+    "deadline_expired": 16,
+    "source_unavailable": 7,
+    "requires_manual_verification": 1
   },
   "by_degree_level": {
     "bachelors": {
@@ -350,7 +360,7 @@
       "verified_funding_count": 0,
       "actionable_count": 0,
       "manual_review_or_unavailable_count": 1,
-      "closed_cycle_count": 0
+      "closed_cycle_count": 2
     },
     {
       "country_code": "BE",
@@ -700,7 +710,7 @@
       "programs_matched": 6,
       "programs_verified_eligibility": 6,
       "programs_verified_funding": 0,
-      "programs_open_cycle": 6,
+      "programs_open_cycle": 4,
       "programs_actionable_open_verified": 0,
       "programs_insufficient_info": 0,
       "programs_manual_review": 0,
@@ -950,7 +960,7 @@
       "programs_matched": 9,
       "programs_verified_eligibility": 9,
       "programs_verified_funding": 0,
-      "programs_open_cycle": 9,
+      "programs_open_cycle": 8,
       "programs_actionable_open_verified": 0,
       "programs_insufficient_info": 0,
       "programs_manual_review": 1,
@@ -1063,20 +1073,42 @@
     {
       "queue_id": "DRQ-01",
       "priority": "P0",
+      "verification_priority": "P0_CRITICAL",
       "target_gap": "no_verified_funding / only_variable_institutional_aid",
       "focus": "Fixed-amount US Community College & International UG Transfer Merit Awards",
+      "research_objective": "Verify concrete fixed/range award figures and transfer terms for JKCF Transfer, OAS Academic, CCPG, and state transfer articulation grants.",
+      "official_sources_required": [
+        "https://www.jkcf.org/our-scholarships/undergraduate-transfer-scholarship/",
+        "https://www.oas.org/en/scholarships/",
+        "https://www.deanza.edu/financialaid/grants/ccpg.html",
+        "UC / CSU / SUNY official transfer merit pages"
+      ],
+      "existing_evidence": "Eligibility rules and program existence verified; CSS Profile full-need programs (MIT/Yale/Princeton/Stanford) confirmed variable.",
+      "missing_evidence": "Live award schedule from WAF-blocked (HTTP 403) sponsor portals; published fixed transfer grant caps separate from variable institutional aid.",
+      "resolution_mode": "human_review_required",
       "official_sources_to_verify": [
         "jackkentcooke.org (manual browser re-verification)",
         "oas.org/fms (manual review)",
         "state/system transfer articulation scholarships (UC/CSU/SUNY)"
       ],
-      "why_deferred": "Current JKCF and OAS primary portals block automated HTTP fetches (403 WAF), while CSS Profile institutional aid is inherently variable."
+      "why_deferred": "Current JKCF, OAS, and CCPG portals return HTTP 403 anti-bot challenges; automated bypass is disallowed so human browser verification is required."
     },
     {
       "queue_id": "DRQ-02",
       "priority": "P1",
+      "verification_priority": "P1_HIGH",
       "target_gap": "only_unconfirmed_transfer",
       "focus": "Confirm transfer-student eligibility across 12 broad 'all' undergraduate scholarships",
+      "research_objective": "Verify explicit external transfer vs incoming first-year clauses across 12 national/institutional undergraduate scholarships.",
+      "official_sources_required": [
+        "Becas Progresar (argentina.gob.ar)",
+        "MEFD Beca General (becaseducacion.gob.es)",
+        "Deutschlandstipendium / LMU / Heidelberg (DE)",
+        "Paris-Saclay (FR), CHED TES (PH), VNU Hanoi (VN), PTDF (NG), KNB (ID), Polimi DSU (IT), MESCyT (DO)"
+      ],
+      "existing_evidence": "Program existence, citizenship/residency/degree rules verified; general undergraduate wording only.",
+      "missing_evidence": "Explicit published transfer student clause permitting mid-degree external university transfers.",
+      "resolution_mode": "human_review_required",
       "official_sources_to_verify": [
         "Becas Progresar (AR)",
         "MEFD Beca General (ES)",
@@ -1087,26 +1119,52 @@
         "PTDF ISS (NG)",
         "KNB (ID)"
       ],
-      "why_deferred": "Official sources establish undergraduate eligibility broadly without an explicit published clause permitting mid-degree external transfers."
+      "why_deferred": "Official pages establish undergraduate eligibility without stating whether external transfers from foreign or domestic institutions qualify."
     },
     {
       "queue_id": "DRQ-03",
       "priority": "P1",
+      "verification_priority": "P1_HIGH",
       "target_gap": "no_actionable_opportunities",
       "focus": "Canada & Australia Fixed Undergraduate Scholarships (University-Published Schedules)",
+      "research_objective": "Separate McGill Undergraduate Major Entrance vs Graduate Mastercard Scholars and verify next-cycle dates + tuition schedules for Pearson, UBC, and Melbourne.",
+      "official_sources_required": [
+        "https://future.utoronto.ca/pearson-scholarships",
+        "https://you.ubc.ca/financial-planning/scholarships-awards-international-students/international-scholars/",
+        "https://www.mcgill.ca/studentaid/scholarships-aid",
+        "https://scholarships.unimelb.edu.au/awards/melbourne-international-undergraduate-scholarship"
+      ],
+      "existing_evidence": "Pearson (2026-11-08) and UBC (2026-11-15) previous cycle rules verified; McGill flagged conflicting_information; Melbourne HTTP 403.",
+      "missing_evidence": "Next 2027-2028 opening dates after Nov 2026 deadlines passed, McGill UG/Grad record separation, and Melbourne non-WAF fee schedule.",
+      "resolution_mode": "human_review_required",
       "official_sources_to_verify": [
         "future.utoronto.ca (Pearson)",
         "you.ubc.ca (OIS/KMES)",
         "mcgill.ca/studentaid (split Entrance vs Mastercard)",
         "scholarships.unimelb.edu.au"
       ],
-      "why_deferred": "Currently classified under variable/full-cost or WAF-blocked; requires institutional fee-schedule linkage without inventing USD figures."
+      "why_deferred": "Previous Nov 2026 cycles have closed, McGill remains conflicting, and Melbourne returns 403; requires human review."
     },
     {
       "queue_id": "DRQ-04",
       "priority": "P2",
+      "verification_priority": "P2_MEDIUM",
       "target_gap": "only_expired_cycles",
-      "focus": "Upcoming 2027/2028 cycle deadline refresh for closed UK Commonwealth, GKS-U, PRONABEC, MIS, and Chevening programs",
+      "focus": "Upcoming 2027/2028 cycle deadline refresh for closed and unannounced recurring programs",
+      "research_objective": "Monitor official announcements for 2027/2028 application opening windows across closed calls and next_cycle_unannounced programs.",
+      "official_sources_required": [
+        "cscuk.fcdo.gov.uk",
+        "chevening.org",
+        "studyinkorea.go.kr",
+        "pronabec.gob.pe",
+        "biasiswa.mohe.gov.my",
+        "erasmus-plus.ec.europa.eu (EMJM annual calls)",
+        "sbfi.admin.ch (SERI)",
+        "daad.de (EPOS)"
+      ],
+      "existing_evidence": "Existence, rules, and historical/native amounts verified in PostgreSQL without deletion.",
+      "missing_evidence": "Official 2027/2028 opening and cutoff dates not yet published or source temporarily timed out (Chevening).",
+      "resolution_mode": "semi_automated_allowlist",
       "official_sources_to_verify": [
         "cscuk.fcdo.gov.uk",
         "chevening.org",
@@ -1114,7 +1172,7 @@
         "pronabec.gob.pe",
         "biasiswa.mohe.gov.my"
       ],
-      "why_deferred": "Programs remain verified in existence and rules; next-cycle call dates open periodically and are preserved historically until officially published."
+      "why_deferred": "Historical deadlines are intentionally preserved as previous_cycle_only / deadline_expired / next_cycle_unannounced until official opening windows appear."
     }
   ],
   "manual_review_programs": [

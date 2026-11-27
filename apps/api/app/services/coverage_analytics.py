@@ -20,6 +20,7 @@ from app.models.rag import ScholarshipProgram
 from app.services.financial_engine import (
     _derive_student_context,
     classify_aid_type,
+    classify_cycle_verification_state,
     classify_transfer_pathway,
     compute_student_coverage_metrics,
     ensure_phase4_seeded,
@@ -166,6 +167,16 @@ def generate_global_coverage_audit(
         "graduate_only": 0,
         "exchange_only": 0,
     }
+    cycle_verification_breakdown: Dict[str, int] = {
+        "confirmed_open": 0,
+        "confirmed_upcoming": 0,
+        "rolling": 0,
+        "previous_cycle_only": 0,
+        "next_cycle_unannounced": 0,
+        "deadline_expired": 0,
+        "source_unavailable": 0,
+        "requires_manual_verification": 0,
+    }
 
     manual_review_items: List[Dict[str, Any]] = []
     unavailable_source_items: List[Dict[str, Any]] = []
@@ -184,17 +195,15 @@ def generate_global_coverage_audit(
         fresh = evaluate_scholarship_freshness(p, now=ref_now)
         is_funded = _has_verified_funding_coverage(p, ref_now)
         is_actionable = bool(is_funded and not cb["deadline_expired"])
-        is_open_confirmed = bool(
-            is_funded
-            and not cb["deadline_expired"]
-            and (bool(p.application_deadline_date and p.application_deadline_date >= ref_now.date()) or bool(p.is_deadline_rolling))
-        )
         is_exchange = (p.funding_type or "").strip().lower() == "exchange_mobility"
 
         aid_cls, _, _ = classify_aid_type(p, cb)
         aid_classification_breakdown[aid_cls] = aid_classification_breakdown.get(aid_cls, 0) + 1
         tx_cls, _ = classify_transfer_pathway(p)
         transfer_pathway_breakdown[tx_cls] = transfer_pathway_breakdown.get(tx_cls, 0) + 1
+        cyc_state, _, cyc_is_open, _, _, _ = classify_cycle_verification_state(p, cb, fresh, ref_now)
+        cycle_verification_breakdown[cyc_state] = cycle_verification_breakdown.get(cyc_state, 0) + 1
+        is_open_confirmed = bool(is_funded and cyc_is_open)
 
         if (
             cb["existence_current"]
@@ -617,34 +626,76 @@ def generate_global_coverage_audit(
         {
             "queue_id": "DRQ-01",
             "priority": "P0",
+            "verification_priority": "P0_CRITICAL",
             "target_gap": "no_verified_funding / only_variable_institutional_aid",
             "focus": "Fixed-amount US Community College & International UG Transfer Merit Awards",
+            "research_objective": "Verify concrete fixed/range award figures and transfer terms for JKCF Transfer, OAS Academic, CCPG, and state transfer articulation grants.",
+            "official_sources_required": [
+                "https://www.jkcf.org/our-scholarships/undergraduate-transfer-scholarship/",
+                "https://www.oas.org/en/scholarships/",
+                "https://www.deanza.edu/financialaid/grants/ccpg.html",
+                "UC / CSU / SUNY official transfer merit pages",
+            ],
+            "existing_evidence": "Eligibility rules and program existence verified; CSS Profile full-need programs (MIT/Yale/Princeton/Stanford) confirmed variable.",
+            "missing_evidence": "Live award schedule from WAF-blocked (HTTP 403) sponsor portals; published fixed transfer grant caps separate from variable institutional aid.",
+            "resolution_mode": "human_review_required",
             "official_sources_to_verify": ["jackkentcooke.org (manual browser re-verification)", "oas.org/fms (manual review)", "state/system transfer articulation scholarships (UC/CSU/SUNY)"],
-            "why_deferred": "Current JKCF and OAS primary portals block automated HTTP fetches (403 WAF), while CSS Profile institutional aid is inherently variable.",
+            "why_deferred": "Current JKCF, OAS, and CCPG portals return HTTP 403 anti-bot challenges; automated bypass is disallowed so human browser verification is required.",
         },
         {
             "queue_id": "DRQ-02",
             "priority": "P1",
+            "verification_priority": "P1_HIGH",
             "target_gap": "only_unconfirmed_transfer",
             "focus": "Confirm transfer-student eligibility across 12 broad 'all' undergraduate scholarships",
+            "research_objective": "Verify explicit external transfer vs incoming first-year clauses across 12 national/institutional undergraduate scholarships.",
+            "official_sources_required": [
+                "Becas Progresar (argentina.gob.ar)",
+                "MEFD Beca General (becaseducacion.gob.es)",
+                "Deutschlandstipendium / LMU / Heidelberg (DE)",
+                "Paris-Saclay (FR), CHED TES (PH), VNU Hanoi (VN), PTDF (NG), KNB (ID), Polimi DSU (IT), MESCyT (DO)",
+            ],
+            "existing_evidence": "Program existence, citizenship/residency/degree rules verified; general undergraduate wording only.",
+            "missing_evidence": "Explicit published transfer student clause permitting mid-degree external university transfers.",
+            "resolution_mode": "human_review_required",
             "official_sources_to_verify": ["Becas Progresar (AR)", "MEFD Beca General (ES)", "Deutschlandstipendium/LMU/Heidelberg (DE)", "Paris-Saclay (FR)", "CHED TES (PH)", "VNU Hanoi (VN)", "PTDF ISS (NG)", "KNB (ID)"],
-            "why_deferred": "Official sources establish undergraduate eligibility broadly without an explicit published clause permitting mid-degree external transfers.",
+            "why_deferred": "Official pages establish undergraduate eligibility without stating whether external transfers from foreign or domestic institutions qualify.",
         },
         {
             "queue_id": "DRQ-03",
             "priority": "P1",
+            "verification_priority": "P1_HIGH",
             "target_gap": "no_actionable_opportunities",
             "focus": "Canada & Australia Fixed Undergraduate Scholarships (University-Published Schedules)",
+            "research_objective": "Separate McGill Undergraduate Major Entrance vs Graduate Mastercard Scholars and verify next-cycle dates + tuition schedules for Pearson, UBC, and Melbourne.",
+            "official_sources_required": [
+                "https://future.utoronto.ca/pearson-scholarships",
+                "https://you.ubc.ca/financial-planning/scholarships-awards-international-students/international-scholars/",
+                "https://www.mcgill.ca/studentaid/scholarships-aid",
+                "https://scholarships.unimelb.edu.au/awards/melbourne-international-undergraduate-scholarship",
+            ],
+            "existing_evidence": "Pearson (2026-11-08) and UBC (2026-11-15) previous cycle rules verified; McGill flagged conflicting_information; Melbourne HTTP 403.",
+            "missing_evidence": "Next 2027-2028 opening dates after Nov 2026 deadlines passed, McGill UG/Grad record separation, and Melbourne non-WAF fee schedule.",
+            "resolution_mode": "human_review_required",
             "official_sources_to_verify": ["future.utoronto.ca (Pearson)", "you.ubc.ca (OIS/KMES)", "mcgill.ca/studentaid (split Entrance vs Mastercard)", "scholarships.unimelb.edu.au"],
-            "why_deferred": "Currently classified under variable/full-cost or WAF-blocked; requires institutional fee-schedule linkage without inventing USD figures.",
+            "why_deferred": "Previous Nov 2026 cycles have closed, McGill remains conflicting, and Melbourne returns 403; requires human review.",
         },
         {
             "queue_id": "DRQ-04",
             "priority": "P2",
+            "verification_priority": "P2_MEDIUM",
             "target_gap": "only_expired_cycles",
-            "focus": "Upcoming 2027/2028 cycle deadline refresh for closed UK Commonwealth, GKS-U, PRONABEC, MIS, and Chevening programs",
+            "focus": "Upcoming 2027/2028 cycle deadline refresh for closed and unannounced recurring programs",
+            "research_objective": "Monitor official announcements for 2027/2028 application opening windows across closed calls and next_cycle_unannounced programs.",
+            "official_sources_required": [
+                "cscuk.fcdo.gov.uk", "chevening.org", "studyinkorea.go.kr", "pronabec.gob.pe", "biasiswa.mohe.gov.my",
+                "erasmus-plus.ec.europa.eu (EMJM annual calls)", "sbfi.admin.ch (SERI)", "daad.de (EPOS)",
+            ],
+            "existing_evidence": "Existence, rules, and historical/native amounts verified in PostgreSQL without deletion.",
+            "missing_evidence": "Official 2027/2028 opening and cutoff dates not yet published or source temporarily timed out (Chevening).",
+            "resolution_mode": "semi_automated_allowlist",
             "official_sources_to_verify": ["cscuk.fcdo.gov.uk", "chevening.org", "studyinkorea.go.kr", "pronabec.gob.pe", "biasiswa.mohe.gov.my"],
-            "why_deferred": "Programs remain verified in existence and rules; next-cycle call dates open periodically and are preserved historically until officially published.",
+            "why_deferred": "Historical deadlines are intentionally preserved as previous_cycle_only / deadline_expired / next_cycle_unannounced until official opening windows appear.",
         },
     ]
 
@@ -676,6 +727,7 @@ def generate_global_coverage_audit(
         "by_pathway": pathway_counts,
         "transfer_pathway_breakdown": transfer_pathway_breakdown,
         "aid_classification_breakdown": aid_classification_breakdown,
+        "cycle_verification_breakdown": cycle_verification_breakdown,
         "by_degree_level": degree_stats,
         "by_citizenship": by_citizenship,
         "by_destination": sorted(dest_stats.values(), key=lambda x: (-x["catalog_count"], x["country_code"])),

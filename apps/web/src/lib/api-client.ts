@@ -1704,6 +1704,12 @@ export async function reviewEvidenceItem(
 // ---------------------------------------------------------------------------
 // Phase 4: Verified Scholarships, Net Price Calculator & Credential Evaluation
 // ---------------------------------------------------------------------------
+export interface StructuredReasonItem {
+  reason_code: string;
+  params?: Record<string, unknown>;
+  fallback_detail: string;
+}
+
 export interface ScholarshipRuleEvaluation {
   dimension: string;
   human_label: string;
@@ -1711,6 +1717,8 @@ export interface ScholarshipRuleEvaluation {
   outcome?: string;
   category?: string;
   detail: string;
+  reason_code?: string | null;
+  params?: Record<string, unknown>;
   is_mandatory: boolean;
 }
 
@@ -1777,6 +1785,12 @@ export interface ScholarshipEligibilityResult {
     claim_domains_supported?: string[];
   }>;
   failed_reasons: string[];
+  satisfied_items?: StructuredReasonItem[];
+  failed_items?: StructuredReasonItem[];
+  missing_items?: StructuredReasonItem[];
+  conditional_items?: StructuredReasonItem[];
+  manual_review_items?: StructuredReasonItem[];
+  freshness_warning_items?: StructuredReasonItem[];
   funding_scope?: string[];
   duration_renewal_summary?: string | null;
   amount_classification?: string | null;
@@ -1784,6 +1798,9 @@ export interface ScholarshipEligibilityResult {
   conflict_notes?: string | null;
   freshness_status?: string;
   application_cycle_status?: string;
+  cycle_verification_state?: string;
+  cycle_reason_code?: string | null;
+  cycle_params?: Record<string, unknown>;
   cycle_status_detail?: string | null;
   is_cycle_open?: boolean;
   is_amount_verified?: boolean;
@@ -1792,6 +1809,7 @@ export interface ScholarshipEligibilityResult {
   is_variable_aid?: boolean;
   transfer_pathway_classification?: string | null;
   transfer_eligibility_detail?: string | null;
+  official_source_language?: string;
   claim_freshness?: Record<string, string>;
   freshness_warnings?: string[];
   verification_expires_at?: string | null;
@@ -2123,6 +2141,7 @@ export interface CatalogCoverageAuditResponse {
   by_pathway: Record<string, number>;
   transfer_pathway_breakdown?: Record<string, number>;
   aid_classification_breakdown?: Record<string, number>;
+  cycle_verification_breakdown?: Record<string, number>;
   by_degree_level: Record<string, Record<string, number>>;
   by_citizenship: Array<{
     country_code: string;
@@ -2176,6 +2195,12 @@ export interface CatalogCoverageAuditResponse {
     focus: string;
     official_sources_to_verify: string[];
     why_deferred: string;
+    research_objective?: string;
+    official_sources_required?: string[];
+    existing_evidence?: string;
+    missing_evidence?: string;
+    verification_priority?: string;
+    resolution_mode?: string;
   }>;
   manual_review_programs: Array<{
     title: string;

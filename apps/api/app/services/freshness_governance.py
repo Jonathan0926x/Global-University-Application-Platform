@@ -172,81 +172,6 @@ def classify_freshness(
     return "requires_manual_review"
 
 
-def evaluate_scholarship_claim_breakdown(
-    sch: ScholarshipProgram,
-    now: Optional[datetime] = None,
-) -> Dict[str, Any]:
-    """
-    Returns independent freshness classifications per provenance claim domain
-    (`program_existence`, `award_amounts`, `eligibility_rules`, `deadlines`) so
-    an expired deadline claim flags the cycle closed without erasing verified
-    program existence or conflating deadlines with amount expiration.
-    """
-    ref_now = _utcnow(now)
-    record_conflict = bool(sch.conflict_notes)
-    if sch.award_amount_min_usd is not None and sch.award_amount_max_usd is not None:
-        if float(sch.award_amount_min_usd) > float(sch.award_amount_max_usd):
-            record_conflict = True
-    if sch.native_amount_min is not None and sch.native_amount_max is not None:
-        if float(sch.native_amount_min) > float(sch.native_amount_max):
-            record_conflict = True
-
-    record_exp = _parse_iso_dt(sch.verification_expires_at)
-    record_state = classify_freshness(
-        verified_at=sch.verified_at,
-        verification_expires_at=record_exp,
-        policy_kind="scholarship_eligibility",
-        source_url=sch.source_url,
-        has_conflict=record_conflict,
-        requires_manual_review=bool(sch.requires_manual_review) or not sch.is_verified,
-        now=ref_now,
-    )
-
-    claims = sch.claim_provenance if isinstance(sch.claim_provenance, dict) else {}
-    policy_for_key = {
-        "program_existence": "scholarship_eligibility",
-        "eligibility_rules": "scholarship_eligibility",
-        "award_amounts": "scholarship_amounts",
-        "deadlines": "scholarship_deadlines",
-    }
-    claim_states: Dict[str, str] = {}
-    for key, policy_kind in policy_for_key.items():
-        c = claims.get(key)
-        if not isinstance(c, dict):
-            claim_states[key] = record_state
-            continue
-        c_ver = _parse_iso_dt(c.get("verified_at")) or sch.verified_at
-        c_exp = _parse_iso_dt(c.get("expires_at")) or compute_verification_expiry(c_ver, policy_kind)
-        claim_states[key] = classify_freshness(
-            verified_at=c_ver,
-            verification_expires_at=c_exp,
-            policy_kind=policy_kind,
-            source_url=c.get("source_url") or sch.source_url,
-            has_conflict=bool(c.get("has_conflict")) or record_conflict,
-            source_unavailable=bool(c.get("source_unavailable")),
-            requires_manual_review=bool(c.get("requires_manual_review")),
-            now=ref_now,
-        )
-
-    deadline_expired = claim_states["deadlines"] == "expired"
-    amount_expired = claim_states["award_amounts"] == "expired"
-    record_expired = record_exp is not None and record_exp <= ref_now
-    existence_current = (
-        not record_expired
-        and not record_conflict
-        and claim_states["program_existence"] in ("current", "approaching_expiration")
-    )
-
-    return {
-        "record_state": record_state,
-        "claims": claim_states,
-        "record_expired": record_expired,
-        "existence_current": existence_current,
-        "amount_expired": amount_expired,
-        "deadline_expired": deadline_expired,
-    }
-
-
 def evaluate_scholarship_freshness(
     sch: ScholarshipProgram,
     now: Optional[datetime] = None,
@@ -369,7 +294,8 @@ def evaluate_scholarship_claim_breakdown(
             now=ref_now,
         )
 
-    deadline_expired = claim_states["deadlines"] == "expired"
+    deadline_date_passed = bool(sch.application_deadline_date is not None and sch.application_deadline_date < ref_now.date())
+    deadline_expired = claim_states["deadlines"] == "expired" or deadline_date_passed
     amount_expired = claim_states["award_amounts"] == "expired"
     record_expired = record_exp is not None and record_exp <= ref_now
     existence_current = (
@@ -383,8 +309,9 @@ def evaluate_scholarship_claim_breakdown(
         "claims": claim_states,
         "record_expired": record_expired,
         "existence_current": existence_current,
-        "amount_expired": amount_expired,
+        "deadline_date_passed": deadline_date_passed,
         "deadline_expired": deadline_expired,
+        "amount_expired": amount_expired,
     }
 
 

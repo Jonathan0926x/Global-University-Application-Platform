@@ -32,6 +32,7 @@ from app.models.provenance import DataQualityFlag
 from app.models.rag import RagKnowledgeChunk, ScholarshipProgram
 from app.services.articulation_engine import evaluate_student_transfer_profile
 from app.services.embeddings import embed_text
+from app.services.financial_engine import match_scholarships_deterministic
 from app.services.requirements_engine import (
     evaluate_dynamic_checklist,
     get_institution_admissions_summary,
@@ -656,9 +657,72 @@ class MultilingualCounselorService:
                         f"No verified institutional scholarship policy is indexed yet for {inst.official_name} (especially for international aid eligibility)."
                     )
 
-        # 3. Load strictly profile-scoped private context
+        # 2b. Student-level scholarship eligibility & external portal routing intelligence (Workstream 6)
+        scholarship_ai_notes: List[str] = []
+        wants_scholarship_intel = topic in ("financial", "deadline") or any(
+            w in q_lower
+            for w in (
+                "scholarship", "scholarships", "aid", "grant", "fellowship", "bourse", "bous",
+                "beca", "stipend", "منحة", "منح", "تمويل", "funding",
+            )
+        )
+        if wants_scholarship_intel:
+            primary_dest = target_insts[0].country_code if target_insts else None
+            sch_overrides: Dict[str, Any] = {
+                "applicant_type": pathway,
+                "degree_level": profile.intended_degree_level if (profile and profile.intended_degree_level) else "bachelors",
+            }
+            if target_insts:
+                sch_overrides["institution_id"] = target_insts[0].id
+                sch_overrides["destination_country"] = primary_dest
+            sch_intel = match_scholarships_deterministic(db, profile, sch_overrides, include_ineligible=False)
+            top_matches = [
+                r for r in sch_intel["results"]
+                if r["eligibility_status"] in ("eligible", "conditionally_eligible", "insufficient_information", "requires_manual_review")
+            ][:3]
+            for s in top_matches:
+                cyc_state = s.get("cycle_verification_state", "next_cycle_unannounced")
+                amt_mode = "variable/formulaic aid policy" if s.get("is_variable_aid") else f"verified fixed/range ({s.get('award_currency', 'USD')})"
+                portal_kind = (
+                    "external institutional financial-aid/admissions portal"
+                    if s.get("provider_type") == "university"
+                    else "separate external sponsor/government scholarship portal"
+                )
+                official_facts.append(
+                    f"**[Verified Scholarship Record — {s['source_name']}]** `{s['title']}` ({amt_mode}; cycle: `{cyc_state}`). Official instructions: {s['source_url']}"
+                )
+                scholarship_ai_notes.append(
+                    f"**Scholarship Fit (`{s['title']}` — {s['eligibility_status']}):** "
+                    + (f"Satisfied: {'; '.join(s.get('satisfied_reasons', [])[:2])}. " if s.get("satisfied_reasons") else "")
+                    + (f"Unverified / Documents needed: {'; '.join(s.get('missing_requirements', [])[:2])}. " if s.get("missing_requirements") else "")
+                    + (f"Cycle note: {s.get('cycle_status_detail', cyc_state)} " if s.get("cycle_status_detail") else "")
+                    + f"Apply externally via the {portal_kind} (UniGlobe tracks readiness and external routing only; UniGlobe never submits scholarship applications automatically)."
+                )
+                if not s.get("is_cycle_open") or s.get("eligibility_status") == "requires_manual_review":
+                    missing_or_conflicting.append(
+                        f"`{s['title']}`: cycle `{cyc_state}` — " + ("; ".join(s.get("manual_review_reasons") or [s.get("cycle_status_detail") or "verify external deadline"]) )
+                    )
+                if s.get("source_url") and (s["source_url"], "official_aid_program") not in seen_cite_keys:
+                    seen_cite_keys.add((s["source_url"], "official_aid_program"))
+                    citations.append(
+                        {
+                            "title": s["title"],
+                            "url": s["source_url"],
+                            "institution": s.get("sponsoring_institution") or s["source_name"],
+                            "verified_at": s["verified_at"].strftime("%Y-%m-%d") if hasattr(s["verified_at"], "strftime") else str(s["verified_at"])[:10],
+                            "summary": s["eligibility_summary"][:220],
+                            "source_type": "official_aid_program",
+                            "epistemic_tier": "official",
+                            "retrieval_score": 0.92,
+                        }
+                    )
+
+        # 3. Load strictly profile-scoped private context (preserve core profile/transfer insights first)
         stu_ctx = _load_student_private_context(db, profile, target_insts, pathway)
-        ai_interpretation: List[str] = list(stu_ctx["notes"])
+        ai_interpretation: List[str] = list(stu_ctx["notes"]) + scholarship_ai_notes
+        if wants_scholarship_intel:
+            stu_ctx["workflows"].append({"label": "Scholarships & Net Price Matcher", "href": "/financial", "workflow_type": "financial"})
+            stu_ctx["workflows"].append({"label": "External Application Routing", "href": "/applications", "workflow_type": "applications"})
         if "community college" in q_lower:
             ai_interpretation.insert(
                 0,
@@ -738,7 +802,7 @@ class MultilingualCounselorService:
             sections.append(f"\n### 1. {labels['official']}\n" + "\n".join(f"- {f}" for f in official_facts[:5]))
         if historical_facts:
             sections.append(f"\n### 2. {labels['historical']}\n" + "\n".join(f"- {f}" for f in historical_facts[:3]))
-        sections.append(f"\n### 3. {labels['ai']}\n" + "\n".join(f"- {a}" for a in ai_interpretation[:8]))
+        sections.append(f"\n### 3. {labels['ai']}\n" + "\n".join(f"- {a}" for a in ai_interpretation[:10]))
         if missing_or_conflicting:
             sections.append(f"\n### 4. {labels['missing']}\n" + "\n".join(f"- {m}" for m in missing_or_conflicting[:6]))
         elif not official_facts and not historical_facts:
@@ -747,7 +811,7 @@ class MultilingualCounselorService:
         breakdown = {
             "official_facts": official_facts[:5],
             "historical_facts": historical_facts[:3],
-            "ai_interpretation": ai_interpretation[:8],
+            "ai_interpretation": ai_interpretation[:10],
             "missing_or_conflicting": missing_or_conflicting[:6],
             "student_context_used": stu_ctx["notes"][:5],
             "context_institution_id": str(primary_inst.id) if primary_inst else None,

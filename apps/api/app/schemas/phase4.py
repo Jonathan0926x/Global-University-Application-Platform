@@ -4,6 +4,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class StructuredReasonItemSchema(BaseModel):
+    reason_code: str
+    params: Dict[str, Any] = {}
+    fallback_detail: str
+
+
 class ScholarshipRuleEvaluationSchema(BaseModel):
     dimension: str
     human_label: str
@@ -11,6 +17,8 @@ class ScholarshipRuleEvaluationSchema(BaseModel):
     outcome: str = "eligible"
     category: str = "eligibility"  # eligibility | renewal
     detail: str
+    reason_code: Optional[str] = None
+    params: Dict[str, Any] = {}
     is_mandatory: bool = True
 
 
@@ -55,6 +63,12 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     conditional_requirements: List[str] = []
     manual_review_reasons: List[str] = []
     failed_reasons: List[str] = []
+    satisfied_items: List[StructuredReasonItemSchema] = []
+    failed_items: List[StructuredReasonItemSchema] = []
+    missing_items: List[StructuredReasonItemSchema] = []
+    conditional_items: List[StructuredReasonItemSchema] = []
+    manual_review_items: List[StructuredReasonItemSchema] = []
+    freshness_warning_items: List[StructuredReasonItemSchema] = []
     student_evidence_used: Dict[str, Any] = {}
     official_supporting_sources: List[Dict[str, Any]] = []
     funding_scope: List[str] = []
@@ -62,6 +76,7 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     freshness_warnings: List[str] = []
     source_name: str
     source_url: str
+    official_source_language: str = "en"
     verified_at: datetime
     award_currency: str = "USD"
     award_fixed_usd: Optional[float] = None
@@ -80,6 +95,9 @@ class ScholarshipEligibilityResultSchema(BaseModel):
     verification_expires_at: Optional[datetime] = None
     freshness_status: str = "requires_manual_review"
     application_cycle_status: str = "unspecified"  # open | closed | rolling | cyclical_check_official | unspecified
+    cycle_verification_state: str = "next_cycle_unannounced"
+    cycle_reason_code: Optional[str] = None
+    cycle_params: Dict[str, Any] = {}
     cycle_status_detail: Optional[str] = None
     is_cycle_open: bool = False
     is_amount_verified: bool = False
@@ -193,6 +211,7 @@ class CatalogCoverageAuditResponse(BaseModel):
     by_pathway: Dict[str, int]
     transfer_pathway_breakdown: Dict[str, int] = {}
     aid_classification_breakdown: Dict[str, int] = {}
+    cycle_verification_breakdown: Dict[str, int] = {}
     by_degree_level: Dict[str, Dict[str, int]]
     by_citizenship: List[Dict[str, Any]]
     by_destination: List[Dict[str, Any]]

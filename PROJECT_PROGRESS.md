@@ -43,8 +43,8 @@
 | **Document Processing & Vault**| ✅ **Tested** | P0 | Phase 2 | Nov 24, 2026 | AI / Backend |
 | **Transfer Intelligence (MVP)**| ✅ **Tested** (3-Tier Matrix Live) | P0 | Phase 3 M4 | Nov 24, 2026 | Data / Backend |
 | **AI College Counselor** | ✅ **Tested** (Milestone 6 Live: Hybrid pgvector RAG) | P0 | Phase 3 M6 | Nov 24, 2026 | AI / Backend |
-| **Scholarship & Net Price** | ✅ **Tested** (Phase 4.1 Complete: Student-Level Eligibility, Transfer Intelligence & Coverage Gaps Live) | P1 | Phase 4.1 | Nov 25, 2026 | Backend / Full Stack |
-| **Security & Privacy Testing**| ✅ **Tested** (DB Audit Triggers + DNS Pinning + Outbound Firewall) | P0 | Phase 1–5 | Nov 25, 2026 | Security / QA |
+| **Scholarship & Net Price** | ✅ **Tested** (Phase 4.2 Complete: Multilingual Explainability, 8-State Cycle Breakdown & Pilot Readiness Live) | P1 | Phase 4.2 | Nov 26, 2026 | Backend / Full Stack |
+| **Security & Privacy Testing**| ✅ **Tested** (Pre-Pilot Audit Complete: DNS Pinning + Outbound Firewall + Clerk Auth Blocker Logged) | P0 | Phase 1–5 | Nov 26, 2026 | Security / QA |
 | **Beta Release (Pilot)** | ⭕ **Not Started** | P0 | Phase 5 | Phase 5 (M6) | Entire Team |
 
 ---
