@@ -54,7 +54,30 @@ run_cmd() {
   fi
 }
 
+preflight_live() {
+  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    echo "ERROR: $MODE must run as root (use sudo -E)." >&2
+    exit 1
+  fi
+  for bin in iptables ip6tables; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      echo "ERROR: Required firewall binary '$bin' not found on host." >&2
+      exit 1
+    fi
+  done
+  if [[ "$MODE" == "--apply" && -n "$DOCKER_EGRESS_BRIDGE" ]]; then
+    if ! iptables -L DOCKER-USER -n >/dev/null 2>&1; then
+      echo "ERROR: DOCKER-USER iptables chain not found. Start Docker daemon / create network first before --apply with DOCKER_EGRESS_BRIDGE=$DOCKER_EGRESS_BRIDGE." >&2
+      exit 1
+    fi
+  fi
+}
+
 apply_rules() {
+  if [[ "$MODE" != "--dry-run" ]]; then
+    preflight_live
+  fi
+
   # IPv4 chain setup
   run_cmd iptables -N "$CHAIN_V4" 2>/dev/null || true
   run_cmd iptables -F "$CHAIN_V4"
@@ -69,6 +92,11 @@ apply_rules() {
   if [[ -n "$ALLOWED_DNS_CIDR" ]]; then
     run_cmd iptables -A "$CHAIN_V4" -p udp -d "$ALLOWED_DNS_CIDR" --dport 53 -j ACCEPT
     run_cmd iptables -A "$CHAIN_V4" -p tcp -d "$ALLOWED_DNS_CIDR" --dport 53 -j ACCEPT
+  fi
+  if [[ -n "$DOCKER_EGRESS_BRIDGE" ]]; then
+    # Permit Docker embedded DNS resolver (127.0.0.11:53) before blocking 127.0.0.0/8 loopback
+    run_cmd iptables -A "$CHAIN_V4" -p udp -d 127.0.0.11/32 --dport 53 -j ACCEPT
+    run_cmd iptables -A "$CHAIN_V4" -p tcp -d 127.0.0.11/32 --dport 53 -j ACCEPT
   fi
 
   for cidr in "${BLOCKED_IPV4_CIDRS[@]}"; do
@@ -110,15 +138,27 @@ apply_rules() {
   if [[ "$MODE" == "--dry-run" ]]; then
     printf 'ip6tables -C OUTPUT -m owner --uid-owner %s -j %s || ip6tables -I OUTPUT 1 -m owner --uid-owner %s -j %s\n' \
       "$WORKER_UID" "$CHAIN_V6" "$WORKER_UID" "$CHAIN_V6"
+    if [[ -n "$DOCKER_EGRESS_BRIDGE" ]]; then
+      printf 'ip6tables -L DOCKER-USER -n >/dev/null 2>&1 && (ip6tables -C DOCKER-USER -i %s -j %s || ip6tables -I DOCKER-USER 1 -i %s -j %s)\n' \
+        "$DOCKER_EGRESS_BRIDGE" "$CHAIN_V6" "$DOCKER_EGRESS_BRIDGE" "$CHAIN_V6"
+    fi
   else
     ip6tables -C OUTPUT -m owner --uid-owner "$WORKER_UID" -j "$CHAIN_V6" 2>/dev/null || \
       ip6tables -I OUTPUT 1 -m owner --uid-owner "$WORKER_UID" -j "$CHAIN_V6"
+    if [[ -n "$DOCKER_EGRESS_BRIDGE" ]] && ip6tables -L DOCKER-USER -n >/dev/null 2>&1; then
+      ip6tables -C DOCKER-USER -i "$DOCKER_EGRESS_BRIDGE" -j "$CHAIN_V6" 2>/dev/null || \
+        ip6tables -I DOCKER-USER 1 -i "$DOCKER_EGRESS_BRIDGE" -j "$CHAIN_V6"
+    fi
   fi
 }
 
 verify_rules() {
+  preflight_live
   iptables -L "$CHAIN_V4" -n -v
   ip6tables -L "$CHAIN_V6" -n -v
+  if [[ -n "$DOCKER_EGRESS_BRIDGE" ]]; then
+    iptables -L DOCKER-USER -n -v
+  fi
 }
 
 case "$MODE" in

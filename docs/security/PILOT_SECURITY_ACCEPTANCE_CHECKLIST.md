@@ -1,6 +1,6 @@
 # UniGlobe Pilot Security Acceptance Checklist
 
-**Last Updated:** November 26, 2026 (Phase 4.6 Infrastructure Blueprint & Reproducible Staging Manifests Ready)  
+**Last Updated:** November 26, 2026 (Phase 4.7 Staging Readiness Audit Complete — **`READY FOR INFRASTRUCTURE AUTHORIZATION`**; Zero Resources Provisioned)  
 **Strict Verification Rule:** Requirements validated only via mocks, localhost sockets, or `--dry-run` remain **`NOT TESTED` (Live Staging Infra)** until actually executed against live staging infrastructure. Real student onboarding stays **`NO-GO`** until zero live gates remain `NOT TESTED` or `FAIL`.
 
 | Category | Security Requirement | Local Code / Integration | Live Staging Infra Gate | Evidence / Missing Staging Prerequisite |
@@ -19,4 +19,4 @@
 | **Gate D — Malware (P1)** | **Live `clamav/clamav` container daemon TCP `3310` scan, EICAR detection & outage recovery** | **PASS (local TCP socket)** | **NOT TESTED** | Blocked: awaiting Docker/Linux staging VM (`Dockerfile.api`/`Dockerfile.web`/`docker-compose.pilot.yml` ready) |
 | **Regression (All)** | Existing product features, 10 languages, Arabic RTL, scholarship/financial safety & production build | **PASS (`109` pytest / `13` web / `16` routes)** | **NOT TESTED (live staging stack)** | Local suite & Next.js build verified cleanly alongside `PHASE_4_6_LIVE_SECURITY_VALIDATION_REPORT.md` |
 
-**Current Acceptance Verdict (Phase 4.6):** **`NO-GO` for Public / Live Pilot** until all **`NOT TESTED`** staging infrastructure gates (A, B, C, D) are executed on a provisioned Linux staging environment and updated with live observed evidence.
+**Current Acceptance Verdict (Phase 4.7):** Staging manifests **`READY FOR INFRASTRUCTURE AUTHORIZATION`**; **`NO-GO` for Public / Live Pilot** until all **`NOT TESTED`** staging infrastructure gates (A, B, C, D) are executed on a provisioned Linux staging environment and updated with live observed evidence.

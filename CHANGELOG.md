@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Audited & Readiness-Approved — Phase 4.7: Staging Deployment Readiness Audit & Infrastructure Provisioning Authorization
+- **Container, Workspace Build & Rewrite Fixes ([.dockerignore](.dockerignore), [Dockerfile.web](infra/pilot/Dockerfile.web), [next.config.ts](apps/web/next.config.ts), [docker-compose.pilot.yml](infra/pilot/docker-compose.pilot.yml), [.env.pilot.example](infra/pilot/.env.pilot.example)):**
+  - Added root `.dockerignore` excluding `.git`, `.env*`, local vault/data files, build artifacts, `node_modules`, and test suites from container build contexts.
+  - Fixed `Dockerfile.web` monorepo build: pinned `pnpm@12.23.0`, included `packages/tsconfig` (`@platform/tsconfig`), fixed `--filter @platform/web...`, preserved `/app/node_modules` workspace symlinks alongside `/app/apps/web`, added `NEXT_PUBLIC_*` build arguments, and replaced `npx next start` with `./node_modules/.bin/next start`.
+  - Updated `next.config.ts` to support `INTERNAL_API_URL=http://api_pilot:8000/api/v1` over `pilot_internal`, aligned `/app/apps/web/.next/cache` tmpfs, hardened `migrate_pilot` (`read_only`, `cap_drop: ALL`, `no-new-privileges`, `tmpfs`, resource limits), fixed `api_pilot` healthcheck to verify JSON `status == "healthy"` (rejecting degraded states), set explicit CPU/memory limits across all 5 Compose services, and added `CORS_ORIGINS` + `NEXT_PUBLIC_*` defaults to `.env.pilot.example`.
+- **Firewall & Smoke-Script Hardening ([egress-iptables.sh](infra/firewall/egress-iptables.sh), [verify_staging_gates.py](infra/pilot/verify_staging_gates.py)):**
+  - Added root/binary/`DOCKER-USER` pre-flight validation prior to mutating live chains, allowed Docker embedded DNS `127.0.0.11:53` before loopback rejection when `DOCKER_EGRESS_BRIDGE` is set, and wired `ip6tables` `DOCKER-USER` hooks; hardened `verify_staging_gates.py` to enforce `is_encrypted=True` and reuse the non-redirecting, proxy-isolated HTTP client.
+- **Readiness & Authorization Deliverables (`docs/security/`):**
+  - Published [PHASE_4_7_STAGING_DEPLOYMENT_READINESS_REPORT.md](docs/security/PHASE_4_7_STAGING_DEPLOYMENT_READINESS_REPORT.md) and [PHASE_4_7_INFRASTRUCTURE_AUTHORIZATION_CHECKLIST.md](docs/security/PHASE_4_7_INFRASTRUCTURE_AUTHORIZATION_CHECKLIST.md): **Staging Readiness Verdict `READY FOR INFRASTRUCTURE AUTHORIZATION`** (zero external/paid resources provisioned yet); **Pilot Launch Verdict remains `NO-GO`** pending live Gates A–D & 12-step staging E2E validation (`109` pytest / `13` web / `16` Next.js static pages / firewall `--dry-run` verified).
+
 ### Planned & Manifest-Hardened — Phase 4.6: Isolated Staging Infrastructure Plan & Validation Gate Readiness
 - **Minimum Viable Staging Blueprint (`docs/security/PHASE_4_6_STAGING_INFRASTRUCTURE_PLAN.md`):**
   - Evaluated single hardened Linux VM (`2 vCPU / 4 GB RAM` + Docker Compose) vs. managed Kubernetes, and Cloudflare R2 vs. AWS S3 under zero-spend authorization rules, recommending Ubuntu 24.04 VM + Cloudflare R2 + free-tier Clerk staging tenant + `clamav/clamav:stable` sidecar (`2048M` limit).

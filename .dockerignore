@@ -1,0 +1,20 @@
+# Ignore VCS, local secrets, runtime state, caches, and tests from container build contexts
+.git
+.gitignore
+.env
+.env.*
+**/.env
+**/.env.*
+data/
+**/node_modules
+**/.next
+**/.turbo
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+apps/api/tests/
+docs/
+*.log
+*.tmp
+*.tar
+*.zip

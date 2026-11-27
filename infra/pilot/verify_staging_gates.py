@@ -47,10 +47,16 @@ def main() -> int:
         assert up_clean.status_code == 201
         doc = up_clean.json()
         assert doc["scan_status"] == "scan_clean"
+        assert doc["is_encrypted"] is True
         assert doc["file_sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
         ps = client.get(f"{api_base}/documents/{doc['id']}/presigned-url", headers=hdr_a)
         assert ps.status_code == 200
-        dl = httpx.get(ps.json()["download_url"], timeout=10.0)
+        dl_url = ps.json()["download_url"]
+        if dl_url.startswith("/"):
+            root_origin = api_base.rsplit("/api/v1", 1)[0]
+            dl = client.get(f"{root_origin}{dl_url}", headers=hdr_a)
+        else:
+            dl = client.get(dl_url)
         assert dl.status_code == 200 and dl.content == pdf_bytes
         # Cross-student access MUST return 404
         assert client.get(f"{api_base}/documents/{doc['id']}/presigned-url", headers=hdr_b).status_code == 404
