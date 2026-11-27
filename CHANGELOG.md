@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Blocked Pending Infrastructure & Authorization — Phase 4.8: Isolated Staging Deployment & Live Security Gate Execution
+- **Live Prerequisite & Environment Audit (`docs/security/PHASE_4_8_STAGING_DEPLOYMENT_REPORT.md`, `docs/security/PHASE_4_8_LIVE_SECURITY_GATE_RESULTS.md`, `docs/security/PILOT_SECURITY_ACCEPTANCE_CHECKLIST.md`):**
+  - Verified baseline `cdfb255` on `main` (clean tree) and inspected local workstation tools (`Darwin 25.6.0` ARM64: `docker`, `orb`, `colima`, `lima`, `kubectl`, `aws`, `wrangler`, `az`, `gcloud`, `terraform` all missing; `NO_STAGING_SSH_CONFIG`; zero `CLERK_*`, `STORAGE_*`, `STAGING_*` credentials or signed-in plugin accounts; zero cloud budget/provider authorization approved).
+  - Kept live Gates A–D and the 12-step staging E2E strictly recorded as **`NOT TESTED`** (`BLOCKED`) with timestamped evidence (`2026-11-26 22:30 EST`) without provisioning unapproved paid cloud resources or substituting local/mocked runs.
+  - Retained explicit **`NO-GO`** pilot launch decision pending provisioned Ubuntu 24.04 staging VM, Clerk staging tenant, and private R2/S3 bucket credentials.
+
 ### Audited & Readiness-Approved — Phase 4.7: Staging Deployment Readiness Audit & Infrastructure Provisioning Authorization
 - **Container, Workspace Build & Rewrite Fixes ([.dockerignore](.dockerignore), [Dockerfile.web](infra/pilot/Dockerfile.web), [next.config.ts](apps/web/next.config.ts), [docker-compose.pilot.yml](infra/pilot/docker-compose.pilot.yml), [.env.pilot.example](infra/pilot/.env.pilot.example)):**
   - Added root `.dockerignore` excluding `.git`, `.env*`, local vault/data files, build artifacts, `node_modules`, and test suites from container build contexts.
