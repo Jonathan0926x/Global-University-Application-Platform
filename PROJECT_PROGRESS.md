@@ -45,7 +45,7 @@
 | **AI College Counselor** | ✅ **Tested** (Milestone 6 Live: Hybrid pgvector RAG) | P0 | Phase 3 M6 | Nov 24, 2026 | AI / Backend |
 | **Scholarship & Net Price** | ✅ **Tested** (Phase 4.2 Complete: Multilingual Explainability, 8-State Cycle Breakdown & Pilot Readiness Live) | P1 | Phase 4.2 | Nov 26, 2026 | Backend / Full Stack |
 | **Security & Privacy Testing**| ✅ **Tested** (Phase 4.4 Validation Complete: Clerk Staging Mode, ClamAV `zINSTREAM`, Quarantined-Doc Gating & Adversarial Suite — `109` Tests Passing) | P0 | Phase 4.4 | Nov 26, 2026 | Security / QA |
-| **Beta Release (Pilot)** | ⛔ **No-Go (Phase 4.5 Audit Stopped on Missing Staging Infra)** (Gates A–D Strictly `NOT TESTED` Locally: No Clerk Staging Tenant, Linux `iptables`/K8s Host, Live R2/S3 Bucket, or `clamd` Daemon Reachable — See `docs/security/PHASE_4_5_LIVE_INFRASTRUCTURE_VALIDATION_REPORT.md`) | P0 | Phase 4.5 | Phase 5 (M6) | Entire Team |
+| **Beta Release (Pilot)** | ⛔ **No-Go (Phase 4.6 Staging Plan & Hardened Docker/Firewall Manifests Ready; Live Infra Pending Provisioning)** (`Dockerfile.api`/`web`, `migrate_pilot`, `DOCKER-USER` firewall hook & `PHASE_4_6_STAGING_INFRASTRUCTURE_PLAN.md` complete; Gates A–D stay `NOT TESTED` without paid cloud/VM provisioning) | P0 | Phase 4.6 | Phase 5 (M6) | Entire Team |
 
 ---
 

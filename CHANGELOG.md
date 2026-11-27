@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Planned & Manifest-Hardened — Phase 4.6: Isolated Staging Infrastructure Plan & Validation Gate Readiness
+- **Minimum Viable Staging Blueprint (`docs/security/PHASE_4_6_STAGING_INFRASTRUCTURE_PLAN.md`):**
+  - Evaluated single hardened Linux VM (`2 vCPU / 4 GB RAM` + Docker Compose) vs. managed Kubernetes, and Cloudflare R2 vs. AWS S3 under zero-spend authorization rules, recommending Ubuntu 24.04 VM + Cloudflare R2 + free-tier Clerk staging tenant + `clamav/clamav:stable` sidecar (`2048M` limit).
+- **Reproducible Staging Containers & Firewall Hardening (`infra/pilot/`, `infra/firewall/egress-iptables.sh`):**
+  - Added multi-stage non-root (`UID 10001`) `Dockerfile.api` & `Dockerfile.web`, added automatic `migrate_pilot` (`alembic upgrade head`) init container & `web_pilot` read-only/capability-drop hardening in `docker-compose.pilot.yml`, added `DOCKER_EGRESS_BRIDGE` (`DOCKER-USER` chain) support to `egress-iptables.sh`, and added non-destructive `verify_staging_gates.py`.
+- **Phase 4.6 Validation Report (`PHASE_4_6_LIVE_SECURITY_VALIDATION_REPORT.md`):**
+  - Separated Local Code & Integration (`PASS`: `109` pytest / `13` web / `16` Next.js routes) from Live Infrastructure Validation (`NOT TESTED` for Gates A–D awaiting staging VM & test credentials), retaining an explicit **`NO-GO`** pilot launch recommendation.
+
 ### Audited — Phase 4.5: Live Infrastructure Validation & Security Gate Closure Assessment
 - **Prerequisite & Reachability Audit (`PHASE_4_5_LIVE_INFRASTRUCTURE_VALIDATION_REPORT.md`, `PILOT_SECURITY_ACCEPTANCE_CHECKLIST.md`):**
   - Verified baseline `a0aa2e0` (`main`, clean working tree, Alembic head `a3c7e9f1b420`) on macOS `Darwin 25.6.0 ARM64`.

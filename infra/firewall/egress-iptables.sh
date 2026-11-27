@@ -14,6 +14,7 @@ MODE="${1:---dry-run}"
 CHAIN_V4="UNIGLOBE_API_EGRESS"
 CHAIN_V6="UNIGLOBE_API_EGRESS_V6"
 WORKER_UID="${UNIGLOBE_WORKER_UID:-uniglobe}"
+DOCKER_EGRESS_BRIDGE="${DOCKER_EGRESS_BRIDGE:-}"
 ALLOWED_DB_CIDR="${ALLOWED_DB_CIDR:-}"
 ALLOWED_REDIS_CIDR="${ALLOWED_REDIS_CIDR:-}"
 ALLOWED_DNS_CIDR="${ALLOWED_DNS_CIDR:-}"
@@ -77,13 +78,21 @@ apply_rules() {
   run_cmd iptables -A "$CHAIN_V4" -p tcp --dport 80 -j ACCEPT
   run_cmd iptables -A "$CHAIN_V4" -j DROP
 
-  # Attach to API worker UID egress in OUTPUT chain
+  # Attach to API worker UID egress in OUTPUT chain (native host worker)
   if [[ "$MODE" == "--dry-run" ]]; then
     printf 'iptables -C OUTPUT -m owner --uid-owner %s -j %s || iptables -I OUTPUT 1 -m owner --uid-owner %s -j %s\n' \
       "$WORKER_UID" "$CHAIN_V4" "$WORKER_UID" "$CHAIN_V4"
+    if [[ -n "$DOCKER_EGRESS_BRIDGE" ]]; then
+      printf 'iptables -C DOCKER-USER -i %s -j %s || iptables -I DOCKER-USER 1 -i %s -j %s\n' \
+        "$DOCKER_EGRESS_BRIDGE" "$CHAIN_V4" "$DOCKER_EGRESS_BRIDGE" "$CHAIN_V4"
+    fi
   else
     iptables -C OUTPUT -m owner --uid-owner "$WORKER_UID" -j "$CHAIN_V4" 2>/dev/null || \
       iptables -I OUTPUT 1 -m owner --uid-owner "$WORKER_UID" -j "$CHAIN_V4"
+    if [[ -n "$DOCKER_EGRESS_BRIDGE" ]]; then
+      iptables -C DOCKER-USER -i "$DOCKER_EGRESS_BRIDGE" -j "$CHAIN_V4" 2>/dev/null || \
+        iptables -I DOCKER-USER 1 -i "$DOCKER_EGRESS_BRIDGE" -j "$CHAIN_V4"
+    fi
   fi
 
   # IPv6 chain setup
