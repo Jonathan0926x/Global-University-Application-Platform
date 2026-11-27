@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Audited — Phase 4.5: Live Infrastructure Validation & Security Gate Closure Assessment
+- **Prerequisite & Reachability Audit (`PHASE_4_5_LIVE_INFRASTRUCTURE_VALIDATION_REPORT.md`, `PILOT_SECURITY_ACCEPTANCE_CHECKLIST.md`):**
+  - Verified baseline `a0aa2e0` (`main`, clean working tree, Alembic head `a3c7e9f1b420`) on macOS `Darwin 25.6.0 ARM64`.
+  - Documented exact missing external infrastructure prerequisites (`docker`/`kubectl`/`clamd`/`aws`/`clerk` CLI missing; zero `CLERK_*`, `STORAGE_*`, or `CLAMAV_*` staging credentials provisioned) cleanly keeping Gates A–D strictly **`NOT TESTED`** in live infrastructure without conflating local integration tests (`109` pytest / `13` web / `16` Next.js routes) with live staging passes.
+  - Maintained honest **`NO-GO`** pilot launch status alongside concrete staging execution runbooks for Clerk staging tenant, Linux `iptables`/K8s `NetworkPolicy`, private R2/S3 bucket, and `clamav/clamav` daemon validation.
+
 ### Validated & Audited — Phase 4.4: Staging Validation, ClamAV Fail-Closed Gates & Pilot Go/No-Go Assessment
 - **Security Scan Gating & Retry Safety ([document_vault.py](apps/api/app/services/document_vault.py), [documents.py](apps/api/app/api/v1/documents.py), [counselor.py](apps/api/app/services/counselor.py), [requirements_engine.py](apps/api/app/services/requirements_engine.py), [articulation_engine.py](apps/api/app/services/articulation_engine.py)):**
   - Enforced `PolicyFailClosedScanner` when `ENVIRONMENT` is `staging`/`production` and `SCANNER_BACKEND != "clamav"`, preventing silent fallback to `HeuristicMalwareScanner`.
