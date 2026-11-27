@@ -540,7 +540,15 @@ def evaluate_student_transfer_profile(
             desc_txt = c.description
             outcomes_list = list(c.learning_outcomes or [])
             if c.syllabus_document_id and (not desc_txt or not outcomes_list):
-                doc = db.query(Document).filter(Document.id == c.syllabus_document_id).first()
+                doc = (
+                    db.query(Document)
+                    .filter(
+                        Document.id == c.syllabus_document_id,
+                        Document.is_archived == False,
+                        Document.scan_status == "scan_clean",
+                    )
+                    .first()
+                )
                 if doc and doc.extraction:
                     if not desc_txt:
                         desc_txt = doc.extraction.extracted_text[:1200]

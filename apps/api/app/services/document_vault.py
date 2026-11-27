@@ -286,11 +286,35 @@ class HeuristicMalwareScanner(IMalwareScanner):
         )
 
 
+class PolicyFailClosedScanner(IMalwareScanner):
+    """Fail-closed placeholder used when staging/production lacks required ClamAV configuration."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+    def scan_bytes(self, content: bytes, filename: str) -> ScanResult:
+        return ScanResult(
+            state="scan_failed",
+            engine="clamav_required_policy",
+            details=self.reason,
+            clean=False,
+        )
+
+
 def get_malware_scanner() -> IMalwareScanner:
-    backend = (settings.SCANNER_BACKEND or "heuristic").strip().lower()
+    backend = (settings.SCANNER_BACKEND or "").strip().lower()
+    env = (settings.ENVIRONMENT or "development").strip().lower()
+    if env in ("production", "prod", "staging"):
+        if backend != "clamav":
+            return PolicyFailClosedScanner(
+                f"SCANNER_BACKEND='{backend or 'unset'}' prohibited in '{env}'; ClamAV is required (fail closed)."
+            )
+        return ClamAVScanner()
     if backend == "clamav":
         return ClamAVScanner()
-    return HeuristicMalwareScanner()
+    if backend in ("heuristic", ""):
+        return HeuristicMalwareScanner()
+    return PolicyFailClosedScanner(f"Unsupported SCANNER_BACKEND='{backend}' (fail closed).")
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +335,10 @@ class IVaultStorageProvider(ABC):
     @abstractmethod
     def move_to_quarantine(self, storage_key: str, storage_path: str, profile_id: str) -> Tuple[str, str]:
         """Isolate infected object under restricted quarantine key/path. Returns (new_key, new_path)."""
+
+    @abstractmethod
+    def delete_bytes(self, storage_key: str, storage_path: str) -> None:
+        """Delete object bytes cleanly from private storage."""
 
     @abstractmethod
     def generate_presigned_download_url(
@@ -381,6 +409,13 @@ class LocalVaultStorageProvider(IVaultStorageProvider):
             except OSError:
                 pass
         return quarantine_key, dst
+
+    def delete_bytes(self, storage_key: str, storage_path: str) -> None:
+        target = self._safe_join(storage_key) if storage_key else os.path.abspath(storage_path)
+        if not target.startswith(self.base_dir + os.sep):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage delete denied.")
+        if os.path.exists(target):
+            os.remove(target)
 
     @staticmethod
     def _sign_download(document_id: str, profile_id: str, expires_ts: int) -> str:
@@ -465,6 +500,9 @@ class S3CompatibleVaultStorageProvider(IVaultStorageProvider):
         self._client.delete_object(Bucket=self.bucket, Key=storage_key)
         return quarantine_key, f"{self.backend_name}://{self.bucket}/{quarantine_key}"
 
+    def delete_bytes(self, storage_key: str, storage_path: str) -> None:
+        self._client.delete_object(Bucket=self.bucket, Key=storage_key)
+
     def generate_presigned_download_url(
         self,
         document_id: str,
@@ -547,7 +585,20 @@ class DocumentVaultService:
         clean_pid = sanitize_filename(str(profile_id))
         unique_doc_id = str(uuid.uuid4())
         storage_key = f"{clean_pid}/orig_{unique_doc_id}.{file_ext}"
-        storage_path, is_encrypted = provider.put_bytes(storage_key, raw_content, mime_type)
+        try:
+            storage_path, is_encrypted = provider.put_bytes(storage_key, raw_content, mime_type)
+        except Exception as exc:
+            log_security_event(
+                "vault_storage_error",
+                "error",
+                resource_type="document",
+                resource_id=unique_doc_id,
+                details={"backend": provider.backend_name, "error": exc.__class__.__name__},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Private document storage provider failed; upload aborted.",
+            )
 
         use_async = settings.DOCUMENT_ASYNC_SCAN if async_scan is None else bool(async_scan)
         now = datetime.now(timezone.utc)
@@ -627,6 +678,51 @@ class DocumentVaultService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Document processing blocked while scan_status='{state}'. Must complete clean scan first.",
             )
+
+    @staticmethod
+    def rescan_document(
+        doc: Any,
+        storage_provider: Optional[IVaultStorageProvider] = None,
+        scanner: Optional[IMalwareScanner] = None,
+    ) -> Optional[bytes]:
+        """
+        Re-runs malware scanning strictly on `pending_scan`, `scan_failed`, or `uploaded` documents.
+        Quarantined / infected files can NEVER be released by retry.
+        Returns raw decrypted bytes if `scan_clean`, else None.
+        """
+        if doc.scan_status in ("quarantined", "scan_infected"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Quarantined or infected documents cannot be released or re-enabled via rescan.",
+            )
+        provider = storage_provider or get_vault_storage_provider()
+        raw_bytes = provider.get_bytes(doc.storage_key or "", doc.storage_path)
+        if hashlib.sha256(raw_bytes).hexdigest() != doc.file_sha256:
+            doc.scan_status = "quarantined"
+            doc.quarantined_at = datetime.now(timezone.utc)
+            doc.scan_details = "SHA-256 mismatch detected during rescan; quarantined."
+            return None
+
+        active_scanner = scanner or get_malware_scanner()
+        scan_res = active_scanner.scan_bytes(raw_bytes, doc.original_filename)
+        now = datetime.now(timezone.utc)
+        doc.scan_engine = scan_res.engine
+        doc.scan_details = scan_res.details
+        doc.scanned_at = now
+        if scan_res.state == "scan_infected":
+            new_key, new_path = provider.move_to_quarantine(
+                doc.storage_key or "", doc.storage_path, str(doc.profile_id)
+            )
+            doc.storage_key = new_key
+            doc.storage_path = new_path
+            doc.scan_status = "quarantined"
+            doc.quarantined_at = now
+            return None
+        if scan_res.clean and scan_res.state == "scan_clean":
+            doc.scan_status = "scan_clean"
+            return raw_bytes
+        doc.scan_status = "scan_failed"
+        return None
 
     @staticmethod
     def extract_document_intelligence(

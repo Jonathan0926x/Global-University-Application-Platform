@@ -449,7 +449,15 @@ def _load_student_private_context(
     else:
         missing.append("Cumulative GPA and native grading scale are not yet recorded on your profile.")
 
-    docs = db.query(Document).filter(Document.profile_id == profile.id).all()
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.profile_id == profile.id,
+            Document.is_archived == False,
+            Document.scan_status == "scan_clean",
+        )
+        .all()
+    )
     if docs:
         doc_labels = [f"{d.document_category} ({d.detected_language})" for d in docs[:5]]
         notes.append(f"Uploaded Document Vault files ({len(docs)} total): {', '.join(doc_labels)}.")

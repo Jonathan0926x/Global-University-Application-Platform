@@ -347,3 +347,99 @@ def translate_document(
     db.refresh(translation)
 
     return translation
+
+
+@router.post("/documents/{document_id}/rescan", response_model=DocumentDetailSchema, tags=["Document Vault"])
+def rescan_student_document(
+    document_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found")
+
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.profile_id == profile.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Academic document not found")
+
+    raw_bytes = DocumentVaultService.rescan_document(doc)
+    if doc.scan_status == "scan_clean" and raw_bytes is not None and not doc.extraction:
+        extraction_data = DocumentVaultService.extract_document_intelligence(
+            doc.original_filename,
+            raw_bytes,
+            doc.file_type,
+        )
+        doc.detected_language = extraction_data["detected_language"]
+        db.add(
+            DocumentExtraction(
+                document_id=doc.id,
+                extracted_text=extraction_data["extracted_text"],
+                detected_institution=extraction_data["detected_institution"],
+                detected_qualification=extraction_data["detected_qualification"],
+                detected_grading_scale=extraction_data["detected_grading_scale"],
+                extracted_data_json=extraction_data["extracted_data"],
+                extraction_confidence=extraction_data["extraction_confidence"],
+                extraction_warnings=extraction_data["extraction_warnings"],
+            )
+        )
+        translation_data = DocumentVaultService.generate_academic_translation(extraction_data, "en-US")
+        db.add(
+            DocumentTranslation(
+                document_id=doc.id,
+                target_language=translation_data["target_language"],
+                translated_text=translation_data["translated_text"],
+                translated_data_json=translation_data["translated_data"],
+                translation_engine=translation_data["translation_engine"],
+                translation_confidence=translation_data["translation_confidence"],
+                translation_disclaimer=translation_data["translation_disclaimer"],
+                is_human_reviewed=False,
+            )
+        )
+
+    db.commit()
+    db.refresh(doc)
+    log_security_event(
+        "vault_rescan",
+        doc.scan_status,
+        actor_user_id=str(current_user.id),
+        resource_type="document",
+        resource_id=str(doc.id),
+    )
+    return doc
+
+
+@router.delete("/documents/{document_id}", tags=["Document Vault"])
+def delete_student_document(
+    document_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found")
+
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.profile_id == profile.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Academic document not found")
+
+    provider = get_vault_storage_provider()
+    provider.delete_bytes(doc.storage_key or "", doc.storage_path)
+    db.delete(doc)
+    db.commit()
+    log_security_event(
+        "vault_delete",
+        "deleted",
+        actor_user_id=str(current_user.id),
+        resource_type="document",
+        resource_id=str(document_id),
+    )
+    return {"deleted": True, "document_id": str(document_id)}

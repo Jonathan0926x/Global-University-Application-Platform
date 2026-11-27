@@ -207,7 +207,10 @@ def _extract_profile_context(
     enrollments: List[EnrollmentRecord] = list(profile.enrollments or [])
     citizenships: List[CitizenshipRecord] = list(profile.citizenships or [])
     tests: List[StandardizedTest] = list(profile.standardized_tests or [])
-    documents: List[Document] = [d for d in (profile.documents or []) if not d.is_archived]
+    documents: List[Document] = [
+        d for d in (profile.documents or [])
+        if not d.is_archived and getattr(d, "scan_status", "scan_clean") == "scan_clean"
+    ]
 
     courses: List[Course] = []
     for enr in enrollments:

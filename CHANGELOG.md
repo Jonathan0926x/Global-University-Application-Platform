@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Validated & Audited — Phase 4.4: Staging Validation, ClamAV Fail-Closed Gates & Pilot Go/No-Go Assessment
+- **Security Scan Gating & Retry Safety ([document_vault.py](apps/api/app/services/document_vault.py), [documents.py](apps/api/app/api/v1/documents.py), [counselor.py](apps/api/app/services/counselor.py), [requirements_engine.py](apps/api/app/services/requirements_engine.py), [articulation_engine.py](apps/api/app/services/articulation_engine.py)):**
+  - Enforced `PolicyFailClosedScanner` when `ENVIRONMENT` is `staging`/`production` and `SCANNER_BACKEND != "clamav"`, preventing silent fallback to `HeuristicMalwareScanner`.
+  - Restricted AI Counselor vault ingestion, Requirements Engine document matching, and Transfer Syllabus attachment strictly to `scan_status == "scan_clean"` documents.
+  - Added `POST /api/v1/documents/{document_id}/rescan` (forbidding release of `quarantined`/`scan_infected` documents with `422`, while allowing clean recovery from transient `scan_failed`), `DELETE /api/v1/documents/{document_id}` storage cleanup, and `503` fail-closed handling on storage write failures.
+- **Integrated Staging Simulation & Adversarial Security Tests ([test_phase4_4_staging_validation_and_adversarial.py](apps/api/tests/test_phase4_4_staging_validation_and_adversarial.py)):**
+  - Verified full synthetic Student A/B, Data Verifier, and Admin workflows under `ENVIRONMENT="staging"`, `AUTH_PROVIDER="clerk"`, `SCANNER_BACKEND="clamav"` using RS256 JWTs and an in-process localhost TCP `zINSTREAM\x00` ClamAV socket server (`OK`, `EICAR FOUND`, timeout, malformed reply), redirect `302 -> 169.254.169.254` non-following, and proxy env ignoring (`trust_env=False`).
+- **Pilot Go/No-Go Acceptance Documentation (`docs/security/`):**
+  - Published [PHASE_4_4_STAGING_VALIDATION_REPORT.md](docs/security/PHASE_4_4_STAGING_VALIDATION_REPORT.md) and [PILOT_GO_NO_GO_REPORT.md](docs/security/PILOT_GO_NO_GO_REPORT.md): **Conditional Code Security PASS (`109 / 109` backend tests, `13 / 13` frontend tests, `16 / 16` built routes)**; **NO-GO for live student onboarding** pending live Linux/staging execution of the 4 external infrastructure gates (Clerk staging tenant, kernel `iptables`/K8s policy, live R2/S3 bucket, live `clamd` daemon).
+
 ### Hardened & Verified — Phase 4.3: Production Security Hardening & Controlled Pilot Readiness
 - **Genuine Clerk RS256 JWKS Authentication ([auth_provider.py](apps/api/app/core/auth_provider.py), [deps.py](apps/api/app/api/deps.py), [config.py](apps/api/app/config.py)):**
   - Eliminated the `clerk_verified_user` placeholder stub and implemented genuine cryptographic RS256 verification via `PyJWT` + `cryptography` with SSRF-pinned `JWKSKeyCache`, controlled key-rotation refresh on unknown `kid`, strict algorithm allowlisting (blocking `none` and `HS256` key-confusion attacks), `iss`/`aud`/`exp`/`nbf`/`iat`/`sub` validation, and zero raw JWT logging.
