@@ -17,10 +17,24 @@ class Document(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     profile_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     original_filename = Column(String(255), nullable=False)
-    file_type = Column(String(50), nullable=False)  # pdf, docx, txt, jpg, png, csv, etc.
+    file_type = Column(String(50), nullable=False)  # pdf, docx, txt, jpg, png, csv, md
+    mime_type = Column(String(100), nullable=False, default="application/octet-stream")
     file_size_bytes = Column(Integer, nullable=False)
     file_sha256 = Column(String(64), nullable=False, index=True)  # Cryptographic integrity checksum
     storage_path = Column(String(500), nullable=False)
+    storage_backend = Column(String(32), nullable=False, default="local")  # local | s3 | cloudflare_r2
+    storage_key = Column(String(500), nullable=True)
+    is_encrypted = Column(Boolean, default=False, nullable=False)
+    scan_status = Column(
+        String(32),
+        nullable=False,
+        default="uploaded",
+        index=True,
+    )  # uploaded | pending_scan | scan_clean | scan_infected | scan_failed | quarantined
+    scan_engine = Column(String(64), nullable=True)
+    scan_details = Column(Text, nullable=True)
+    scanned_at = Column(DateTime(timezone=True), nullable=True)
+    quarantined_at = Column(DateTime(timezone=True), nullable=True)
     detected_language = Column(String(20), default="en-US", nullable=False)
     document_category = Column(String(50), default="transcript")  # transcript, diploma, test_score, syllabus
     is_archived = Column(Boolean, default=False, nullable=False)

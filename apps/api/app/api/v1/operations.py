@@ -369,9 +369,28 @@ def inspect_evidence_vault_document(
 
     doc = ev.document
     if download:
-        if not os.path.exists(doc.storage_path):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored vault file missing on disk.")
-        return FileResponse(path=doc.storage_path, filename=doc.original_filename)
+        from fastapi import Response
+        import hashlib
+        from app.services.document_vault import DocumentVaultService, get_vault_storage_provider
+
+        DocumentVaultService.assert_document_accessible(doc)
+        provider = get_vault_storage_provider()
+        raw_bytes = provider.get_bytes(doc.storage_key or "", doc.storage_path)
+        if hashlib.sha256(raw_bytes).hexdigest() != doc.file_sha256:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Document SHA-256 integrity verification failed.",
+            )
+        return Response(
+            content=raw_bytes,
+            media_type=doc.mime_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{doc.original_filename}"',
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+                "X-Document-SHA256": doc.file_sha256,
+            },
+        )
 
     return {
         "document_id": str(doc.id),

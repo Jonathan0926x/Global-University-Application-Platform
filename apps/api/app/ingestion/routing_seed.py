@@ -12,6 +12,7 @@ Strict Grounding Guarantees:
 from datetime import datetime, timedelta, timezone
 from ipaddress import ip_address
 import re
+import socket
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 from sqlalchemy.orm import Session
@@ -20,7 +21,19 @@ from app.models.institution import Institution
 from app.models.routing import ApplicationRoute
 
 
-_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "example.com", "example.org", "test.local"}
+_BLOCKED_HOSTS = {
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "example.com",
+    "example.org",
+    "test.local",
+    "metadata.google.internal",
+    "metadata.goog",
+    "instance-data",
+}
+_BLOCKED_SUFFIXES = (".localhost", ".local", ".internal", ".arpa", ".localdomain")
 
 
 def validate_routing_url(url: Optional[str]) -> Dict[str, Any]:
@@ -29,26 +42,45 @@ def validate_routing_url(url: Optional[str]) -> Dict[str, Any]:
         return {"valid": False, "reason": "URL is empty.", "normalized_url": None, "scheme_secure": False}
 
     lower = raw.lower()
-    if lower.startswith(("javascript:", "data:", "vbscript:", "file:")):
+    if lower.startswith(("javascript:", "data:", "vbscript:", "file:", "ftp:", "gopher:")):
         return {"valid": False, "reason": "Disallowed URL scheme.", "normalized_url": None, "scheme_secure": False}
+
+    if re.search(r"\s", raw):
+        return {"valid": False, "reason": "URL contains whitespace characters.", "normalized_url": None, "scheme_secure": False}
 
     parsed = urlparse(raw)
     if parsed.scheme not in ("https", "http"):
         return {"valid": False, "reason": "URL must start with https:// or http://.", "normalized_url": None, "scheme_secure": False}
 
-    host = (parsed.hostname or "").lower().strip()
-    if not host or "." not in host or host in _BLOCKED_HOSTS:
-        return {"valid": False, "reason": f"Invalid or restricted host: '{host or 'missing'}'.", "normalized_url": None, "scheme_secure": False}
+    if parsed.username or parsed.password:
+        return {"valid": False, "reason": "Embedded credentials in URL are disallowed.", "normalized_url": None, "scheme_secure": False}
 
-    # Block raw IPv4/IPv6 literal targets (private / SSRF hygiene)
+    raw_host = (parsed.hostname or "").lower().strip().rstrip(".")
     try:
-        ip_address(host)
+        ascii_host = raw_host.encode("idna").decode("ascii") if raw_host else ""
+    except UnicodeError:
+        ascii_host = ""
+
+    if (
+        not ascii_host
+        or "." not in ascii_host
+        or ascii_host in _BLOCKED_HOSTS
+        or ascii_host.endswith(_BLOCKED_SUFFIXES)
+    ):
+        return {"valid": False, "reason": f"Invalid or restricted host: '{raw_host or 'missing'}'.", "normalized_url": None, "scheme_secure": False}
+
+    # Block raw IPv4/IPv6 literal targets AND alternate octal/hex/short IPv4 notations
+    try:
+        ip_address(ascii_host)
         return {"valid": False, "reason": "IP-literal URLs are disallowed for official application routing.", "normalized_url": None, "scheme_secure": False}
     except ValueError:
         pass
 
-    if re.search(r"\s", raw):
-        return {"valid": False, "reason": "URL contains whitespace characters.", "normalized_url": None, "scheme_secure": False}
+    try:
+        socket.inet_aton(ascii_host)
+        return {"valid": False, "reason": "Alternate IP-literal notation is disallowed.", "normalized_url": None, "scheme_secure": False}
+    except OSError:
+        pass
 
     return {
         "valid": True,

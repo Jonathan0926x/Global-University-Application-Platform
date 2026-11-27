@@ -11,7 +11,7 @@ Provides:
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 import logging
 import socket
 from typing import Any, Callable, Dict, Iterable, List, Optional
@@ -100,11 +100,20 @@ def get_stale_routes(
     )
 
 
+_CGNAT_NET = ip_network("100.64.0.0/10")
+_NAT64_NET = ip_network("64:ff9b::/96")
+
+
 def _is_public_routable_ip(raw_ip: str) -> bool:
     """Return True strictly for globally routable public IPs (including IPv4-mapped IPv6)."""
-    addr = ip_address(raw_ip)
+    cleaned = (raw_ip or "").split("%", 1)[0].strip()
+    addr = ip_address(cleaned)
     if getattr(addr, "ipv4_mapped", None) is not None:
         addr = addr.ipv4_mapped
+    if addr.version == 4 and addr in _CGNAT_NET:
+        return False
+    if addr.version == 6 and addr in _NAT64_NET:
+        return False
     return bool(
         addr.is_global
         and not addr.is_private
@@ -159,7 +168,9 @@ class _PinnedPublicIPBackend(httpcore.SyncBackend):
         except (OSError, ValueError) as exc:
             raise httpcore.ConnectError(f"Connection-time DNS validation failed: {exc}") from exc
 
-        allowed_targets = [ip for ip in self.pinned_ips if ip in current_ips] or self.pinned_ips
+        allowed_targets = [ip for ip in self.pinned_ips if ip in current_ips]
+        if not allowed_targets:
+            raise httpcore.ConnectError("Connection-time DNS mismatch against pinned public IPs.")
         last_exc: Optional[Exception] = None
         for target_ip in allowed_targets:
             if not _is_public_routable_ip(target_ip):

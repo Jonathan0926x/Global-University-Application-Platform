@@ -614,22 +614,33 @@ async def upload_or_attach_submission_evidence(
     attached_doc: Optional[Document] = None
 
     if file is not None:
-        storage_path, sha256_hash, file_size, file_ext = await DocumentVaultService.store_original_file(
-            str(profile.id), file
-        )
-        content_bytes = await file.read()
+        ingested = await DocumentVaultService.validate_and_ingest_file(str(profile.id), file)
+        if ingested["scan_status"] != "scan_clean":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Submission evidence rejected/quarantined (scan_status='{ingested['scan_status']}').",
+            )
         extraction_data = DocumentVaultService.extract_document_intelligence(
-            file.filename or "submission_confirmation",
-            content_bytes,
-            file_ext,
+            ingested["safe_filename"],
+            ingested["content_bytes"],
+            ingested["file_ext"],
         )
         attached_doc = Document(
             profile_id=profile.id,
-            original_filename=file.filename or "submission_confirmation",
-            file_type=file_ext,
-            file_size_bytes=file_size,
-            file_sha256=sha256_hash,
-            storage_path=storage_path,
+            original_filename=ingested["safe_filename"],
+            file_type=ingested["file_ext"],
+            mime_type=ingested["mime_type"],
+            file_size_bytes=ingested["file_size_bytes"],
+            file_sha256=ingested["file_sha256"],
+            storage_path=ingested["storage_path"],
+            storage_backend=ingested["storage_backend"],
+            storage_key=ingested["storage_key"],
+            is_encrypted=ingested["is_encrypted"],
+            scan_status=ingested["scan_status"],
+            scan_engine=ingested["scan_engine"],
+            scan_details=ingested["scan_details"],
+            scanned_at=ingested["scanned_at"],
+            quarantined_at=ingested["quarantined_at"],
             detected_language=extraction_data["detected_language"],
             document_category="submission_confirmation",
         )
@@ -655,6 +666,7 @@ async def upload_or_attach_submission_evidence(
         )
         if not attached_doc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Referenced Document Vault file not found.")
+        DocumentVaultService.assert_document_accessible(attached_doc)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

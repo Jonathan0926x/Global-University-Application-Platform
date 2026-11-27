@@ -265,10 +265,11 @@ def test_42_06_pilot_security_and_external_routing_honesty():
     assert "_PinnedPublicIPBackend" in routing_src
     assert "follow_redirects=False" in routing_src
 
-    # Honest audit of ClerkAuthProvider: still placeholder in codebase and documented as blocker
+    # Verify ClerkAuthProvider now implements genuine RS256 JWKS verification (stub removed)
     auth_src = (REPO_ROOT / "apps" / "api" / "app" / "core" / "auth_provider.py").read_text(encoding="utf-8")
     assert "ClerkAuthProvider" in auth_src
-    assert "clerk_verified_user" in auth_src
+    assert "JWKSKeyCache" in auth_src
+    assert "clerk_verified_user" not in auth_src
 
     # External portal handoff endpoint must exist under OpenAPI routes (never auto-submitted)
     client = TestClient(app)

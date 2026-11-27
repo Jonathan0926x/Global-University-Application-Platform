@@ -185,6 +185,8 @@ def attach_course_syllabus(
     )
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Syllabus document not found in Document Vault.")
+    from app.services.document_vault import DocumentVaultService
+    DocumentVaultService.assert_document_accessible(doc)
 
     course.syllabus_document_id = doc.id
     if payload.description:

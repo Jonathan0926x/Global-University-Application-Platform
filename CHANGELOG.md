@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased] - Phase 4 Active
 
+### Hardened & Verified — Phase 4.3: Production Security Hardening & Controlled Pilot Readiness
+- **Genuine Clerk RS256 JWKS Authentication ([auth_provider.py](apps/api/app/core/auth_provider.py), [deps.py](apps/api/app/api/deps.py), [config.py](apps/api/app/config.py)):**
+  - Eliminated the `clerk_verified_user` placeholder stub and implemented genuine cryptographic RS256 verification via `PyJWT` + `cryptography` with SSRF-pinned `JWKSKeyCache`, controlled key-rotation refresh on unknown `kid`, strict algorithm allowlisting (blocking `none` and `HS256` key-confusion attacks), `iss`/`aud`/`exp`/`nbf`/`iat`/`sub` validation, and zero raw JWT logging.
+  - Enforced fail-closed behavior (`SecurityConfigurationError` when `AUTH_PROVIDER != "clerk"` in `staging`/`production`, and removal of unauthenticated `dev_token` fallback outside explicit local dev/test mock mode).
+- **Authorization & IDOR Remediation ([profiles.py](apps/api/app/api/v1/profiles.py)):**
+  - Fixed a cross-student IDOR gap in `POST /api/v1/profile/enrollments/{enrollment_id}/courses` by enforcing `EnrollmentRecord.profile_id == profile.id` derived strictly from authenticated `current_user.id`, alongside ignoring client-supplied `profile_completion_pct` on `PATCH /profile`.
+- **SSRF & Firewall Deployment Hardening ([routing_seed.py](apps/api/app/ingestion/routing_seed.py), [routing_health.py](apps/api/app/services/routing_health.py), `infra/firewall/PRODUCTION_DEPLOYMENT_CHECKLIST.md`):**
+  - Blocked octal/hex/short IPv4 notations (`socket.inet_aton`), trailing-dot hosts, embedded credentials, `.internal`/`.local`/`.arpa` hostnames, CGNAT (`100.64.0.0/10`), NAT64 (`64:ff9b::/96`), IPv6 ULA/IMDS (`fc00::/7`), and strict DNS-pinned IP intersection in `_PinnedPublicIPBackend`. Added production firewall deployment and rollback runbook.
+- **Document Vault Encryption, Scanning & Pre-Signed Access (Migration `a3c7e9f1b420`, [document_vault.py](apps/api/app/services/document_vault.py), [documents.py](apps/api/app/api/v1/documents.py), [applications.py](apps/api/app/api/v1/applications.py), [transfer.py](apps/api/app/api/v1/transfer.py), [operations.py](apps/api/app/api/v1/operations.py)):**
+  - Added `25 MB` max upload guard, path-traversal blocking, executable/double-extension rejection, MIME & magic-byte validation, local Fernet encryption at rest, `S3CompatibleVaultStorageProvider` (AWS S3 / Cloudflare R2 SSE + private ACL), `GET /documents/{id}/presigned-url` + `/download` with HMAC expiry and SHA-256 integrity checks, malware scanner abstraction (`ClamAVScanner` TCP `zINSTREAM` + EICAR quarantine workflow gating extraction/translation/evidence/syllabus), external AI privacy guard, and structured JSON security logging (`security_logging.py`).
+- **Controlled Pilot Readiness & Security Documentation (`infra/pilot/`, `docs/security/`):**
+  - Created isolated non-public pilot configuration (`infra/pilot/.env.pilot.example`, `docker-compose.pilot.yml`, `README.md`), `PHASE_4_3_SECURITY_HARDENING_REPORT.md`, and `PILOT_SECURITY_ACCEPTANCE_CHECKLIST.md`.
+- **Verification Matrix:** Passed **106 / 106** backend `pytest` tests (`test_phase4_3_security_hardening.py`), **13 / 13** frontend unit tests (`api-client.test.ts`), and **16 / 16** static Next.js production routes.
+
 ### Added & Verified — Phase 4.2: Global Scholarship Intelligence, Multilingual Explainability & Pilot Readiness
 - **Multilingual Explainability Engine across 10 Locales (`financial_engine.py`, `phase4-reason-codes.ts`, `api-client.ts`, `/financial`):**
   - Replaced unstructured English detail strings with structured `reason_code` (`rule.*`, `cycle.*`, `fresh.*`, `intl_policy.*`) + `params` across all 99 evaluated criteria in `evaluate_single_scholarship` and `classify_cycle_verification_state`.

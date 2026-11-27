@@ -113,7 +113,7 @@ def update_student_profile(
             detail="Student profile not found."
         )
 
-    update_data = profile_update.model_dump(exclude_unset=True)
+    update_data = profile_update.model_dump(exclude_unset=True, exclude={"profile_completion_pct"})
     for field, value in update_data.items():
         setattr(profile, field, value)
 
@@ -171,7 +171,18 @@ def add_course_record(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    enrollment = db.query(EnrollmentRecord).filter(EnrollmentRecord.id == enrollment_id).first()
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student profile not found")
+
+    enrollment = (
+        db.query(EnrollmentRecord)
+        .filter(
+            EnrollmentRecord.id == enrollment_id,
+            EnrollmentRecord.profile_id == profile.id,
+        )
+        .first()
+    )
     if not enrollment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment record not found")
 
